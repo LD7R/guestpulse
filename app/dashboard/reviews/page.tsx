@@ -121,42 +121,41 @@ export default function ReviewsInboxPage() {
 
   const [reviews, setReviews] = useState<Review[]>([]);
 
-  const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!url || !anonKey) return null;
-    return createBrowserClient(url, anonKey);
-  }, []);
-
   useEffect(() => {
-    if (!supabase) {
-      setError("Supabase is not configured in the environment.");
-      setLoading(false);
-      return;
-    }
-
-    const sb = supabase;
     let isCancelled = false;
 
     async function fetchInbox() {
       setLoading(true);
       setError(null);
 
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+
       const {
         data: { user },
         error: userError,
-      } = await sb.auth.getUser();
+      } = await supabase.auth.getUser();
 
-      if (userError || !user) {
+      if (userError) {
         if (!isCancelled) {
-          setError(userError?.message ?? "You must be signed in to view reviews.");
+          setError(userError.message);
           setLoading(false);
         }
         return;
       }
 
-      const { data: hotels, error: hotelsError } = await sb
+      // Confirm the user object before any DB queries.
+      if (!user || typeof user.id !== "string" || !user.id) {
+        if (!isCancelled) {
+          setError("You must be signed in to view reviews.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      const { data: hotels, error: hotelsError } = await supabase
         .from("hotels")
         .select("id")
         .eq("user_id", user.id);
@@ -179,7 +178,7 @@ export default function ReviewsInboxPage() {
         return;
       }
 
-      const { data: reviewsData, error: reviewsError } = await sb
+      const { data: reviewsData, error: reviewsError } = await supabase
         .from("reviews")
         .select("*")
         .in("hotel_id", hotelIds)
@@ -208,7 +207,7 @@ export default function ReviewsInboxPage() {
     return () => {
       isCancelled = true;
     };
-  }, [supabase]);
+  }, []);
 
   const summary = useMemo(() => {
     const total = reviews.length;
