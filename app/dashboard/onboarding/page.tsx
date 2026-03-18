@@ -2,8 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useState, useTransition } from "react";
-
-import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { createBrowserClient } from "@supabase/ssr";
 
 export default function HotelOnboardingPage() {
   const router = useRouter();
@@ -19,7 +18,15 @@ export default function HotelOnboardingPage() {
     e.preventDefault();
     setError(null);
 
-    const supabase = createSupabaseBrowserClient();
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!url || !anonKey) {
+      setError("Supabase is not configured in the environment.");
+      return;
+    }
+
+    const supabase = createBrowserClient(url, anonKey);
 
     const {
       data: { user },
