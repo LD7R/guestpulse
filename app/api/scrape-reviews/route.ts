@@ -25,12 +25,31 @@ function normalizeRating(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "number") {
     const clamped = Math.max(1, Math.min(5, value));
-    return Math.round(clamped);
+    return Math.round(clamped); // Ensure integer 1-5
   }
   const n = parseInt(String(value), 10);
   if (Number.isNaN(n)) return null;
   const clamped = Math.max(1, Math.min(5, n));
   return Math.round(clamped);
+}
+
+function getDayBounds(dateValue: string | null) {
+  if (!dateValue) return null;
+  const parsed = new Date(dateValue);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  // Normalize to UTC day bounds so time-of-day differences are ignored.
+  const start = new Date(
+    Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate(), 0, 0, 0, 0),
+  );
+  const end = new Date(
+    Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate() + 1, 0, 0, 0, 0),
+  );
+
+  return {
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+  };
 }
 
 async function sleep(ms: number) {
@@ -89,7 +108,7 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           startUrls: [{ url: tripadvisor_url }],
-          maxReviews: 50,
+          maxReviews: 20,
           language: "en",
         }),
       },
@@ -199,6 +218,7 @@ export async function POST(request: NextRequest) {
     }
 
     const items = (await itemsRes.json()) as ApifyReviewItem[];
+    console.log("[scrape-reviews] Apify items returned:", Array.isArray(items) ? items.length : 0);
 
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ success: true, count: 0 });
@@ -218,6 +238,7 @@ export async function POST(request: NextRequest) {
       sentiment: null;
       responded: boolean;
     }> = [];
+    let skippedDuplicates = 0;
 
     for (const item of items) {
       const name = reviewerName(item);
@@ -226,17 +247,37 @@ export async function POST(request: NextRequest) {
       const reviewText = item.text ?? null;
       const responded = Boolean(item.ownerResponse);
 
-      // Skip duplicate: same reviewer_name + review_date + hotel_id
-      const { data: existing } = await supabase
-        .from("reviews")
-        .select("id")
-        .eq("hotel_id", hotel_id)
-        .eq("reviewer_name", name)
-        .eq("review_date", reviewDate)
-        .limit(1)
-        .maybeSingle();
+      // Skip duplicate only when reviewer_name matches and review_date is on the same day.
+      const dayBounds = getDayBounds(reviewDate);
+      let existing: { id: string } | null = null;
 
-      if (existing) continue;
+      if (dayBounds) {
+        const { data } = await supabase
+          .from("reviews")
+          .select("id")
+          .eq("hotel_id", hotel_id)
+          .eq("reviewer_name", name)
+          .gte("review_date", dayBounds.startIso)
+          .lt("review_date", dayBounds.endIso)
+          .limit(1)
+          .maybeSingle();
+        existing = data as { id: string } | null;
+      } else {
+        const { data } = await supabase
+          .from("reviews")
+          .select("id")
+          .eq("hotel_id", hotel_id)
+          .eq("reviewer_name", name)
+          .eq("review_date", reviewDate)
+          .limit(1)
+          .maybeSingle();
+        existing = data as { id: string } | null;
+      }
+
+      if (existing) {
+        skippedDuplicates += 1;
+        continue;
+      }
 
       rowsToInsert.push({
         hotel_id,
@@ -251,6 +292,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (rowsToInsert.length === 0) {
+      console.log("[scrape-reviews] Duplicates skipped:", skippedDuplicates);
+      console.log("[scrape-reviews] Inserted reviews:", 0);
       return NextResponse.json({ success: true, count: 0 });
     }
 
@@ -259,6 +302,9 @@ export async function POST(request: NextRequest) {
       .insert(rowsToInsert);
 
     if (insertError) {
+      console.log("[scrape-reviews] Duplicates skipped:", skippedDuplicates);
+      console.log("[scrape-reviews] Inserted reviews:", 0);
+      console.error("[scrape-reviews] Insert error:", insertError);
       return NextResponse.json(
         {
           success: false,
@@ -268,6 +314,9 @@ export async function POST(request: NextRequest) {
         { status: 500 },
       );
     }
+
+    console.log("[scrape-reviews] Duplicates skipped:", skippedDuplicates);
+    console.log("[scrape-reviews] Inserted reviews:", rowsToInsert.length);
 
     return NextResponse.json({
       success: true,
