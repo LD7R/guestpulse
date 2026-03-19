@@ -18,8 +18,8 @@ export default function DashboardLayout({
   const nav = useMemo(
     () => [
       { href: "/dashboard", label: "Overview" },
-      { href: "/dashboard/reviews", label: "Reviews inbox" },
-      { href: "/dashboard/settings", label: "Hotel settings" },
+      { href: "/dashboard/reviews", label: "Reviews" },
+      { href: "/dashboard/settings", label: "Settings" },
     ],
     [],
   );
@@ -48,7 +48,7 @@ export default function DashboardLayout({
 
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard";
-    return pathname?.startsWith(href) ?? false;
+    return pathname === href || pathname?.startsWith(`${href}/`);
   }
 
   return (
@@ -56,11 +56,8 @@ export default function DashboardLayout({
       <aside className="fixed left-0 top-0 z-10 h-screen w-[240px] border-r border-[#222222] bg-[#0f0f0f]">
         <div className="flex h-full flex-col">
           <div className="px-5 pt-6 pb-4">
-            <div className="text-base font-semibold tracking-tight">
+            <div className="text-base font-bold tracking-tight text-white">
               GuestPulse
-            </div>
-            <div className="mt-1 text-xs text-[#888888]">
-              Hotel review management
             </div>
           </div>
 
@@ -72,9 +69,9 @@ export default function DashboardLayout({
                   key={item.href}
                   href={item.href}
                   className={[
-                    "rounded-xl px-3 py-2 text-sm transition",
+                    "rounded-xl px-3 py-2 text-sm transition relative",
                     active
-                      ? "bg-[#111111] text-white ring-1 ring-[#6366f1]/60"
+                      ? "bg-[#1a1a1a] text-white border-l-2 border-[#6366f1] pl-[11px]"
                       : "text-[#888888] hover:bg-[#111111] hover:text-white",
                   ].join(" ")}
                 >
@@ -85,11 +82,8 @@ export default function DashboardLayout({
           </nav>
 
           <div className="mt-auto px-5 pb-6">
-            <div className="mb-3">
-              <div className="text-xs text-[#888888]">Signed in as</div>
-              <div className="truncate text-sm font-medium">
-                {email ?? ""}
-              </div>
+            <div className="mb-3 truncate text-sm font-medium text-white">
+              {email ?? ""}
             </div>
 
             <button

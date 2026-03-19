@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
+import { useEffect, useMemo, useState } from "react";
 
 type Stats = {
   totalReviews: number;
@@ -12,12 +11,10 @@ type Stats = {
 };
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [userEmail, setUserEmail] = useState<string>("");
-  const [hasHotel, setHasHotel] = useState<boolean | null>(null);
+  const [hasHotel, setHasHotel] = useState<boolean>(false);
 
   const [stats, setStats] = useState<Stats>({
     totalReviews: 0,
@@ -27,10 +24,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function load() {
-      try {
-        setLoading(true);
-        setError(null);
+      setLoading(true);
+      setError(null);
 
+      try {
         const supabase = createBrowserClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -41,10 +38,8 @@ export default function DashboardPage() {
           error: userError,
         } = await supabase.auth.getUser();
 
-        if (userError || !user) {
-          router.replace("/login?redirectTo=/dashboard");
-          return;
-        }
+        if (userError) throw userError;
+        if (!user) throw new Error("You must be signed in.");
 
         setUserEmail(user.email ?? "");
 
@@ -60,7 +55,6 @@ export default function DashboardPage() {
         if (hotelIds.length === 0) {
           setHasHotel(false);
           setStats({ totalReviews: 0, avgRating: null, needingResponse: 0 });
-          setLoading(false);
           return;
         }
 
@@ -73,7 +67,6 @@ export default function DashboardPage() {
 
         if (totalError) throw totalError;
 
-        // Average rating (client-side calculation)
         const { data: ratingRows, error: ratingError } = await supabase
           .from("reviews")
           .select("rating")
@@ -83,7 +76,8 @@ export default function DashboardPage() {
 
         const numericRatings = (ratingRows ?? [])
           .map((r: { rating: unknown }) => {
-            const n = typeof r.rating === "number" ? r.rating : Number(r.rating);
+            const n =
+              typeof r.rating === "number" ? r.rating : Number(r.rating);
             return Number.isNaN(n) ? null : n;
           })
           .filter((n: number | null): n is number => n !== null);
@@ -91,7 +85,8 @@ export default function DashboardPage() {
         const avgRating =
           numericRatings.length === 0
             ? null
-            : numericRatings.reduce((a, b) => a + b, 0) / numericRatings.length;
+            : numericRatings.reduce((a, b) => a + b, 0) /
+              numericRatings.length;
 
         const { count: needingCount, error: needingError } = await supabase
           .from("reviews")
@@ -103,33 +98,27 @@ export default function DashboardPage() {
 
         setStats({
           totalReviews: totalCount ?? 0,
-          avgRating: avgRating ?? null,
+          avgRating,
           needingResponse: needingCount ?? 0,
         });
-        setLoading(false);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load dashboard.");
+      } finally {
         setLoading(false);
       }
     }
 
     load();
-  }, [router]);
+  }, []);
 
-  const cards = useMemo(() => {
+  const statCards = useMemo(() => {
     return [
+      { label: "Total Reviews", value: stats.totalReviews },
       {
-        label: "Total reviews",
-        value: stats.totalReviews,
-      },
-      {
-        label: "Average rating",
+        label: "Average Rating",
         value: stats.avgRating === null ? "—" : stats.avgRating.toFixed(2),
       },
-      {
-        label: "Needing response",
-        value: stats.needingResponse,
-      },
+      { label: "Needing Response", value: stats.needingResponse },
     ];
   }, [stats]);
 
@@ -156,35 +145,16 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
         <h1 className="text-2xl font-semibold tracking-tight text-white">
-          Good morning, {userEmail}
+          Welcome to GuestPulse
         </h1>
         <p className="mt-1 text-sm text-[#888888]">
-          Track reviews, respond to feedback, and improve guest experience.
+          Manage hotel review responses in one place.
         </p>
       </div>
 
-      {hasHotel === false ? (
-        <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-medium text-white">
-                Get started — add your hotel details to start tracking reviews
-              </div>
-              <div className="mt-1 text-sm text-[#888888]">
-                We’ll sync TripAdvisor reviews and route them to your inbox.
-              </div>
-            </div>
-            <Link
-              href="/dashboard/settings"
-              className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
-            >
-              Add hotel details
-            </Link>
-          </div>
-        </div>
-      ) : (
+      {hasHotel ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {cards.map((card) => (
+          {statCards.map((card) => (
             <div
               key={card.label}
               className="rounded-[12px] border border-[#222222] bg-[#111111] p-6"
@@ -198,6 +168,25 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
+      ) : (
+        <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium text-white">
+                Get started — add your hotel details to start tracking reviews
+              </div>
+              <div className="mt-1 text-sm text-[#888888]">
+                Add your hotel to begin syncing TripAdvisor reviews.
+              </div>
+            </div>
+            <Link
+              href="/dashboard/settings"
+              className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
+            >
+              Hotel settings
+            </Link>
+          </div>
+        </div>
       )}
 
       <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
@@ -207,13 +196,13 @@ export default function DashboardPage() {
             href="/dashboard/reviews"
             className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
           >
-            Go to review inbox
+            View Reviews
           </Link>
           <Link
             href="/dashboard/settings"
             className="inline-flex items-center justify-center rounded-[8px] border border-[#222222] bg-[#111111] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#0f0f0f]"
           >
-            Add/edit hotel
+            Hotel Settings
           </Link>
         </div>
       </div>

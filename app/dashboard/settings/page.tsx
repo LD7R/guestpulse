@@ -1,37 +1,40 @@
 "use client";
 
-import { createBrowserClient } from "@supabase/ssr";
-import { useEffect, useState, useTransition } from "react";
+"use client";
 
-type HotelRow = {
+import { createBrowserClient } from "@supabase/ssr";
+import { FormEvent, useEffect, useState } from "react";
+
+type Hotel = {
   id: string;
-  name?: string | null;
-  tripadvisor_url?: string | null;
-  google_url?: string | null;
-  booking_url?: string | null;
+  user_id: string;
+  name: string | null;
+  tripadvisor_url: string | null;
+  google_url: string | null;
+  booking_url: string | null;
 };
 
 export default function HotelSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [hotel, setHotel] = useState<HotelRow | null>(null);
+  const [hotel, setHotel] = useState<Hotel | null>(null);
 
   const [name, setName] = useState("");
   const [tripadvisorUrl, setTripadvisorUrl] = useState("");
   const [googleUrl, setGoogleUrl] = useState("");
   const [bookingUrl, setBookingUrl] = useState("");
 
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
-  const [isSaving, startTransition] = useTransition();
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
-      try {
-        setLoading(true);
-        setError(null);
+      setLoading(true);
+      setError(null);
 
+      try {
         const supabase = createBrowserClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -42,28 +45,27 @@ export default function HotelSettingsPage() {
           error: userError,
         } = await supabase.auth.getUser();
 
-        if (userError || !user) {
-          setError(userError?.message ?? "You must be signed in.");
-          return;
-        }
+        if (userError) throw userError;
+        if (!user) throw new Error("You must be signed in.");
 
         const { data, error: hotelError } = await supabase
           .from("hotels")
-          .select("id,name,tripadvisor_url,google_url,booking_url")
+          .select(
+            "id,user_id,name,tripadvisor_url,google_url,booking_url",
+          )
           .eq("user_id", user.id)
           .limit(1)
           .maybeSingle();
 
         if (hotelError) throw hotelError;
 
-        const nextHotel = (data ?? null) as HotelRow | null;
-        setHotel(nextHotel);
+        setHotel((data as Hotel | null) ?? null);
 
-        if (nextHotel) {
-          setName(nextHotel.name ?? "");
-          setTripadvisorUrl(nextHotel.tripadvisor_url ?? "");
-          setGoogleUrl(nextHotel.google_url ?? "");
-          setBookingUrl(nextHotel.booking_url ?? "");
+        if (data) {
+          setName(data.name ?? "");
+          setTripadvisorUrl(data.tripadvisor_url ?? "");
+          setGoogleUrl(data.google_url ?? "");
+          setBookingUrl(data.booking_url ?? "");
         } else {
           setName("");
           setTripadvisorUrl("");
@@ -80,74 +82,70 @@ export default function HotelSettingsPage() {
     load();
   }, []);
 
-  async function onSave(e: React.FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setSaving(true);
     setSaveError(null);
     setSaveSuccess(null);
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !anonKey) {
-      setSaveError("Supabase is not configured in the environment.");
-      return;
-    }
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
 
-    const supabase = createBrowserClient(url, anonKey);
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error("You must be signed in.");
 
-    if (userError || !user) {
-      setSaveError(userError?.message ?? "You must be signed in.");
-      return;
-    }
+      const payload = {
+        user_id: user.id,
+        name: name.trim(),
+        tripadvisor_url: tripadvisorUrl.trim() || null,
+        google_url: googleUrl.trim() || null,
+        booking_url: bookingUrl.trim() || null,
+      };
 
-    const payload = {
-      name: name.trim(),
-      tripadvisor_url: tripadvisorUrl.trim() || null,
-      google_url: googleUrl.trim() || null,
-      booking_url: bookingUrl.trim() || null,
-    };
-
-    if (!payload.name) {
-      setSaveError("Hotel name is required.");
-      return;
-    }
-
-    startTransition(async () => {
-      try {
-        if (hotel) {
-          const { error: updateError } = await supabase
-            .from("hotels")
-            .update(payload)
-            .eq("id", hotel.id);
-          if (updateError) throw updateError;
-        } else {
-          const { error: insertError } = await supabase.from("hotels").insert({
-            ...payload,
-            user_id: user.id,
-          });
-          if (insertError) throw insertError;
-        }
-
-        setSaveSuccess("Saved hotel settings successfully.");
-        // Refresh the local hotel row after saving
-        const { data: refreshed, error: refreshError } = await supabase
-          .from("hotels")
-          .select("id,name,tripadvisor_url,google_url,booking_url")
-          .eq("user_id", user.id)
-          .limit(1)
-          .maybeSingle();
-
-        if (refreshError) throw refreshError;
-
-        setHotel((refreshed ?? null) as HotelRow | null);
-      } catch (e) {
-        setSaveError(e instanceof Error ? e.message : "Failed to save hotel settings.");
+      if (!payload.name) {
+        throw new Error("Hotel name is required.");
       }
-    });
+
+      const { error: upsertError } = await supabase
+        .from("hotels")
+        .upsert(payload, { onConflict: "user_id" });
+
+      if (upsertError) throw upsertError;
+
+      setSaveSuccess("Hotel saved successfully.");
+
+      // Refresh the hotel row so the button state is correct.
+      const { data, error: refreshError } = await supabase
+        .from("hotels")
+        .select(
+          "id,user_id,name,tripadvisor_url,google_url,booking_url",
+        )
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (refreshError) throw refreshError;
+      setHotel((data as Hotel | null) ?? null);
+
+      if (data) {
+        setName(data.name ?? "");
+        setTripadvisorUrl(data.tripadvisor_url ?? "");
+        setGoogleUrl(data.google_url ?? "");
+        setBookingUrl(data.booking_url ?? "");
+      }
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Failed to save hotel.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (loading) {
@@ -176,23 +174,15 @@ export default function HotelSettingsPage() {
           Hotel settings
         </h1>
         <p className="mt-1 text-sm text-[#888888]">
-          Update your hotel details to enable review scraping.
+          Manage the hotel details used for review scraping.
         </p>
       </div>
 
-      <form onSubmit={onSave} className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
+      <form
+        onSubmit={onSubmit}
+        className="rounded-2xl border border-[#222222] bg-[#111111] p-6"
+      >
         <div className="space-y-5">
-          {!hotel ? (
-            <div className="rounded-xl border border-[#222222] bg-[#0f0f0f] p-4">
-              <div className="text-sm font-medium text-white">
-                Get started
-              </div>
-              <div className="mt-1 text-sm text-[#888888]">
-                Add your hotel details to start tracking reviews.
-              </div>
-            </div>
-          ) : null}
-
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium text-[#888888]">
@@ -203,7 +193,7 @@ export default function HotelSettingsPage() {
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#111111] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
                 placeholder="My Boutique Hotel"
               />
             </div>
@@ -216,7 +206,7 @@ export default function HotelSettingsPage() {
                 type="url"
                 value={tripadvisorUrl}
                 onChange={(e) => setTripadvisorUrl(e.target.value)}
-                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#111111] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
                 placeholder="https://tripadvisor.com/hotel/..."
               />
             </div>
@@ -229,7 +219,7 @@ export default function HotelSettingsPage() {
                 type="url"
                 value={googleUrl}
                 onChange={(e) => setGoogleUrl(e.target.value)}
-                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#111111] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
                 placeholder="https://maps.google.com/..."
               />
             </div>
@@ -242,7 +232,7 @@ export default function HotelSettingsPage() {
                 type="url"
                 value={bookingUrl}
                 onChange={(e) => setBookingUrl(e.target.value)}
-                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#111111] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
                 placeholder="https://booking.com/hotel/..."
               />
             </div>
@@ -253,7 +243,6 @@ export default function HotelSettingsPage() {
               {saveError}
             </div>
           ) : null}
-
           {saveSuccess ? (
             <div className="rounded-xl border border-emerald-900/50 bg-emerald-900/20 px-3 py-2 text-sm text-emerald-200">
               {saveSuccess}
@@ -263,10 +252,10 @@ export default function HotelSettingsPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={saving}
               className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSaving ? "Saving…" : hotel ? "Save changes" : "Create hotel"}
+              {saving ? (hotel ? "Updating…" : "Creating…") : hotel ? "Update" : "Create hotel"}
             </button>
           </div>
         </div>
