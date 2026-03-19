@@ -17,6 +17,7 @@ export default function HotelSettingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [hotel, setHotel] = useState<Hotel | null>(null);
+  const [hotelId, setHotelId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [tripadvisorUrl, setTripadvisorUrl] = useState("");
@@ -26,6 +27,15 @@ export default function HotelSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (hotel) {
+      setName(hotel.name || "");
+      setTripadvisorUrl(hotel.tripadvisor_url || "");
+      setGoogleUrl(hotel.google_url || "");
+      setBookingUrl(hotel.booking_url || "");
+    }
+  }, [hotel]);
 
   useEffect(() => {
     async function load() {
@@ -48,28 +58,23 @@ export default function HotelSettingsPage() {
 
         const { data, error: hotelError } = await supabase
           .from("hotels")
-          .select(
-            "id,user_id,name,tripadvisor_url,google_url,booking_url",
-          )
+          .select("*")
           .eq("user_id", user.id)
-          .limit(1)
-          .maybeSingle();
+          .single();
 
-        if (hotelError) throw hotelError;
-
-        setHotel((data as Hotel | null) ?? null);
-
-        if (data) {
-          setName(data.name ?? "");
-          setTripadvisorUrl(data.tripadvisor_url ?? "");
-          setGoogleUrl(data.google_url ?? "");
-          setBookingUrl(data.booking_url ?? "");
-        } else {
-          setName("");
-          setTripadvisorUrl("");
-          setGoogleUrl("");
-          setBookingUrl("");
+        if (hotelError) {
+          // No row found is valid for first-time setup.
+          if (hotelError.code !== "PGRST116") {
+            throw hotelError;
+          }
+          setHotel(null);
+          setHotelId(null);
+          return;
         }
+
+        const loadedHotel = (data as Hotel | null) ?? null;
+        setHotel(loadedHotel);
+        setHotelId(loadedHotel?.id ?? null);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load hotel settings.");
       } finally {
@@ -101,7 +106,6 @@ export default function HotelSettingsPage() {
       if (!user) throw new Error("You must be signed in.");
 
       const payload = {
-        user_id: user.id,
         name: name.trim(),
         tripadvisor_url: tripadvisorUrl.trim() || null,
         google_url: googleUrl.trim() || null,
@@ -112,73 +116,47 @@ export default function HotelSettingsPage() {
         throw new Error("Hotel name is required.");
       }
 
-      const fields = {
-        name: payload.name,
-        tripadvisor_url: payload.tripadvisor_url,
-        google_url: payload.google_url,
-        booking_url: payload.booking_url,
-      };
-
-      // Check if hotel already exists for this user (RLS-safe).
-      const {
-        data: existing,
-        error: existingError,
-      } = await supabase
-        .from("hotels")
-        .select("id,user_id,name,tripadvisor_url,google_url,booking_url")
-        .eq("user_id", user.id)
-        .single();
-
-      if (existingError) {
-        // PGRST116 = "JSON object requested, multiple (or no) rows returned"
-        if (existingError.code !== "PGRST116") {
-          console.error("Hotel existence check failed:", existingError);
-          throw existingError;
-        }
-      }
-
-      if (existing) {
+      if (hotelId) {
         const { error: updateError } = await supabase
           .from("hotels")
-          .update(fields)
-          .eq("user_id", user.id);
+          .update(payload)
+          .eq("id", hotelId);
 
         if (updateError) {
           console.error("Hotel update failed:", updateError);
           throw updateError;
         }
+        setHotel((prev) =>
+          prev
+            ? { ...prev, ...payload }
+            : {
+                id: hotelId,
+                user_id: user.id,
+                name: payload.name,
+                tripadvisor_url: payload.tripadvisor_url,
+                google_url: payload.google_url,
+                booking_url: payload.booking_url,
+              },
+        );
       } else {
-        const { error: insertError } = await supabase
+        const { data: inserted, error: insertError } = await supabase
           .from("hotels")
-          .insert({ ...fields, user_id: user.id });
+          .insert({ ...payload, user_id: user.id })
+          .select("*")
+          .single();
 
         if (insertError) {
           console.error("Hotel insert failed:", insertError);
           throw insertError;
         }
+
+        const insertedHotel = inserted as Hotel;
+        setHotelId(insertedHotel.id);
+        setHotel(insertedHotel);
       }
 
-      setSaveSuccess("Hotel saved successfully.");
-
-      // Refresh the hotel row so the button state is correct.
-      const { data, error: refreshError } = await supabase
-        .from("hotels")
-        .select(
-          "id,user_id,name,tripadvisor_url,google_url,booking_url",
-        )
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (refreshError) throw refreshError;
-      setHotel((data as Hotel | null) ?? null);
-
-      if (data) {
-        setName(data.name ?? "");
-        setTripadvisorUrl(data.tripadvisor_url ?? "");
-        setGoogleUrl(data.google_url ?? "");
-        setBookingUrl(data.booking_url ?? "");
-      }
+      setSaveSuccess("Saved successfully!");
+      setTimeout(() => setSaveSuccess(null), 3000);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Failed to save hotel.");
     } finally {
@@ -251,14 +229,14 @@ export default function HotelSettingsPage() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-[#888888]">
-                Google URL
+                Google Maps URL
               </label>
               <input
                 type="url"
                 value={googleUrl}
                 onChange={(e) => setGoogleUrl(e.target.value)}
                 className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
-                placeholder="https://maps.google.com/?cid=... or Google Maps URL"
+                placeholder="https://www.google.com/maps/place/..."
               />
             </div>
 
@@ -293,7 +271,7 @@ export default function HotelSettingsPage() {
               disabled={saving}
               className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {saving ? (hotel ? "Updating…" : "Creating…") : hotel ? "Update" : "Create hotel"}
+              {saving ? (hotelId ? "Updating…" : "Creating…") : hotelId ? "Update" : "Create hotel"}
             </button>
           </div>
         </div>
