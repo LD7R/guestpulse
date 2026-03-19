@@ -2,6 +2,7 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 type Hotel = {
   id: string;
@@ -90,8 +91,7 @@ function platformBadge(platform: string | null | undefined) {
     );
   }
   return cn(
-    "inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-700",
-    "dark:border-zinc-800 dark:bg-zinc-900/20 dark:text-zinc-200",
+    "inline-flex items-center rounded-full border border-[#222222] bg-[#0f0f0f] px-2 py-0.5 text-xs font-medium text-[#888888]",
   );
 }
 
@@ -110,8 +110,7 @@ function sentimentBadge(sentiment: string | null | undefined) {
     );
   }
   return cn(
-    "inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-700",
-    "dark:border-zinc-800 dark:bg-zinc-900/20 dark:text-zinc-200",
+    "inline-flex items-center rounded-full border border-[#222222] bg-[#0f0f0f] px-2 py-0.5 text-xs font-medium text-[#888888]",
   );
 }
 
@@ -127,7 +126,7 @@ function SyncTripAdvisorButton({
       type="button"
       onClick={onSync}
       disabled={syncing}
-      className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900"
+      className="inline-flex h-10 items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5] disabled:cursor-not-allowed disabled:opacity-60"
     >
       {syncing ? (
         <span className="inline-flex items-center gap-2">
@@ -151,6 +150,37 @@ export default function ReviewsInboxPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+
+  const [platformFilter, setPlatformFilter] = useState<string>("all");
+  const [sentimentFilter, setSentimentFilter] = useState<string>("all");
+  const [respondedFilter, setRespondedFilter] = useState<string>("all");
+
+  const visibleReviews = useMemo(() => {
+    return reviews.filter((r) => {
+      const platform = (r.platform ?? r.source ?? "").toString().toLowerCase();
+      const sentimentRaw = (r.sentiment ?? r.sentiment_label ?? "").toString().toLowerCase();
+      const sentiment =
+        sentimentRaw === "positive" ? "positive" : sentimentRaw === "negative" ? "negative" : "neutral";
+
+      const responded =
+        r.responded ?? r.has_responded ?? r.is_responded ?? false;
+
+      const platformOk =
+        platformFilter === "all" ? true : platform === platformFilter;
+
+      const sentimentOk =
+        sentimentFilter === "all" ? true : sentiment === sentimentFilter;
+
+      const respondedOk =
+        respondedFilter === "all"
+          ? true
+          : respondedFilter === "responded"
+            ? Boolean(responded)
+            : !Boolean(responded);
+
+      return platformOk && sentimentOk && respondedOk;
+    });
+  }, [reviews, platformFilter, sentimentFilter, respondedFilter]);
 
   async function handleSyncTripAdvisor() {
     setSyncError(null);
@@ -364,73 +394,18 @@ export default function ReviewsInboxPage() {
 
   if (reviews.length === 0) {
     return (
-      <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-12 dark:bg-black">
-        <div className="w-full max-w-4xl mx-auto space-y-5">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-                Reviews inbox
-              </h1>
-              <SyncTripAdvisorButton
-                syncing={syncing}
-                onSync={handleSyncTripAdvisor}
-              />
-            </div>
+      <div className="space-y-5">
+        <nav className="flex items-center gap-2 text-sm text-[#888888]">
+          <Link href="/dashboard" className="hover:text-white">
+            Overview
+          </Link>
+          <span className="text-[#444444]">/</span>
+          <span className="text-[#888888]">Reviews inbox</span>
+        </nav>
 
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/20">
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Total reviews
-                </div>
-                <div className="mt-1 text-3xl font-semibold text-zinc-900 dark:text-zinc-50">
-                  {summary.total}
-                </div>
-              </div>
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/20">
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Average rating
-                </div>
-                <div className="mt-1 text-3xl font-semibold text-zinc-900 dark:text-zinc-50">
-                  {summary.avgRating === null ? "—" : summary.avgRating.toFixed(2)}
-                </div>
-              </div>
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/20">
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Needing response
-                </div>
-                <div className="mt-1 text-3xl font-semibold text-zinc-900 dark:text-zinc-50">
-                  {summary.needingResponse}
-                </div>
-              </div>
-            </div>
-            {syncError ? (
-              <p className="mt-3 text-sm text-red-600 dark:text-red-400">
-                {syncError}
-              </p>
-            ) : null}
-            {syncMessage ? (
-              <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-300">
-                {syncMessage}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              No reviews yet. Once guests leave feedback, it will show up here for response.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-12 dark:bg-black">
-      <div className="w-full max-w-4xl mx-auto space-y-5">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+            <h1 className="text-2xl font-semibold tracking-tight text-white">
               Reviews inbox
             </h1>
             <SyncTripAdvisorButton
@@ -440,59 +415,203 @@ export default function ReviewsInboxPage() {
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/20">
-              <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            <div className="rounded-xl border border-[#222222] bg-[#111111] p-4">
+              <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
                 Total reviews
               </div>
-              <div className="mt-1 text-3xl font-semibold text-zinc-900 dark:text-zinc-50">
+              <div className="mt-1 text-3xl font-semibold text-white">
                 {summary.total}
               </div>
             </div>
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/20">
-              <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            <div className="rounded-xl border border-[#222222] bg-[#111111] p-4">
+              <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
                 Average rating
               </div>
-              <div className="mt-1 text-3xl font-semibold text-zinc-900 dark:text-zinc-50">
+              <div className="mt-1 text-3xl font-semibold text-white">
                 {summary.avgRating === null ? "—" : summary.avgRating.toFixed(2)}
               </div>
             </div>
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/20">
-              <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            <div className="rounded-xl border border-[#222222] bg-[#111111] p-4">
+              <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
                 Needing response
               </div>
-              <div className="mt-1 text-3xl font-semibold text-zinc-900 dark:text-zinc-50">
+              <div className="mt-1 text-3xl font-semibold text-white">
                 {summary.needingResponse}
               </div>
             </div>
           </div>
 
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-[#888888]">Platform</div>
+              <select
+                value={platformFilter}
+                onChange={(e) => setPlatformFilter(e.target.value)}
+                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+              >
+                <option value="all">All</option>
+                <option value="tripadvisor">TripAdvisor</option>
+                <option value="google">Google</option>
+                <option value="booking">Booking.com</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-[#888888]">Sentiment</div>
+              <select
+                value={sentimentFilter}
+                onChange={(e) => setSentimentFilter(e.target.value)}
+                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+              >
+                <option value="all">All</option>
+                <option value="positive">Positive</option>
+                <option value="neutral">Neutral</option>
+                <option value="negative">Negative</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-[#888888]">Status</div>
+              <select
+                value={respondedFilter}
+                onChange={(e) => setRespondedFilter(e.target.value)}
+                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+              >
+                <option value="all">All</option>
+                <option value="needsResponse">Needs response</option>
+                <option value="responded">Responded</option>
+              </select>
+            </div>
+          </div>
+
           {syncError ? (
-            <p className="mt-3 text-sm text-red-600 dark:text-red-400">
-              {syncError}
-            </p>
+            <p className="mt-3 text-sm text-red-400">{syncError}</p>
           ) : null}
           {syncMessage ? (
-            <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-300">
-              {syncMessage}
-            </p>
+            <p className="mt-3 text-sm text-emerald-300">{syncMessage}</p>
           ) : null}
         </div>
 
-        <div className="space-y-4">
-          {reviews.map((review, idx) => {
+        <div className="rounded-2xl border border-[#222222] bg-[#111111] p-8">
+          <p className="text-sm text-[#888888]">
+            No reviews yet. Once guests leave feedback, it will show up here for response.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <nav className="flex items-center gap-2 text-sm text-[#888888]">
+        <Link href="/dashboard" className="hover:text-white">
+          Overview
+        </Link>
+        <span className="text-[#444444]">/</span>
+        <span className="text-[#888888]">Reviews inbox</span>
+      </nav>
+
+      <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight text-white">
+            Reviews inbox
+          </h1>
+          <SyncTripAdvisorButton
+            syncing={syncing}
+            onSync={handleSyncTripAdvisor}
+          />
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-[#222222] bg-[#111111] p-4">
+            <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
+              Total reviews
+            </div>
+            <div className="mt-1 text-3xl font-semibold text-white">
+              {summary.total}
+            </div>
+          </div>
+          <div className="rounded-xl border border-[#222222] bg-[#111111] p-4">
+            <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
+              Average rating
+            </div>
+            <div className="mt-1 text-3xl font-semibold text-white">
+              {summary.avgRating === null ? "—" : summary.avgRating.toFixed(2)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-[#222222] bg-[#111111] p-4">
+            <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
+              Needing response
+            </div>
+            <div className="mt-1 text-3xl font-semibold text-white">
+              {summary.needingResponse}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="space-y-2">
+            <div className="text-sm font-medium text-[#888888]">Platform</div>
+            <select
+              value={platformFilter}
+              onChange={(e) => setPlatformFilter(e.target.value)}
+              className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+            >
+              <option value="all">All</option>
+              <option value="tripadvisor">TripAdvisor</option>
+              <option value="google">Google</option>
+              <option value="booking">Booking.com</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <div className="text-sm font-medium text-[#888888]">Sentiment</div>
+            <select
+              value={sentimentFilter}
+              onChange={(e) => setSentimentFilter(e.target.value)}
+              className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+            >
+              <option value="all">All</option>
+              <option value="positive">Positive</option>
+              <option value="neutral">Neutral</option>
+              <option value="negative">Negative</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <div className="text-sm font-medium text-[#888888]">Status</div>
+            <select
+              value={respondedFilter}
+              onChange={(e) => setRespondedFilter(e.target.value)}
+              className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+            >
+              <option value="all">All</option>
+              <option value="needsResponse">Needs response</option>
+              <option value="responded">Responded</option>
+            </select>
+          </div>
+        </div>
+
+        {syncError ? (
+          <p className="mt-3 text-sm text-red-400">{syncError}</p>
+        ) : null}
+        {syncMessage ? (
+          <p className="mt-3 text-sm text-emerald-300">{syncMessage}</p>
+        ) : null}
+      </div>
+
+      <div className="space-y-4">
+        {visibleReviews.map((review, idx) => {
             const platform = review.platform ?? review.source ?? "";
             const rating = normalizeRating(review.rating ?? review.stars);
             const reviewerName = review.reviewer_name ?? review.name ?? "Anonymous";
             const createdAt = review.created_at ?? review.date ?? null;
             const reviewText = review.review_text ?? review.body ?? review.text ?? "";
-            const sentiment = review.sentiment ?? review.sentiment_label ?? "";
+            const sentiment =
+              review.sentiment ?? review.sentiment_label ?? "neutral";
             const complaintTopic = review.complaint_topic ?? review.topic ?? null;
             const responded = review.responded ?? review.has_responded ?? review.is_responded ?? false;
 
             return (
               <div
                 key={review.id ?? `${idx}-${platform}-${createdAt}`}
-                className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+                className="rounded-2xl border border-[#222222] bg-[#111111] p-6"
               >
                 <div className="flex flex-wrap items-center gap-2 justify-between">
                   <div className="flex items-center gap-3">
@@ -510,39 +629,36 @@ export default function ReviewsInboxPage() {
                     <button
                       type="button"
                       onClick={() => {}}
-                      className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900"
+                      className="inline-flex h-10 items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
                     >
                       Draft response
                     </button>
                   )}
                 </div>
 
-                <div className="mt-4 text-sm text-zinc-700 dark:text-zinc-200">
+                <div className="mt-4 text-sm text-[#888888]">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                    <span className="font-medium text-white">
                       {reviewerName}
                     </span>
-                    <span className="text-zinc-500 dark:text-zinc-400">• {formatDate(createdAt)}</span>
-                    {sentiment ? (
-                      <span className={sentimentBadge(sentiment)}>
-                        {sentiment.charAt(0).toUpperCase() + sentiment.slice(1)}
-                      </span>
-                    ) : null}
+                    <span className="text-[#444444]">• {formatDate(createdAt)}</span>
+                    <span className={sentimentBadge(sentiment)}>
+                      {sentiment.charAt(0).toUpperCase() + sentiment.slice(1)}
+                    </span>
                     {complaintTopic ? (
-                      <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+                      <span className="inline-flex items-center rounded-full bg-[#0f0f0f] px-2 py-1 text-xs font-medium text-[#888888] border border-[#222222]">
                         {complaintTopic}
                       </span>
                     ) : null}
                   </div>
                 </div>
 
-                <div className="mt-3 text-zinc-900 dark:text-zinc-50 whitespace-pre-wrap text-sm leading-6">
+                <div className="mt-3 text-white whitespace-pre-wrap text-sm leading-6">
                   {reviewText || "—"}
                 </div>
               </div>
             );
           })}
-        </div>
       </div>
     </div>
   );
