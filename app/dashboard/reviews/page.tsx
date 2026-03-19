@@ -115,7 +115,7 @@ function sentimentBadge(sentiment: string | null | undefined) {
   );
 }
 
-function SyncButton({
+function SyncTripAdvisorButton({
   syncing,
   onSync,
 }: {
@@ -132,10 +132,10 @@ function SyncButton({
       {syncing ? (
         <span className="inline-flex items-center gap-2">
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900 dark:border-zinc-700 dark:border-t-zinc-50" />
-          Syncing reviews…
+          Syncing…
         </span>
       ) : (
-        "Sync reviews"
+        "Sync TripAdvisor"
       )}
     </button>
   );
@@ -151,6 +151,87 @@ export default function ReviewsInboxPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+
+  async function handleSyncTripAdvisor() {
+    setSyncError(null);
+    setSyncMessage(null);
+    try {
+      setSyncing(true);
+
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw new Error(userError.message);
+      }
+
+      if (!user?.id) {
+        throw new Error("You must be signed in to sync reviews.");
+      }
+
+      const { data: hotel, error: hotelError } = await supabase
+        .from("hotels")
+        .select("id, tripadvisor_url")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (hotelError) {
+        throw new Error(hotelError.message);
+      }
+
+      if (!hotel?.id) {
+        alert("No TripAdvisor URL set. Please update your hotel settings.");
+        return;
+      }
+
+      const tripadvisorUrl =
+        typeof hotel.tripadvisor_url === "string" && hotel.tripadvisor_url.trim()
+          ? hotel.tripadvisor_url.trim()
+          : null;
+
+      if (!tripadvisorUrl) {
+        alert("No TripAdvisor URL set. Please update your hotel settings.");
+        return;
+      }
+
+      const res = await fetch("/api/scrape-reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hotel_id: hotel.id,
+          tripadvisor_url: tripadvisorUrl,
+        }),
+      });
+
+      const json = (await res.json()) as {
+        success?: boolean;
+        count?: number;
+        error?: string;
+      };
+
+      if (!res.ok || json.success !== true) {
+        throw new Error(json.error ?? "Failed to sync reviews from TripAdvisor.");
+      }
+
+      const count = json.count ?? 0;
+      setSyncMessage(`Synced ${count} new reviews!`);
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      setSyncError(
+        err instanceof Error ? err.message : "Failed to sync reviews.",
+      );
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   useEffect(() => {
     let isCancelled = false;
@@ -290,91 +371,9 @@ export default function ReviewsInboxPage() {
               <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
                 Reviews inbox
               </h1>
-              <SyncButton
+              <SyncTripAdvisorButton
                 syncing={syncing}
-                onSync={async () => {
-                  setSyncError(null);
-                  setSyncMessage(null);
-
-                  try {
-                    setSyncing(true);
-
-                    const supabase = createBrowserClient(
-                      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-                    );
-
-                    const {
-                      data: { user },
-                      error: userError,
-                    } = await supabase.auth.getUser();
-
-                    if (userError) {
-                      throw new Error(userError.message);
-                    }
-
-                    if (!user || !user.id) {
-                      throw new Error("You must be signed in to sync reviews.");
-                    }
-
-                    const { data: hotel, error: hotelError } = await supabase
-                      .from("hotels")
-                      .select("id, tripadvisor_url")
-                      .eq("user_id", user.id)
-                      .limit(1)
-                      .maybeSingle();
-
-                    if (hotelError) {
-                      throw new Error(hotelError.message);
-                    }
-
-                    if (!hotel?.id || !hotel.tripadvisor_url) {
-                      throw new Error(
-                        "No hotel with a TripAdvisor URL found for this user.",
-                      );
-                    }
-
-                    const res = await fetch("/api/scrape-reviews", {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({
-                        hotel_id: hotel.id,
-                        tripadvisor_url: hotel.tripadvisor_url,
-                      }),
-                    });
-
-                    const json = (await res.json()) as {
-                      success?: boolean;
-                      count?: number;
-                      error?: string;
-                      details?: string;
-                    };
-
-                    if (!res.ok || json.success !== true) {
-                      throw new Error(
-                        json.error ||
-                          json.details ||
-                          "Failed to sync reviews from TripAdvisor.",
-                      );
-                    }
-
-                    const inserted = json.count ?? 0;
-                    setSyncMessage(`Synced ${inserted} new reviews.`);
-
-                    // Trigger refresh of the inbox data
-                    setRefreshKey((key) => key + 1);
-                  } catch (err) {
-                    const message =
-                      err instanceof Error
-                        ? err.message
-                        : "Failed to sync reviews.";
-                    setSyncError(message);
-                  } finally {
-                    setSyncing(false);
-                  }
-                }}
+                onSync={handleSyncTripAdvisor}
               />
             </div>
 
@@ -434,91 +433,9 @@ export default function ReviewsInboxPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
               Reviews inbox
             </h1>
-            <SyncButton
+            <SyncTripAdvisorButton
               syncing={syncing}
-              onSync={async () => {
-                setSyncError(null);
-                setSyncMessage(null);
-
-                try {
-                  setSyncing(true);
-
-                  const supabase = createBrowserClient(
-                    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-                  );
-
-                  const {
-                    data: { user },
-                    error: userError,
-                  } = await supabase.auth.getUser();
-
-                  if (userError) {
-                    throw new Error(userError.message);
-                  }
-
-                  if (!user || !user.id) {
-                    throw new Error("You must be signed in to sync reviews.");
-                  }
-
-                  const { data: hotel, error: hotelError } = await supabase
-                    .from("hotels")
-                    .select("id, tripadvisor_url")
-                    .eq("user_id", user.id)
-                    .limit(1)
-                    .maybeSingle();
-
-                  if (hotelError) {
-                    throw new Error(hotelError.message);
-                  }
-
-                  if (!hotel?.id || !hotel.tripadvisor_url) {
-                    throw new Error(
-                      "No hotel with a TripAdvisor URL found for this user.",
-                    );
-                  }
-
-                  const res = await fetch("/api/scrape-reviews", {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      hotel_id: hotel.id,
-                      tripadvisor_url: hotel.tripadvisor_url,
-                    }),
-                  });
-
-                  const json = (await res.json()) as {
-                    success?: boolean;
-                    count?: number;
-                    error?: string;
-                    details?: string;
-                  };
-
-                  if (!res.ok || json.success !== true) {
-                    throw new Error(
-                      json.error ||
-                        json.details ||
-                        "Failed to sync reviews from TripAdvisor.",
-                    );
-                  }
-
-                  const inserted = json.count ?? 0;
-                  setSyncMessage(`Synced ${inserted} new reviews.`);
-
-                  // Trigger refresh of the inbox data
-                  setRefreshKey((key) => key + 1);
-                } catch (err) {
-                  const message =
-                    err instanceof Error
-                      ? err.message
-                      : "Failed to sync reviews.";
-                  setSyncError(message);
-                } finally {
-                  setSyncing(false);
-                }
-              }}
+              onSync={handleSyncTripAdvisor}
             />
           </div>
 
