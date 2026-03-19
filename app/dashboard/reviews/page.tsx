@@ -115,11 +115,42 @@ function sentimentBadge(sentiment: string | null | undefined) {
   );
 }
 
+function SyncButton({
+  syncing,
+  onSync,
+}: {
+  syncing: boolean;
+  onSync: () => Promise<void>;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSync}
+      disabled={syncing}
+      className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900"
+    >
+      {syncing ? (
+        <span className="inline-flex items-center gap-2">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900 dark:border-zinc-700 dark:border-t-zinc-50" />
+          Syncing reviews…
+        </span>
+      ) : (
+        "Sync reviews"
+      )}
+    </button>
+  );
+}
+
 export default function ReviewsInboxPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -207,7 +238,7 @@ export default function ReviewsInboxPage() {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   const summary = useMemo(() => {
     const total = reviews.length;
@@ -255,9 +286,98 @@ export default function ReviewsInboxPage() {
       <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-12 dark:bg-black">
         <div className="w-full max-w-4xl mx-auto space-y-5">
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-              Reviews inbox
-            </h1>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                Reviews inbox
+              </h1>
+              <SyncButton
+                syncing={syncing}
+                onSync={async () => {
+                  setSyncError(null);
+                  setSyncMessage(null);
+
+                  try {
+                    setSyncing(true);
+
+                    const supabase = createBrowserClient(
+                      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                    );
+
+                    const {
+                      data: { user },
+                      error: userError,
+                    } = await supabase.auth.getUser();
+
+                    if (userError) {
+                      throw new Error(userError.message);
+                    }
+
+                    if (!user || !user.id) {
+                      throw new Error("You must be signed in to sync reviews.");
+                    }
+
+                    const { data: hotel, error: hotelError } = await supabase
+                      .from("hotels")
+                      .select("id, tripadvisor_url")
+                      .eq("user_id", user.id)
+                      .limit(1)
+                      .maybeSingle();
+
+                    if (hotelError) {
+                      throw new Error(hotelError.message);
+                    }
+
+                    if (!hotel?.id || !hotel.tripadvisor_url) {
+                      throw new Error(
+                        "No hotel with a TripAdvisor URL found for this user.",
+                      );
+                    }
+
+                    const res = await fetch("/api/scrape-reviews", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        hotel_id: hotel.id,
+                        tripadvisor_url: hotel.tripadvisor_url,
+                      }),
+                    });
+
+                    const json = (await res.json()) as {
+                      success?: boolean;
+                      count?: number;
+                      error?: string;
+                      details?: string;
+                    };
+
+                    if (!res.ok || json.success !== true) {
+                      throw new Error(
+                        json.error ||
+                          json.details ||
+                          "Failed to sync reviews from TripAdvisor.",
+                      );
+                    }
+
+                    const inserted = json.count ?? 0;
+                    setSyncMessage(`Synced ${inserted} new reviews.`);
+
+                    // Trigger refresh of the inbox data
+                    setRefreshKey((key) => key + 1);
+                  } catch (err) {
+                    const message =
+                      err instanceof Error
+                        ? err.message
+                        : "Failed to sync reviews.";
+                    setSyncError(message);
+                  } finally {
+                    setSyncing(false);
+                  }
+                }}
+              />
+            </div>
+
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/20">
                 <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
@@ -284,6 +404,16 @@ export default function ReviewsInboxPage() {
                 </div>
               </div>
             </div>
+            {syncError ? (
+              <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+                {syncError}
+              </p>
+            ) : null}
+            {syncMessage ? (
+              <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-300">
+                {syncMessage}
+              </p>
+            ) : null}
           </div>
 
           <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -300,9 +430,98 @@ export default function ReviewsInboxPage() {
     <div className="flex flex-1 flex-col bg-zinc-50 px-4 py-12 dark:bg-black">
       <div className="w-full max-w-4xl mx-auto space-y-5">
         <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Reviews inbox
-          </h1>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+              Reviews inbox
+            </h1>
+            <SyncButton
+              syncing={syncing}
+              onSync={async () => {
+                setSyncError(null);
+                setSyncMessage(null);
+
+                try {
+                  setSyncing(true);
+
+                  const supabase = createBrowserClient(
+                    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                  );
+
+                  const {
+                    data: { user },
+                    error: userError,
+                  } = await supabase.auth.getUser();
+
+                  if (userError) {
+                    throw new Error(userError.message);
+                  }
+
+                  if (!user || !user.id) {
+                    throw new Error("You must be signed in to sync reviews.");
+                  }
+
+                  const { data: hotel, error: hotelError } = await supabase
+                    .from("hotels")
+                    .select("id, tripadvisor_url")
+                    .eq("user_id", user.id)
+                    .limit(1)
+                    .maybeSingle();
+
+                  if (hotelError) {
+                    throw new Error(hotelError.message);
+                  }
+
+                  if (!hotel?.id || !hotel.tripadvisor_url) {
+                    throw new Error(
+                      "No hotel with a TripAdvisor URL found for this user.",
+                    );
+                  }
+
+                  const res = await fetch("/api/scrape-reviews", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      hotel_id: hotel.id,
+                      tripadvisor_url: hotel.tripadvisor_url,
+                    }),
+                  });
+
+                  const json = (await res.json()) as {
+                    success?: boolean;
+                    count?: number;
+                    error?: string;
+                    details?: string;
+                  };
+
+                  if (!res.ok || json.success !== true) {
+                    throw new Error(
+                      json.error ||
+                        json.details ||
+                        "Failed to sync reviews from TripAdvisor.",
+                    );
+                  }
+
+                  const inserted = json.count ?? 0;
+                  setSyncMessage(`Synced ${inserted} new reviews.`);
+
+                  // Trigger refresh of the inbox data
+                  setRefreshKey((key) => key + 1);
+                } catch (err) {
+                  const message =
+                    err instanceof Error
+                      ? err.message
+                      : "Failed to sync reviews.";
+                  setSyncError(message);
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+            />
+          </div>
+
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/20">
               <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
@@ -329,6 +548,17 @@ export default function ReviewsInboxPage() {
               </div>
             </div>
           </div>
+
+          {syncError ? (
+            <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+              {syncError}
+            </p>
+          ) : null}
+          {syncMessage ? (
+            <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-300">
+              {syncMessage}
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-4">
