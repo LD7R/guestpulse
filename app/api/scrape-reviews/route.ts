@@ -126,9 +126,10 @@ export async function POST(request: NextRequest) {
     const actorInput =
       platform === "google"
         ? {
-            placeUrls: [{ url }],
+            startUrls: [{ url }],
             maxReviews: 20,
             language: "en",
+            personalData: true,
           }
         : platform === "booking"
           ? {
@@ -296,7 +297,7 @@ export async function POST(request: NextRequest) {
           : item.publishedDate ?? null;
       const rating =
         platform === "google"
-          ? normalizeRating(item.stars ?? item.rating)
+          ? normalizeRating(item.stars || item.rating || null)
           : platform === "booking"
             ? normalizeRating(
                 (item.rating as number | string | null | undefined) ??
