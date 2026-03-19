@@ -17,7 +17,9 @@ type ApifyRun = {
 };
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
-const APIFY_ACTOR_ID = "apify~tripadvisor-scraper";
+const APIFY_ACTOR_ID = "automation-lab~tripadvisor-scraper";
+
+export const runtime = "nodejs";
 
 function normalizeRating(value: unknown): number | null {
   if (value === null || value === undefined) return null;
@@ -51,6 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     const apifyToken = process.env.APIFY_API_TOKEN;
+    // Debug logging removed (avoid leaking env details in production).
     if (!apifyToken) {
       return NextResponse.json(
         { success: false, error: "APIFY_API_TOKEN is not configured" },
