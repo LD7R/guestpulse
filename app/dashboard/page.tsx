@@ -4,7 +4,12 @@ import { createBrowserClient } from "@supabase/ssr";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Hotel = { id: string };
+type Hotel = {
+  id: string;
+  tripadvisor_url?: string | null;
+  google_url?: string | null;
+  booking_url?: string | null;
+};
 
 type Stats = {
   totalReviews: number;
@@ -18,11 +23,122 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [hasHotel, setHasHotel] = useState(false);
+  const [primaryHotel, setPrimaryHotel] = useState<Hotel | null>(null);
   const [stats, setStats] = useState<Stats>({
     totalReviews: 0,
     avgRating: null,
     needingResponse: 0,
   });
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncBreakdown, setSyncBreakdown] = useState<{
+    tripadvisor: number;
+    google: number;
+    booking: number;
+  } | null>(null);
+
+  async function syncPlatform(
+    platform: "tripadvisor" | "google" | "booking",
+    url: string,
+    hotelId: string,
+  ) {
+    try {
+      const res = await fetch("/api/scrape-reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hotel_id: hotelId, url, platform }),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        count?: number;
+        error?: string;
+      };
+
+      if (!res.ok || json.success !== true) {
+        throw new Error(json.error ?? `Failed syncing ${platform}`);
+      }
+
+      return { platform, count: json.count ?? 0, error: null as string | null };
+    } catch (e) {
+      return {
+        platform,
+        count: 0,
+        error: e instanceof Error ? e.message : `Failed syncing ${platform}`,
+      };
+    }
+  }
+
+  async function handleSyncAllReviews() {
+    setSyncError(null);
+    setSyncMessage(null);
+    setSyncBreakdown(null);
+
+    if (!primaryHotel?.id) {
+      setSyncError("No hotel found. Add one in Settings first.");
+      return;
+    }
+
+    const tripadvisorUrl =
+      typeof primaryHotel.tripadvisor_url === "string"
+        ? primaryHotel.tripadvisor_url.trim()
+        : "";
+    const googleUrl =
+      typeof primaryHotel.google_url === "string"
+        ? primaryHotel.google_url.trim()
+        : "";
+    const bookingUrl =
+      typeof primaryHotel.booking_url === "string"
+        ? primaryHotel.booking_url.trim()
+        : "";
+
+    const tasks = [
+      tripadvisorUrl
+        ? syncPlatform("tripadvisor", tripadvisorUrl, primaryHotel.id)
+        : null,
+      googleUrl ? syncPlatform("google", googleUrl, primaryHotel.id) : null,
+      bookingUrl ? syncPlatform("booking", bookingUrl, primaryHotel.id) : null,
+    ].filter(Boolean) as Promise<{
+      platform: "tripadvisor" | "google" | "booking";
+      count: number;
+      error: string | null;
+    }>[];
+
+    if (tasks.length === 0) {
+      setSyncMessage("Synced 0 new reviews across 0 platforms");
+      setSyncBreakdown({ tripadvisor: 0, google: 0, booking: 0 });
+      return;
+    }
+
+    setSyncing(true);
+    try {
+      const results = await Promise.all(tasks);
+      const totalSynced = results.reduce((sum, r) => sum + (r?.count || 0), 0);
+      const platformCount = results.filter((r) => (r?.count ?? 0) > 0).length;
+      const failed = results.filter((r) => r.error);
+
+      setSyncBreakdown({
+        tripadvisor:
+          results.find((r) => r.platform === "tripadvisor")?.count ?? 0,
+        google: results.find((r) => r.platform === "google")?.count ?? 0,
+        booking: results.find((r) => r.platform === "booking")?.count ?? 0,
+      });
+      setSyncMessage(
+        `Synced ${totalSynced} new reviews across ${platformCount} platforms`,
+      );
+
+      if (failed.length > 0) {
+        setSyncError(
+          `Some platforms failed: ${failed
+            .map((f) => `${f.platform}: ${f.error}`)
+            .join(" | ")}`,
+        );
+      }
+
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -45,7 +161,7 @@ export default function DashboardPage() {
 
         const { data: hotels, error: hotelsError } = await supabase
           .from("hotels")
-          .select("id")
+          .select("id, tripadvisor_url, google_url, booking_url")
           .eq("user_id", user.id);
 
         if (hotelsError) throw hotelsError;
@@ -53,11 +169,13 @@ export default function DashboardPage() {
         const hotelIds = (hotels ?? []).map((h: Hotel) => h.id);
         if (hotelIds.length === 0) {
           setHasHotel(false);
+          setPrimaryHotel(null);
           setStats({ totalReviews: 0, avgRating: null, needingResponse: 0 });
           return;
         }
 
         setHasHotel(true);
+        setPrimaryHotel((hotels ?? [])[0] ?? null);
 
         const { count: totalCount, error: totalError } = await supabase
           .from("reviews")
@@ -202,7 +320,56 @@ export default function DashboardPage() {
               >
                 Hotel settings
               </button>
+              <button
+                type="button"
+                disabled={syncing}
+                onClick={handleSyncAllReviews}
+                className="inline-flex items-center justify-center gap-2 rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {syncing ? (
+                  <>
+                    <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    Syncing...
+                  </>
+                ) : (
+                  "Sync all reviews"
+                )}
+              </button>
             </div>
+            {syncMessage ? (
+              <p className="mt-3 text-sm text-emerald-300">{syncMessage}</p>
+            ) : null}
+            {syncError ? <p className="mt-2 text-sm text-red-400">{syncError}</p> : null}
+            {syncBreakdown ? (
+              <p className="mt-2 text-sm">
+                <span className="text-[#888888]">Synced breakdown — </span>
+                <span
+                  className={
+                    syncBreakdown.tripadvisor > 0
+                      ? "text-emerald-300"
+                      : "text-[#888888]"
+                  }
+                >
+                  TripAdvisor: {syncBreakdown.tripadvisor}
+                </span>
+                <span className="text-[#888888]"> · </span>
+                <span
+                  className={
+                    syncBreakdown.google > 0 ? "text-emerald-300" : "text-[#888888]"
+                  }
+                >
+                  Google: {syncBreakdown.google}
+                </span>
+                <span className="text-[#888888]"> · </span>
+                <span
+                  className={
+                    syncBreakdown.booking > 0 ? "text-emerald-300" : "text-[#888888]"
+                  }
+                >
+                  Booking: {syncBreakdown.booking}
+                </span>
+              </p>
+            ) : null}
           </div>
         </>
       )}

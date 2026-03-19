@@ -25,7 +25,9 @@ type ApifyRun = {
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
 const APIFY_TRIPADVISOR_ACTOR_ID = "Hvp4YfFGyLM635Q2F";
-const APIFY_GOOGLE_ACTOR_ID = "Xb8osYTtOjlsgI6k9";
+// Placeholder until dedicated actors are finalized.
+const APIFY_GOOGLE_ACTOR_ID = APIFY_TRIPADVISOR_ACTOR_ID;
+const APIFY_BOOKING_ACTOR_ID = APIFY_TRIPADVISOR_ACTOR_ID;
 
 export const runtime = "nodejs";
 
@@ -68,15 +70,20 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as {
       hotel_id?: string;
-      tripadvisor_url?: string;
-      platform?: "tripadvisor" | "google";
+      url?: string;
+      platform?: "tripadvisor" | "google" | "booking";
     };
-    const { hotel_id, tripadvisor_url } = body;
-    const platform = body.platform === "google" ? "google" : "tripadvisor";
+    const { hotel_id, url } = body;
+    const platform =
+      body.platform === "google"
+        ? "google"
+        : body.platform === "booking"
+          ? "booking"
+          : "tripadvisor";
 
-    if (!hotel_id || !tripadvisor_url) {
+    if (!hotel_id || !url) {
       return NextResponse.json(
-        { success: false, error: "hotel_id and tripadvisor_url are required" },
+        { success: false, error: "hotel_id, url, and platform are required" },
         { status: 400 },
       );
     }
@@ -109,16 +116,26 @@ export async function POST(request: NextRequest) {
 
     // 2. Start Apify actor run
     const actorId =
-      platform === "google" ? APIFY_GOOGLE_ACTOR_ID : APIFY_TRIPADVISOR_ACTOR_ID;
+      platform === "google"
+        ? APIFY_GOOGLE_ACTOR_ID
+        : platform === "booking"
+          ? APIFY_BOOKING_ACTOR_ID
+          : APIFY_TRIPADVISOR_ACTOR_ID;
     const actorInput =
       platform === "google"
         ? {
-            placeUrls: [{ url: tripadvisor_url }],
+            placeUrls: [{ url }],
             maxReviews: 20,
             language: "en",
           }
+        : platform === "booking"
+          ? {
+              startUrls: [{ url }],
+              maxReviews: 20,
+              language: "en",
+            }
         : {
-            startUrls: [{ url: tripadvisor_url }],
+            startUrls: [{ url }],
             maxReviews: 20,
             language: "en",
           };
@@ -249,6 +266,8 @@ export async function POST(request: NextRequest) {
     const reviewerName = (item: ApifyReviewItem) =>
       platform === "google"
         ? item.name ?? item.reviewer?.name ?? "Anonymous"
+        : platform === "booking"
+          ? String((item.author as string) ?? (item.reviewer as string) ?? "Anonymous")
         : item.user?.name ?? item.user?.username ?? "Anonymous";
 
     const rowsToInsert: Array<{
@@ -268,18 +287,33 @@ export async function POST(request: NextRequest) {
       const reviewDate =
         platform === "google"
           ? item.publishedAtDate ?? item.date ?? null
+          : platform === "booking"
+            ? (item.date as string | null | undefined) ??
+              (item.stayDate as string | null | undefined) ??
+              null
           : item.publishedDate ?? null;
       const rating =
         platform === "google"
           ? normalizeRating(item.stars ?? item.rating)
+          : platform === "booking"
+            ? normalizeRating(
+                (item.rating as number | string | null | undefined) ??
+                  (item.score as number | string | null | undefined),
+              )
           : normalizeRating(item.rating);
       const reviewText =
         platform === "google"
           ? item.text ?? item.snippet ?? null
+          : platform === "booking"
+            ? (item.positive as string | null | undefined) ??
+              item.text ??
+              null
           : item.text ?? null;
       const responded =
         platform === "google"
           ? Boolean(item.responseFromOwnerText)
+          : platform === "booking"
+            ? false
           : Boolean(item.ownerResponse);
 
       // Skip duplicate only when reviewer_name matches and review_date is on the same day.

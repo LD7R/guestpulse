@@ -7,6 +7,9 @@ import Link from "next/link";
 type Hotel = {
   id: string;
   name?: string | null;
+  tripadvisor_url?: string | null;
+  google_url?: string | null;
+  booking_url?: string | null;
 };
 
 type Review = {
@@ -114,7 +117,7 @@ function sentimentBadge(sentiment: string | null | undefined) {
   );
 }
 
-function SyncTripAdvisorButton({
+function SyncAllButton({
   syncing,
   onSync,
   label,
@@ -152,9 +155,11 @@ export default function ReviewsInboxPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [syncingPlatform, setSyncingPlatform] = useState<
-    "tripadvisor" | "google" | null
-  >(null);
+  const [syncBreakdown, setSyncBreakdown] = useState<{
+    tripadvisor: number;
+    google: number;
+    booking: number;
+  } | null>(null);
 
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [sentimentFilter, setSentimentFilter] = useState<string>("all");
@@ -187,63 +192,19 @@ export default function ReviewsInboxPage() {
     });
   }, [reviews, platformFilter, sentimentFilter, respondedFilter]);
 
-  async function handleSyncTripAdvisor() {
-    setSyncError(null);
-    setSyncMessage(null);
+  async function syncPlatform(
+    platform: "tripadvisor" | "google" | "booking",
+    url: string,
+    hotelId: string,
+  ) {
     try {
-      setSyncing(true);
-      setSyncingPlatform("tripadvisor");
-
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      );
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        throw new Error(userError.message);
-      }
-
-      if (!user?.id) {
-        throw new Error("You must be signed in to sync reviews.");
-      }
-
-      const { data: hotel, error: hotelError } = await supabase
-        .from("hotels")
-        .select("id, tripadvisor_url")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (hotelError) {
-        throw new Error(hotelError.message);
-      }
-
-      if (!hotel?.id) {
-        alert("No TripAdvisor URL set. Please update your hotel settings.");
-        return;
-      }
-
-      const tripadvisorUrl =
-        typeof hotel.tripadvisor_url === "string" && hotel.tripadvisor_url.trim()
-          ? hotel.tripadvisor_url.trim()
-          : null;
-
-      if (!tripadvisorUrl) {
-        alert("No TripAdvisor URL set. Please update your hotel settings.");
-        return;
-      }
-
       const res = await fetch("/api/scrape-reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          hotel_id: hotel.id,
-          tripadvisor_url: tripadvisorUrl,
+          hotel_id: hotelId,
+          url,
+          platform,
         }),
       });
 
@@ -254,28 +215,25 @@ export default function ReviewsInboxPage() {
       };
 
       if (!res.ok || json.success !== true) {
-        throw new Error(json.error ?? "Failed to sync reviews from TripAdvisor.");
+        throw new Error(json.error ?? `Failed syncing ${platform}`);
       }
 
-      const count = json.count ?? 0;
-      setSyncMessage(`Synced ${count} new reviews!`);
-      setRefreshKey((k) => k + 1);
-    } catch (err) {
-      setSyncError(
-        err instanceof Error ? err.message : "Failed to sync reviews.",
-      );
-    } finally {
-      setSyncing(false);
-      setSyncingPlatform(null);
+      return { platform, count: json.count ?? 0, error: null as string | null };
+    } catch (e) {
+      return {
+        platform,
+        count: 0,
+        error: e instanceof Error ? e.message : `Failed syncing ${platform}`,
+      };
     }
   }
 
-  async function handleSyncGoogle() {
+  async function handleSyncAllReviews() {
     setSyncError(null);
     setSyncMessage(null);
+    setSyncBreakdown(null);
     try {
       setSyncing(true);
-      setSyncingPlatform("google");
 
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -297,7 +255,7 @@ export default function ReviewsInboxPage() {
 
       const { data: hotel, error: hotelError } = await supabase
         .from("hotels")
-        .select("id, google_url")
+        .select("id, tripadvisor_url, google_url, booking_url")
         .eq("user_id", user.id)
         .limit(1)
         .maybeSingle();
@@ -307,42 +265,57 @@ export default function ReviewsInboxPage() {
       }
 
       if (!hotel?.id) {
-        alert("No Google URL set. Add it in Settings.");
-        return;
+        throw new Error("No hotel found. Add one in Settings first.");
       }
 
+      const tripadvisorUrl =
+        typeof hotel.tripadvisor_url === "string" ? hotel.tripadvisor_url.trim() : "";
       const googleUrl =
-        typeof hotel.google_url === "string" && hotel.google_url.trim()
-          ? hotel.google_url.trim()
-          : null;
+        typeof hotel.google_url === "string" ? hotel.google_url.trim() : "";
+      const bookingUrl =
+        typeof hotel.booking_url === "string" ? hotel.booking_url.trim() : "";
 
-      if (!googleUrl) {
-        alert("No Google URL set. Add it in Settings.");
+      const platformTasks = [
+        tripadvisorUrl
+          ? syncPlatform("tripadvisor", tripadvisorUrl, hotel.id)
+          : null,
+        googleUrl ? syncPlatform("google", googleUrl, hotel.id) : null,
+        bookingUrl ? syncPlatform("booking", bookingUrl, hotel.id) : null,
+      ].filter(Boolean) as Promise<{
+        platform: "tripadvisor" | "google" | "booking";
+        count: number;
+        error: string | null;
+      }>[];
+
+      if (platformTasks.length === 0) {
+        setSyncMessage("Synced 0 new reviews across 0 platforms");
+        setSyncBreakdown({ tripadvisor: 0, google: 0, booking: 0 });
         return;
       }
 
-      const res = await fetch("/api/scrape-reviews", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          hotel_id: hotel.id,
-          tripadvisor_url: googleUrl,
-          platform: "google",
-        }),
-      });
+      const results = await Promise.all(platformTasks);
 
-      const json = (await res.json()) as {
-        success?: boolean;
-        count?: number;
-        error?: string;
+      const totalSynced = results.reduce((sum, r) => sum + (r?.count || 0), 0);
+      const platformCount = results.filter((r) => (r?.count ?? 0) > 0).length;
+      const breakdown = {
+        tripadvisor: results.find((r) => r.platform === "tripadvisor")?.count ?? 0,
+        google: results.find((r) => r.platform === "google")?.count ?? 0,
+        booking: results.find((r) => r.platform === "booking")?.count ?? 0,
       };
 
-      if (!res.ok || json.success !== true) {
-        throw new Error(json.error ?? "Failed to sync reviews from Google.");
+      const failed = results.filter((r) => r.error);
+      if (failed.length > 0) {
+        setSyncError(
+          `Some platforms failed: ${failed
+            .map((f) => `${f.platform}: ${f.error}`)
+            .join(" | ")}`,
+        );
       }
 
-      const count = json.count ?? 0;
-      setSyncMessage(`Synced ${count} new reviews!`);
+      setSyncBreakdown(breakdown);
+      setSyncMessage(
+        `Synced ${totalSynced} new reviews across ${platformCount} platforms`,
+      );
       setRefreshKey((k) => k + 1);
     } catch (err) {
       setSyncError(
@@ -350,7 +323,6 @@ export default function ReviewsInboxPage() {
       );
     } finally {
       setSyncing(false);
-      setSyncingPlatform(null);
     }
   }
 
@@ -499,18 +471,11 @@ export default function ReviewsInboxPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-white">
               Reviews inbox
             </h1>
-            <div className="flex items-center gap-2">
-              <SyncTripAdvisorButton
-                syncing={syncing && syncingPlatform === "tripadvisor"}
-                onSync={handleSyncTripAdvisor}
-                label="Sync TripAdvisor"
-              />
-              <SyncTripAdvisorButton
-                syncing={syncing && syncingPlatform === "google"}
-                onSync={handleSyncGoogle}
-                label="Sync Google"
-              />
-            </div>
+            <SyncAllButton
+              syncing={syncing}
+              onSync={handleSyncAllReviews}
+              label="Sync all reviews"
+            />
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -587,6 +552,34 @@ export default function ReviewsInboxPage() {
           {syncMessage ? (
             <p className="mt-3 text-sm text-emerald-300">{syncMessage}</p>
           ) : null}
+          {syncBreakdown ? (
+            <p className="mt-2 text-sm">
+              <span className="text-[#888888]">Synced breakdown — </span>
+              <span
+                className={
+                  syncBreakdown.tripadvisor > 0 ? "text-emerald-300" : "text-[#888888]"
+                }
+              >
+                TripAdvisor: {syncBreakdown.tripadvisor}
+              </span>
+              <span className="text-[#888888]"> · </span>
+              <span
+                className={
+                  syncBreakdown.google > 0 ? "text-emerald-300" : "text-[#888888]"
+                }
+              >
+                Google: {syncBreakdown.google}
+              </span>
+              <span className="text-[#888888]"> · </span>
+              <span
+                className={
+                  syncBreakdown.booking > 0 ? "text-emerald-300" : "text-[#888888]"
+                }
+              >
+                Booking: {syncBreakdown.booking}
+              </span>
+            </p>
+          ) : null}
         </div>
 
         <div className="rounded-2xl border border-[#222222] bg-[#111111] p-8">
@@ -613,18 +606,11 @@ export default function ReviewsInboxPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-white">
             Reviews inbox
           </h1>
-          <div className="flex items-center gap-2">
-            <SyncTripAdvisorButton
-              syncing={syncing && syncingPlatform === "tripadvisor"}
-              onSync={handleSyncTripAdvisor}
-              label="Sync TripAdvisor"
-            />
-            <SyncTripAdvisorButton
-              syncing={syncing && syncingPlatform === "google"}
-              onSync={handleSyncGoogle}
-              label="Sync Google"
-            />
-          </div>
+          <SyncAllButton
+            syncing={syncing}
+            onSync={handleSyncAllReviews}
+            label="Sync all reviews"
+          />
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -700,6 +686,34 @@ export default function ReviewsInboxPage() {
         ) : null}
         {syncMessage ? (
           <p className="mt-3 text-sm text-emerald-300">{syncMessage}</p>
+        ) : null}
+        {syncBreakdown ? (
+          <p className="mt-2 text-sm">
+            <span className="text-[#888888]">Synced breakdown — </span>
+            <span
+              className={
+                syncBreakdown.tripadvisor > 0 ? "text-emerald-300" : "text-[#888888]"
+              }
+            >
+              TripAdvisor: {syncBreakdown.tripadvisor}
+            </span>
+            <span className="text-[#888888]"> · </span>
+            <span
+              className={
+                syncBreakdown.google > 0 ? "text-emerald-300" : "text-[#888888]"
+              }
+            >
+              Google: {syncBreakdown.google}
+            </span>
+            <span className="text-[#888888]"> · </span>
+            <span
+              className={
+                syncBreakdown.booking > 0 ? "text-emerald-300" : "text-[#888888]"
+              }
+            >
+              Booking: {syncBreakdown.booking}
+            </span>
+          </p>
         ) : null}
       </div>
 
