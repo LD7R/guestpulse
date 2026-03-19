@@ -17,7 +17,7 @@ type ApifyRun = {
 };
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
-const APIFY_ACTOR_ID = "automation-lab~tripadvisor-scraper";
+const APIFY_ACTOR_ID = "Hvp4YfFGyLM635Q2F";
 
 export const runtime = "nodejs";
 
