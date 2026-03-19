@@ -1,7 +1,5 @@
 "use client";
 
-"use client";
-
 import { createBrowserClient } from "@supabase/ssr";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -114,11 +112,51 @@ export default function HotelSettingsPage() {
         throw new Error("Hotel name is required.");
       }
 
-      const { error: upsertError } = await supabase
-        .from("hotels")
-        .upsert(payload, { onConflict: "user_id" });
+      const fields = {
+        name: payload.name,
+        tripadvisor_url: payload.tripadvisor_url,
+        google_url: payload.google_url,
+        booking_url: payload.booking_url,
+      };
 
-      if (upsertError) throw upsertError;
+      // Check if hotel already exists for this user (RLS-safe).
+      const {
+        data: existing,
+        error: existingError,
+      } = await supabase
+        .from("hotels")
+        .select("id,user_id,name,tripadvisor_url,google_url,booking_url")
+        .eq("user_id", user.id)
+        .single();
+
+      if (existingError) {
+        // PGRST116 = "JSON object requested, multiple (or no) rows returned"
+        if (existingError.code !== "PGRST116") {
+          console.error("Hotel existence check failed:", existingError);
+          throw existingError;
+        }
+      }
+
+      if (existing) {
+        const { error: updateError } = await supabase
+          .from("hotels")
+          .update(fields)
+          .eq("user_id", user.id);
+
+        if (updateError) {
+          console.error("Hotel update failed:", updateError);
+          throw updateError;
+        }
+      } else {
+        const { error: insertError } = await supabase
+          .from("hotels")
+          .insert({ ...fields, user_id: user.id });
+
+        if (insertError) {
+          console.error("Hotel insert failed:", insertError);
+          throw insertError;
+        }
+      }
 
       setSaveSuccess("Hotel saved successfully.");
 

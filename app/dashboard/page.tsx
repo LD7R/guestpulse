@@ -1,8 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { createBrowserClient } from "@supabase/ssr";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+
+type Hotel = { id: string };
 
 type Stats = {
   totalReviews: number;
@@ -11,11 +13,11 @@ type Stats = {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string>("");
-  const [hasHotel, setHasHotel] = useState<boolean>(false);
 
+  const [hasHotel, setHasHotel] = useState(false);
   const [stats, setStats] = useState<Stats>({
     totalReviews: 0,
     avgRating: null,
@@ -24,10 +26,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function load() {
-      setLoading(true);
-      setError(null);
-
       try {
+        setLoading(true);
+        setError(null);
+
         const supabase = createBrowserClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -41,8 +43,6 @@ export default function DashboardPage() {
         if (userError) throw userError;
         if (!user) throw new Error("You must be signed in.");
 
-        setUserEmail(user.email ?? "");
-
         const { data: hotels, error: hotelsError } = await supabase
           .from("hotels")
           .select("id")
@@ -50,8 +50,7 @@ export default function DashboardPage() {
 
         if (hotelsError) throw hotelsError;
 
-        const hotelIds = (hotels ?? []).map((h: { id: string }) => h.id);
-
+        const hotelIds = (hotels ?? []).map((h: Hotel) => h.id);
         if (hotelIds.length === 0) {
           setHasHotel(false);
           setStats({ totalReviews: 0, avgRating: null, needingResponse: 0 });
@@ -76,8 +75,7 @@ export default function DashboardPage() {
 
         const numericRatings = (ratingRows ?? [])
           .map((r: { rating: unknown }) => {
-            const n =
-              typeof r.rating === "number" ? r.rating : Number(r.rating);
+            const n = typeof r.rating === "number" ? r.rating : Number(r.rating);
             return Number.isNaN(n) ? null : n;
           })
           .filter((n: number | null): n is number => n !== null);
@@ -113,12 +111,15 @@ export default function DashboardPage() {
 
   const statCards = useMemo(() => {
     return [
-      { label: "Total Reviews", value: stats.totalReviews },
+      { label: "Total Reviews", value: stats.totalReviews.toString() },
       {
         label: "Average Rating",
-        value: stats.avgRating === null ? "—" : stats.avgRating.toFixed(2),
+        value: stats.avgRating === null ? "—" : stats.avgRating.toFixed(1),
       },
-      { label: "Needing Response", value: stats.needingResponse },
+      {
+        label: "Needing Response",
+        value: stats.needingResponse.toString(),
+      },
     ];
   }, [stats]);
 
@@ -127,7 +128,7 @@ export default function DashboardPage() {
       <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
         <div className="flex items-center gap-3">
           <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-[#222222] border-t-[#6366f1]" />
-          <span className="text-sm text-[#888888]">Loading dashboard…</span>
+          <span className="text-sm text-[#888888]">Loading…</span>
         </div>
       </div>
     );
@@ -147,67 +148,65 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-semibold tracking-tight text-white">
           Welcome to GuestPulse
         </h1>
-        <p className="mt-1 text-sm text-[#888888]">
-          Manage hotel review responses in one place.
-        </p>
       </div>
 
-      {hasHotel ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {statCards.map((card) => (
-            <div
-              key={card.label}
-              className="rounded-[12px] border border-[#222222] bg-[#111111] p-6"
-            >
-              <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
-                {card.label}
-              </div>
-              <div className="mt-2 text-3xl font-semibold text-white">
-                {card.value}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-medium text-white">
-                Get started — add your hotel details to start tracking reviews
-              </div>
-              <div className="mt-1 text-sm text-[#888888]">
-                Add your hotel to begin syncing TripAdvisor reviews.
-              </div>
-            </div>
-            <Link
-              href="/dashboard/settings"
+      {!hasHotel ? (
+        <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-6">
+          <div className="text-sm font-medium text-yellow-900">
+            No hotel added yet — go to Settings to add your hotel
+          </div>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/settings")}
               className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
             >
               Hotel settings
-            </Link>
+            </button>
           </div>
         </div>
-      )}
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {statCards.map((card) => (
+              <div
+                key={card.label}
+                className="rounded-[12px] border border-[#222222] bg-[#111111] p-6"
+              >
+                <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
+                  {card.label}
+                </div>
+                <div className="mt-2 text-3xl font-semibold text-white">
+                  {card.value}
+                </div>
+              </div>
+            ))}
+          </div>
 
-      <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
-        <div className="text-sm font-semibold text-white">Quick actions</div>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Link
-            href="/dashboard/reviews"
-            className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
-          >
-            View Reviews
-          </Link>
-          <Link
-            href="/dashboard/settings"
-            className="inline-flex items-center justify-center rounded-[8px] border border-[#222222] bg-[#111111] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#0f0f0f]"
-          >
-            Hotel Settings
-          </Link>
-        </div>
-      </div>
+          <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
+            <div className="text-sm font-semibold text-white">
+              Quick actions
+            </div>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/reviews")}
+                className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
+              >
+                View review inbox
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/settings")}
+                className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
+              >
+                Hotel settings
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
-
 
