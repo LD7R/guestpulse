@@ -3,10 +3,17 @@ import { createClient } from "@supabase/supabase-js";
 
 type ApifyReviewItem = {
   user?: { username?: string; name?: string };
+  reviewer?: { name?: string };
   rating?: number | string;
+  stars?: number | string;
   text?: string;
+  snippet?: string;
   publishedDate?: string;
+  publishedAtDate?: string;
+  date?: string;
   ownerResponse?: unknown;
+  responseFromOwnerText?: unknown;
+  name?: string;
   [key: string]: unknown;
 };
 
@@ -17,7 +24,8 @@ type ApifyRun = {
 };
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
-const APIFY_ACTOR_ID = "Hvp4YfFGyLM635Q2F";
+const APIFY_TRIPADVISOR_ACTOR_ID = "Hvp4YfFGyLM635Q2F";
+const APIFY_GOOGLE_ACTOR_ID = "Xb8osYTtOjlsgI6k9";
 
 export const runtime = "nodejs";
 
@@ -61,8 +69,10 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as {
       hotel_id?: string;
       tripadvisor_url?: string;
+      platform?: "tripadvisor" | "google";
     };
     const { hotel_id, tripadvisor_url } = body;
+    const platform = body.platform === "google" ? "google" : "tripadvisor";
 
     if (!hotel_id || !tripadvisor_url) {
       return NextResponse.json(
@@ -98,19 +108,30 @@ export async function POST(request: NextRequest) {
     });
 
     // 2. Start Apify actor run
+    const actorId =
+      platform === "google" ? APIFY_GOOGLE_ACTOR_ID : APIFY_TRIPADVISOR_ACTOR_ID;
+    const actorInput =
+      platform === "google"
+        ? {
+            placeUrls: [{ url: tripadvisor_url }],
+            maxReviews: 20,
+            language: "en",
+          }
+        : {
+            startUrls: [{ url: tripadvisor_url }],
+            maxReviews: 20,
+            language: "en",
+          };
+
     const startRunRes = await fetch(
-      `${APIFY_BASE_URL}/acts/${encodeURIComponent(APIFY_ACTOR_ID)}/runs`,
+      `${APIFY_BASE_URL}/acts/${encodeURIComponent(actorId)}/runs`,
       {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apifyToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          startUrls: [{ url: tripadvisor_url }],
-          maxReviews: 20,
-          language: "en",
-        }),
+        body: JSON.stringify(actorInput),
       },
     );
 
@@ -226,7 +247,9 @@ export async function POST(request: NextRequest) {
 
     // 5. Build rows; 6. Skip duplicates (same reviewer_name + review_date + hotel_id)
     const reviewerName = (item: ApifyReviewItem) =>
-      item.user?.name ?? item.user?.username ?? "Anonymous";
+      platform === "google"
+        ? item.name ?? item.reviewer?.name ?? "Anonymous"
+        : item.user?.name ?? item.user?.username ?? "Anonymous";
 
     const rowsToInsert: Array<{
       hotel_id: string;
@@ -242,10 +265,22 @@ export async function POST(request: NextRequest) {
 
     for (const item of items) {
       const name = reviewerName(item);
-      const reviewDate = item.publishedDate ?? null;
-      const rating = normalizeRating(item.rating);
-      const reviewText = item.text ?? null;
-      const responded = Boolean(item.ownerResponse);
+      const reviewDate =
+        platform === "google"
+          ? item.publishedAtDate ?? item.date ?? null
+          : item.publishedDate ?? null;
+      const rating =
+        platform === "google"
+          ? normalizeRating(item.stars ?? item.rating)
+          : normalizeRating(item.rating);
+      const reviewText =
+        platform === "google"
+          ? item.text ?? item.snippet ?? null
+          : item.text ?? null;
+      const responded =
+        platform === "google"
+          ? Boolean(item.responseFromOwnerText)
+          : Boolean(item.ownerResponse);
 
       // Skip duplicate only when reviewer_name matches and review_date is on the same day.
       const dayBounds = getDayBounds(reviewDate);
@@ -281,7 +316,7 @@ export async function POST(request: NextRequest) {
 
       rowsToInsert.push({
         hotel_id,
-        platform: "tripadvisor",
+        platform,
         reviewer_name: name,
         rating,
         review_text: reviewText,

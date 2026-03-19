@@ -258,7 +258,7 @@ export default function HotelSettingsPage() {
                 value={googleUrl}
                 onChange={(e) => setGoogleUrl(e.target.value)}
                 className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
-                placeholder="https://maps.google.com/..."
+                placeholder="https://maps.google.com/?cid=... or Google Maps URL"
               />
             </div>
 
