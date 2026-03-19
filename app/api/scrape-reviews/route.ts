@@ -24,10 +24,11 @@ type ApifyRun = {
 };
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
-const APIFY_TRIPADVISOR_ACTOR_ID = "Hvp4YfFGyLM635Q2F";
-// Placeholder until dedicated actors are finalized.
-const APIFY_GOOGLE_ACTOR_ID = APIFY_TRIPADVISOR_ACTOR_ID;
-const APIFY_BOOKING_ACTOR_ID = APIFY_TRIPADVISOR_ACTOR_ID;
+const ACTOR_IDS = {
+  tripadvisor: "Hvp4YfFGyLM635Q2F",
+  google: "Xb8osYTtOjlsgI6k9",
+  booking: "", // placeholder for now
+} as const;
 
 export const runtime = "nodejs";
 
@@ -115,12 +116,13 @@ export async function POST(request: NextRequest) {
     });
 
     // 2. Start Apify actor run
-    const actorId =
-      platform === "google"
-        ? APIFY_GOOGLE_ACTOR_ID
-        : platform === "booking"
-          ? APIFY_BOOKING_ACTOR_ID
-          : APIFY_TRIPADVISOR_ACTOR_ID;
+    const actorId = ACTOR_IDS[platform];
+    if (!actorId) {
+      return NextResponse.json(
+        { success: false, error: `No Apify actor configured for ${platform}` },
+        { status: 400 },
+      );
+    }
     const actorInput =
       platform === "google"
         ? {
