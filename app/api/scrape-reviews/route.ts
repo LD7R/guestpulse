@@ -16,7 +16,9 @@ type ApifyReviewItem = {
   responseFromOwnerText?: unknown;
   name?: string;
   positive?: string;
-  review?: string;
+  /** Booking.com: nested pros/cons; may also be a string in some actors */
+  review?: string | { positive?: string; negative?: string };
+  reviewDate?: string;
   stayDate?: string;
   [key: string]: unknown;
 };
@@ -83,7 +85,7 @@ function bookingRatingFromItem(item: ApifyReviewItem): number | null {
   const r = item.rating;
   if (r === null || r === undefined || r === "") return null;
   if (!r) return null; // matches `item.rating ? ... : null` (0 → null)
-  const v = Math.round(parseFloat(String(r)) / 2);
+  const v = Math.min(5, Math.round(parseFloat(String(r)) / 2));
   return Number.isNaN(v) ? null : v;
 }
 
@@ -153,9 +155,10 @@ export async function POST(request: NextRequest) {
           }
         : platform === "booking"
           ? {
+              maxReviewsPerHotel: 20,
+              reviewScores: ["ALL"],
+              sortReviewsBy: "f_recent_desc",
               startUrls: [{ url }],
-              maxReviews: 20,
-              language: "en",
             }
         : {
             startUrls: [{ url }],
@@ -291,7 +294,7 @@ export async function POST(request: NextRequest) {
         ? item.name ?? reviewerNameFromField(item.reviewer) ?? "Anonymous"
         : platform === "booking"
           ? String(
-              item.author || reviewerNameFromField(item.reviewer) || "Anonymous",
+              reviewerNameFromField(item.reviewer) || item.name || "Anonymous",
             )
         : item.user?.name ?? item.user?.username ?? "Anonymous";
 
@@ -314,7 +317,7 @@ export async function POST(request: NextRequest) {
           ? item.publishedAtDate ?? item.date ?? null
           : platform === "booking"
             ? (item.date as string | null | undefined) ??
-              (item.stayDate as string | null | undefined) ??
+              (item.reviewDate as string | null | undefined) ??
               null
           : item.publishedDate ?? null;
       const rating =
@@ -327,7 +330,15 @@ export async function POST(request: NextRequest) {
         platform === "google"
           ? item.text ?? item.snippet ?? null
           : platform === "booking"
-            ? item.positive || item.text || item.review || null
+            ? (() => {
+                const rev = item.review;
+                const nested =
+                  rev && typeof rev === "object"
+                    ? (rev as { positive?: string; negative?: string }).positive ||
+                      (rev as { positive?: string; negative?: string }).negative
+                    : undefined;
+                return nested || item.text || item.positive || null;
+              })()
           : item.text ?? null;
       const responded =
         platform === "google"
