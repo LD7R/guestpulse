@@ -3,7 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 
 type ApifyReviewItem = {
   user?: { username?: string; name?: string };
-  reviewer?: { name?: string };
+  author?: string;
+  reviewer?: string | { name?: string };
   rating?: number | string;
   stars?: number | string;
   text?: string;
@@ -14,6 +15,9 @@ type ApifyReviewItem = {
   ownerResponse?: unknown;
   responseFromOwnerText?: unknown;
   name?: string;
+  positive?: string;
+  review?: string;
+  stayDate?: string;
   [key: string]: unknown;
 };
 
@@ -27,7 +31,7 @@ const APIFY_BASE_URL = "https://api.apify.com/v2";
 const ACTOR_IDS = {
   tripadvisor: "Hvp4YfFGyLM635Q2F",
   google: "Xb8osYTtOjlsgI6k9",
-  booking: "", // placeholder for now
+  booking: "PbMHke3jW25J6hSOA",
 } as const;
 
 export const runtime = "nodejs";
@@ -65,6 +69,22 @@ function getDayBounds(dateValue: string | null) {
 
 async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function reviewerNameFromField(
+  reviewer: ApifyReviewItem["reviewer"],
+): string | undefined {
+  if (reviewer === null || reviewer === undefined) return undefined;
+  if (typeof reviewer === "string") return reviewer;
+  return reviewer.name;
+}
+
+function bookingRatingFromItem(item: ApifyReviewItem): number | null {
+  const r = item.rating;
+  if (r === null || r === undefined || r === "") return null;
+  if (!r) return null; // matches `item.rating ? ... : null` (0 → null)
+  const v = Math.round(parseFloat(String(r)) / 2);
+  return Number.isNaN(v) ? null : v;
 }
 
 export async function POST(request: NextRequest) {
@@ -268,9 +288,11 @@ export async function POST(request: NextRequest) {
     // 5. Build rows; 6. Skip duplicates (same reviewer_name + review_date + hotel_id)
     const reviewerName = (item: ApifyReviewItem) =>
       platform === "google"
-        ? item.name ?? item.reviewer?.name ?? "Anonymous"
+        ? item.name ?? reviewerNameFromField(item.reviewer) ?? "Anonymous"
         : platform === "booking"
-          ? String((item.author as string) ?? (item.reviewer as string) ?? "Anonymous")
+          ? String(
+              item.author || reviewerNameFromField(item.reviewer) || "Anonymous",
+            )
         : item.user?.name ?? item.user?.username ?? "Anonymous";
 
     const rowsToInsert: Array<{
@@ -299,24 +321,19 @@ export async function POST(request: NextRequest) {
         platform === "google"
           ? normalizeRating(item.stars || item.rating || null)
           : platform === "booking"
-            ? normalizeRating(
-                (item.rating as number | string | null | undefined) ??
-                  (item.score as number | string | null | undefined),
-              )
+            ? bookingRatingFromItem(item)
           : normalizeRating(item.rating);
       const reviewText =
         platform === "google"
           ? item.text ?? item.snippet ?? null
           : platform === "booking"
-            ? (item.positive as string | null | undefined) ??
-              item.text ??
-              null
+            ? item.positive || item.text || item.review || null
           : item.text ?? null;
       const responded =
         platform === "google"
           ? Boolean(item.responseFromOwnerText)
           : platform === "booking"
-            ? false
+            ? Boolean(item.ownerResponse)
           : Boolean(item.ownerResponse);
 
       // Skip duplicate only when reviewer_name matches and review_date is on the same day.
