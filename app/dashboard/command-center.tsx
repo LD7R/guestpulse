@@ -5,6 +5,18 @@ import { createBrowserClient } from "@supabase/ssr";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 type Hotel = {
   id: string;
@@ -23,6 +35,14 @@ type ReviewRow = {
   sentiment?: string | null;
   responded?: boolean | null;
 };
+
+type AnalyticsRow = {
+  rating: unknown;
+  sentiment: string | null;
+  complaint_topic: string | null;
+};
+
+const RATING_BAR_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"];
 
 function displayNameFromEmail(email: string | null): string {
   if (!email) return "there";
@@ -112,7 +132,7 @@ export default function CommandCenterPage() {
   const [trendNeeding, setTrendNeeding] = useState({ text: "", color: "var(--text-muted)" });
   const [trendWeek, setTrendWeek] = useState({ text: "", color: "var(--text-muted)" });
 
-  const [recentReviews, setRecentReviews] = useState<ReviewRow[]>([]);
+  const [analyticsRows, setAnalyticsRows] = useState<AnalyticsRow[]>([]);
   const [urgentList, setUrgentList] = useState<ReviewRow[]>([]);
   const [urgentCount, setUrgentCount] = useState(0);
 
@@ -128,6 +148,16 @@ export default function CommandCenterPage() {
     google: number;
     booking: number;
   } | null>(null);
+
+  const [isDark, setIsDark] = useState(true);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    setIsDark(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDark(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   const loadDashboard = useCallback(async () => {
     const supabase = createBrowserClient(
@@ -160,7 +190,7 @@ export default function CommandCenterPage() {
       setAvgRating(null);
       setNeedingResponse(0);
       setWeekNew(0);
-      setRecentReviews([]);
+      setAnalyticsRows([]);
       setUrgentList([]);
       setUrgentCount(0);
       setPlatformHealth([]);
@@ -192,10 +222,12 @@ export default function CommandCenterPage() {
 
     const { data: ratingRows, error: ratingError } = await supabase
       .from("reviews")
-      .select("rating")
+      .select("rating, sentiment, complaint_topic")
       .in("hotel_id", hotelIds);
 
     if (ratingError) throw ratingError;
+
+    setAnalyticsRows((ratingRows ?? []) as AnalyticsRow[]);
 
     const numericRatings = (ratingRows ?? [])
       .map((r: { rating: unknown }) => {
@@ -293,16 +325,6 @@ export default function CommandCenterPage() {
     }
     setTrendNeeding(formatTrend(dNeed, true, "int"));
     setTrendWeek(formatTrend(dWeek, false, "int"));
-
-    const { data: recent, error: re } = await supabase
-      .from("reviews")
-      .select("id, platform, rating, reviewer_name, created_at, review_text, sentiment, responded")
-      .in("hotel_id", hotelIds)
-      .order("created_at", { ascending: false })
-      .limit(5);
-
-    if (re) throw re;
-    setRecentReviews((recent ?? []) as ReviewRow[]);
 
     const { data: urgentRows, error: ue } = await supabase
       .from("reviews")
@@ -528,58 +550,81 @@ export default function CommandCenterPage() {
     );
   };
 
-  const sentimentBadge = (s: string | null | undefined) => {
+  function sentimentBucket(s: string | null | undefined): "positive" | "neutral" | "negative" {
     const x = normSentiment(s);
-    if (x === "positive") {
-      return (
-        <span
-          style={{
-            fontSize: "11px",
-            fontWeight: 600,
-            padding: "2px 8px",
-            borderRadius: "100px",
-            background: "var(--success-bg)",
-            color: "var(--success)",
-            border: "1px solid var(--success-border)",
-          }}
-        >
-          Positive
-        </span>
-      );
+    if (x === "positive") return "positive";
+    if (x === "negative") return "negative";
+    return "neutral";
+  }
+
+  const chartColors = useMemo(
+    () => ({
+      axisMuted: isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.35)",
+      grid: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+    }),
+    [isDark],
+  );
+
+  const tooltipContentStyle: CSSProperties = useMemo(
+    () => ({
+      background: isDark ? "rgba(15,15,30,0.95)" : "rgba(255,255,255,0.98)",
+      border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.08)",
+      borderRadius: "12px",
+      color: isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.85)",
+    }),
+    [isDark],
+  );
+
+  const ratingDistribution = useMemo(
+    () =>
+      [1, 2, 3, 4, 5].map((star) => ({
+        name: `${star}★`,
+        star,
+        count: analyticsRows.filter((r) => {
+          const n = normalizeRating(r.rating);
+          if (n === null) return false;
+          return Math.round(Math.max(1, Math.min(5, n))) === star;
+        }).length,
+      })),
+    [analyticsRows],
+  );
+
+  const sentimentPie = useMemo(() => {
+    let pos = 0;
+    let neu = 0;
+    let neg = 0;
+    for (const r of analyticsRows) {
+      const b = sentimentBucket(r.sentiment);
+      if (b === "positive") pos += 1;
+      else if (b === "negative") neg += 1;
+      else neu += 1;
     }
-    if (x === "negative") {
-      return (
-        <span
-          style={{
-            fontSize: "11px",
-            fontWeight: 600,
-            padding: "2px 8px",
-            borderRadius: "100px",
-            background: "var(--error-bg)",
-            color: "var(--error)",
-            border: "1px solid var(--error-border)",
-          }}
-        >
-          Negative
-        </span>
-      );
+    const total = pos + neu + neg;
+    return {
+      pos,
+      neu,
+      neg,
+      total,
+      data: [
+        { name: "Positive", value: pos, fill: "#22c55e" },
+        { name: "Neutral", value: neu, fill: "#6b7280" },
+        { name: "Negative", value: neg, fill: "#ef4444" },
+      ],
+    };
+  }, [analyticsRows]);
+
+  const topComplaints = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of analyticsRows) {
+      const t = r.complaint_topic?.trim();
+      if (!t) continue;
+      map.set(t, (map.get(t) ?? 0) + 1);
     }
-    return (
-      <span
-        style={{
-          fontSize: "11px",
-          fontWeight: 600,
-          padding: "2px 8px",
-          borderRadius: "100px",
-          background: "var(--neutral-sentiment-bg)",
-          color: "var(--text-secondary)",
-          border: "1px solid var(--neutral-sentiment-border)",
-        }}
-      >
-        Neutral
-      </span>
-    );
-  };
+    const sorted = [...map.entries()].sort((a, b) => b[1] - a[1]);
+    const top = sorted.slice(0, 6);
+    const max = top.length ? Math.max(...top.map(([, c]) => c)) : 1;
+    return top.map(([topic, count]) => ({ topic, count, max }));
+  }, [analyticsRows]);
 
   if (loading) {
     return (
@@ -647,15 +692,17 @@ export default function CommandCenterPage() {
             .command-center .cc-stat-card { position: relative; padding: 24px; }
             .command-center .cc-stat-icon { position: absolute; top: 20px; right: 20px; width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: var(--glass-bg); border: 1px solid var(--glass-border); }
             .command-center .cc-quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-            .command-center .cc-recent-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr) auto; gap: 12px; align-items: center; }
-            .command-center .cc-platform-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
+            .command-center .cc-analytics-row1 { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-bottom: 16px; align-items: stretch; }
+            .command-center .cc-analytics-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; align-items: stretch; }
+            .command-center .cc-pie-wrap { display: flex; flex: 1; align-items: center; gap: 20px; min-height: 0; min-width: 0; }
             @media (max-width: 1024px) {
               .command-center .cc-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+              .command-center .cc-analytics-row1 { grid-template-columns: 1fr; }
             }
             @media (max-width: 768px) {
               .command-center .cc-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-              .command-center .cc-recent-row { grid-template-columns: 1fr; }
-              .command-center .cc-platform-row { grid-template-columns: 1fr; }
+              .command-center .cc-analytics-row2 { grid-template-columns: 1fr; }
+              .command-center .cc-pie-wrap { flex-direction: column; }
             }
           `,
         }}
@@ -747,102 +794,328 @@ export default function CommandCenterPage() {
             ))}
           </div>
 
-          <section style={{ marginBottom: "24px" }}>
-            <div
+          {urgentCount > 0 ? (
+            <section
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "12px",
+                ...glass,
+                padding: "20px 24px",
+                marginBottom: "24px",
+                background: "rgba(239,68,68,0.06)",
+                border: "1px solid rgba(239,68,68,0.15)",
               }}
             >
-              <h2 style={{ fontSize: "17px", fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>
-                Recent reviews
-              </h2>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+                <span style={{ fontSize: "20px" }} aria-hidden>
+                  ⚠
+                </span>
+                <strong style={{ fontSize: "16px", color: "var(--text-primary)" }}>
+                  {urgentCount} urgent reviews need immediate attention
+                </strong>
+              </div>
+              <ul style={{ margin: "0 0 16px", paddingLeft: "20px", color: "var(--text-secondary)", fontSize: "14px" }}>
+                {urgentList.map((u) => (
+                  <li key={u.id} style={{ marginBottom: "6px" }}>
+                    <strong style={{ color: "var(--text-primary)" }}>{u.reviewer_name ?? "Guest"}</strong> —{" "}
+                    {normalizeRating(u.rating)?.toFixed(1) ?? "?"}★ — {excerpt(u.review_text, 80)}
+                  </li>
+                ))}
+              </ul>
               <Link
                 href="/dashboard/reviews"
-                style={{ fontSize: "14px", fontWeight: 500, color: "var(--accent)", textDecoration: "none" }}
+                style={{
+                  display: "inline-block",
+                  ...glassPrimary,
+                  padding: "10px 20px",
+                  textDecoration: "none",
+                  borderRadius: "12px",
+                }}
               >
-                View all →
+                Respond now
               </Link>
-            </div>
-            {recentReviews.length === 0 ? (
-              <div style={{ ...glass, padding: "20px", fontSize: "14px", color: "var(--text-secondary)" }}>
-                No reviews yet. Click &apos;Sync reviews&apos; to get started.
-              </div>
-            ) : (
-              recentReviews.map((r) => (
-                <div
-                  key={r.id}
-                  className="cc-recent-row"
+            </section>
+          ) : null}
+
+          <section style={{ marginBottom: "24px" }}>
+            <div className="cc-analytics-row1">
+              <div style={{ ...glass, padding: "24px", minHeight: "280px", display: "flex", flexDirection: "column" }}>
+                <h2
                   style={{
-                    ...glass,
-                    padding: "12px 16px",
-                    borderRadius: "12px",
-                    marginBottom: "10px",
-                    transition: "transform 0.2s ease, border-color 0.2s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                    e.currentTarget.style.borderColor = "var(--glass-hover-border)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.borderColor = "var(--glass-border)";
+                    fontSize: "17px",
+                    fontWeight: 600,
+                    color: "var(--text-primary)",
+                    margin: "0 0 16px 0",
                   }}
                 >
-                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", minWidth: 0 }}>
-                    {platformBadge(r.platform)}
-                    <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--text-primary)" }}>
-                      {r.reviewer_name ?? "Guest"}
-                    </span>
-                    <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                      {r.created_at
-                        ? new Date(r.created_at).toLocaleDateString(undefined, {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          })
-                        : "—"}
-                    </span>
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ color: "var(--star)", fontSize: "14px", marginBottom: "4px" }}>
-                      {"★".repeat(Math.min(5, Math.round(normalizeRating(r.rating) ?? 0)))}
-                      <span style={{ color: "var(--text-muted)", marginLeft: "6px", fontSize: "12px" }}>
-                        {normalizeRating(r.rating)?.toFixed(1) ?? "—"}
+                  Rating distribution
+                </h2>
+                <div style={{ width: "100%", height: "200px", flex: 1 }}>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart
+                      data={ratingDistribution}
+                      margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
+                    >
+                      <CartesianGrid stroke={chartColors.grid} vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fill: chartColors.axisMuted, fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis hide domain={[0, "auto"]} />
+                      <Tooltip
+                        contentStyle={tooltipContentStyle}
+                        formatter={(value) => [String(value ?? 0), "Count"]}
+                      />
+                      <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                        {ratingDistribution.map((_, i) => (
+                          <Cell key={i} fill={RATING_BAR_COLORS[i] ?? "#888"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div style={{ ...glass, padding: "24px", minHeight: "280px", display: "flex", flexDirection: "column" }}>
+                <h2
+                  style={{
+                    fontSize: "17px",
+                    fontWeight: 600,
+                    color: "var(--text-primary)",
+                    margin: "0 0 16px 0",
+                  }}
+                >
+                  Sentiment breakdown
+                </h2>
+                <div className="cc-pie-wrap" style={{ flex: 1, justifyContent: "center" }}>
+                  <div style={{ position: "relative", flex: "0 0 52%", height: "200px", minWidth: 0 }}>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <PieChart>
+                        <Pie
+                          data={sentimentPie.data}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={55}
+                          outerRadius={85}
+                          paddingAngle={2}
+                          stroke="none"
+                        >
+                          {sentimentPie.data.map((e, i) => (
+                            <Cell key={i} fill={e.fill} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={tooltipContentStyle} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        pointerEvents: "none",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500 }}>
+                        Total reviews
+                      </span>
+                      <span style={{ fontSize: "20px", fontWeight: 700, color: "var(--text-primary)" }}>
+                        {sentimentPie.total}
                       </span>
                     </div>
-                    <p
-                      style={{
-                        fontSize: "13px",
-                        color: "var(--text-secondary)",
-                        margin: 0,
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      {excerpt(r.review_text, 60)}
-                    </p>
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", justifyContent: "flex-end" }}>
-                    {sentimentBadge(r.sentiment)}
-                    <button
-                      type="button"
-                      onClick={() => router.push("/dashboard/reviews")}
-                      style={glassPrimary}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = "var(--btn-primary-hover)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "var(--btn-primary-bg)";
-                      }}
-                    >
-                      Draft response
-                    </button>
+                  <div
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      justifyContent: "center",
+                      minWidth: 0,
+                    }}
+                  >
+                    {sentimentPie.data.map((d) => {
+                      const pct =
+                        sentimentPie.total === 0
+                          ? 0
+                          : Math.round((d.value / sentimentPie.total) * 100);
+                      return (
+                        <div
+                          key={d.name}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                            fontSize: "13px",
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: "8px",
+                              height: "8px",
+                              borderRadius: "50%",
+                              background: d.fill,
+                              flexShrink: 0,
+                            }}
+                          />
+                          <span style={{ color: "var(--text-secondary)", flex: 1 }}>{d.name}</span>
+                          <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{pct}%</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              ))
-            )}
+              </div>
+            </div>
+
+            <div className="cc-analytics-row2">
+              <div style={{ ...glass, padding: "24px" }}>
+                <h2
+                  style={{
+                    fontSize: "17px",
+                    fontWeight: 600,
+                    color: "var(--text-primary)",
+                    margin: "0 0 16px 0",
+                  }}
+                >
+                  Top complaint topics
+                </h2>
+                {topComplaints.length === 0 ? (
+                  <p style={{ color: "var(--text-muted)", fontSize: "14px", margin: 0, lineHeight: 1.6 }}>
+                    No complaint data yet — sync and classify reviews to see topics
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                    {topComplaints.map(({ topic, count, max }) => (
+                      <div
+                        key={topic}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "12px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            flex: "0 0 28%",
+                            minWidth: 0,
+                            fontSize: "13px",
+                            padding: "6px 10px",
+                            borderRadius: "100px",
+                            background: "var(--glass-bg)",
+                            border: "1px solid var(--glass-border)",
+                            color: "var(--text-primary)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={topic}
+                        >
+                          {topic}
+                        </div>
+                        <div
+                          style={{
+                            flex: 1,
+                            height: "6px",
+                            borderRadius: "100px",
+                            background: "var(--glass-bg)",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            style={{
+                              height: "100%",
+                              width: `${(count / max) * 100}%`,
+                              borderRadius: "100px",
+                              background: "linear-gradient(90deg, #6366f1, #8b5cf6)",
+                              transition: "width 0.8s ease",
+                            }}
+                          />
+                        </div>
+                        <span
+                          style={{
+                            flex: "0 0 auto",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            padding: "2px 10px",
+                            borderRadius: "100px",
+                            background: "var(--accent-bg)",
+                            color: "var(--accent)",
+                            border: "1px solid var(--accent-border)",
+                          }}
+                        >
+                          {count}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ ...glass, padding: "24px" }}>
+                <h2
+                  style={{
+                    fontSize: "17px",
+                    fontWeight: 600,
+                    color: "var(--text-primary)",
+                    margin: "0 0 16px 0",
+                  }}
+                >
+                  Platform health
+                </h2>
+                <div>
+                  {platformHealth.map((p, i) => (
+                    <div
+                      key={p.key}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "12px",
+                        padding: "12px 0",
+                        borderBottom:
+                          i < platformHealth.length - 1 ? "1px solid var(--glass-border)" : "none",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          flexWrap: "wrap",
+                          minWidth: 0,
+                        }}
+                      >
+                        {platformBadge(p.key)}
+                        <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--text-primary)" }}>
+                          {p.count === 0 ? "—" : p.avg.toFixed(1)}
+                          <span style={{ fontWeight: 500, color: "var(--text-muted)", fontSize: "12px" }}>
+                            {" "}
+                            avg
+                          </span>
+                        </span>
+                        <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+                          {p.count} review{p.count === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <span
+                        style={{
+                          width: "10px",
+                          height: "10px",
+                          borderRadius: "50%",
+                          background: p.dot,
+                          flexShrink: 0,
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </section>
 
           <section style={{ marginBottom: "24px" }}>
@@ -979,89 +1252,6 @@ export default function CommandCenterPage() {
               </div>
             ) : null}
           </section>
-
-          {urgentCount > 0 ? (
-            <section
-              style={{
-                ...glass,
-                padding: "20px 24px",
-                marginBottom: "24px",
-                background: "rgba(239,68,68,0.06)",
-                border: "1px solid rgba(239,68,68,0.15)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-                <span style={{ fontSize: "20px" }} aria-hidden>
-                  ⚠
-                </span>
-                <strong style={{ fontSize: "16px", color: "var(--text-primary)" }}>
-                  {urgentCount} urgent reviews need immediate attention
-                </strong>
-              </div>
-              <ul style={{ margin: "0 0 16px", paddingLeft: "20px", color: "var(--text-secondary)", fontSize: "14px" }}>
-                {urgentList.map((u) => (
-                  <li key={u.id} style={{ marginBottom: "6px" }}>
-                    <strong style={{ color: "var(--text-primary)" }}>{u.reviewer_name ?? "Guest"}</strong> —{" "}
-                    {normalizeRating(u.rating)?.toFixed(1) ?? "?"}★ — {excerpt(u.review_text, 80)}
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href="/dashboard/reviews"
-                style={{
-                  display: "inline-block",
-                  ...glassPrimary,
-                  padding: "10px 20px",
-                  textDecoration: "none",
-                  borderRadius: "12px",
-                }}
-              >
-                Respond now
-              </Link>
-            </section>
-          ) : null}
-
-          {totalReviews > 0 ? (
-            <section>
-              <h2
-                style={{
-                  fontSize: "17px",
-                  fontWeight: 600,
-                  color: "var(--text-primary)",
-                  marginBottom: "12px",
-                }}
-              >
-                Platform health
-              </h2>
-              <div className="cc-platform-row">
-                {platformHealth.map((p) => (
-                  <div key={p.key} style={{ ...glass, padding: "16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                      <span
-                        style={{
-                          width: "10px",
-                          height: "10px",
-                          borderRadius: "50%",
-                          background: p.dot,
-                          flexShrink: 0,
-                        }}
-                      />
-                      <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--text-primary)" }}>
-                        {p.label}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: "24px", fontWeight: 700, color: "var(--text-primary)" }}>
-                      {p.count === 0 ? "—" : p.avg.toFixed(1)}
-                      <span style={{ fontSize: "13px", color: "var(--text-muted)", fontWeight: 500 }}> avg</span>
-                    </div>
-                    <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
-                      {p.count} review{p.count === 1 ? "" : "s"}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
         </>
       )}
     </div>
