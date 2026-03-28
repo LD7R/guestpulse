@@ -8,10 +8,9 @@ import { createBrowserClient } from "@supabase/ssr";
 
 const navDotColors: Record<string, string> = {
   "/dashboard": "var(--accent)",
-  "/dashboard/overview": "#22c55e",
   "/dashboard/reviews": "#34d399",
-  "/dashboard/sentiment": "#a78bfa",
   "/dashboard/settings": "#60a5fa",
+  "/dashboard/pricing": "#a78bfa",
 };
 
 export default function DashboardLayout({
@@ -26,11 +25,10 @@ export default function DashboardLayout({
 
   const nav = useMemo(
     () => [
-      { href: "/dashboard", label: "Dashboard" },
-      { href: "/dashboard/overview", label: "Overview" },
-      { href: "/dashboard/reviews", label: "Reviews" },
-      { href: "/dashboard/sentiment", label: "Sentiment" },
-      { href: "/dashboard/settings", label: "Settings" },
+      { href: "/dashboard", label: "Overview" },
+      { href: "/dashboard/reviews", label: "Review Inbox" },
+      { href: "/dashboard/settings", label: "Hotel Setup" },
+      { href: "/dashboard/pricing", label: "Pricing" },
     ],
     [],
   );
@@ -61,9 +59,6 @@ export default function DashboardLayout({
     if (href === "/dashboard") {
       return pathname === "/dashboard";
     }
-    if (href === "/dashboard/overview") {
-      return pathname === "/dashboard/overview";
-    }
     return pathname === href || pathname?.startsWith(`${href}/`);
   }
 
@@ -75,8 +70,8 @@ export default function DashboardLayout({
     zIndex: 10,
     height: "100vh",
     background: "var(--sidebar-bg)",
-    backdropFilter: "blur(40px)",
-    WebkitBackdropFilter: "blur(40px)",
+    backdropFilter: "blur(40px) saturate(180%)",
+    WebkitBackdropFilter: "blur(40px) saturate(180%)",
     borderRight: "1px solid var(--sidebar-border)",
     boxShadow: "var(--sidebar-shadow)",
   };
