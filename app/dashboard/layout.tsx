@@ -7,7 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 
 const navDotColors: Record<string, string> = {
-  "/dashboard": "#6366f1",
+  "/dashboard": "var(--accent)",
+  "/dashboard/overview": "#22c55e",
   "/dashboard/reviews": "#34d399",
   "/dashboard/sentiment": "#a78bfa",
   "/dashboard/settings": "#60a5fa",
@@ -25,7 +26,8 @@ export default function DashboardLayout({
 
   const nav = useMemo(
     () => [
-      { href: "/dashboard", label: "Overview" },
+      { href: "/dashboard", label: "Dashboard" },
+      { href: "/dashboard/overview", label: "Overview" },
       { href: "/dashboard/reviews", label: "Reviews" },
       { href: "/dashboard/sentiment", label: "Sentiment" },
       { href: "/dashboard/settings", label: "Settings" },
@@ -56,7 +58,12 @@ export default function DashboardLayout({
   }
 
   function isActive(href: string) {
-    if (href === "/dashboard") return pathname === "/dashboard";
+    if (href === "/dashboard") {
+      return pathname === "/dashboard";
+    }
+    if (href === "/dashboard/overview") {
+      return pathname === "/dashboard/overview";
+    }
     return pathname === href || pathname?.startsWith(`${href}/`);
   }
 
@@ -67,23 +74,23 @@ export default function DashboardLayout({
     top: 0,
     zIndex: 10,
     height: "100vh",
-    background: "rgba(10, 10, 26, 0.8)",
+    background: "var(--sidebar-bg)",
     backdropFilter: "blur(40px)",
     WebkitBackdropFilter: "blur(40px)",
-    borderRight: "1px solid rgba(255, 255, 255, 0.07)",
-    boxShadow: "4px 0 24px rgba(0, 0, 0, 0.3)",
+    borderRight: "1px solid var(--sidebar-border)",
+    boxShadow: "var(--sidebar-shadow)",
   };
 
   const secondaryBtn: CSSProperties = {
     width: "calc(100% - 24px)",
     margin: "8px 12px",
     padding: "12px 16px",
-    borderRadius: "12px",
+    borderRadius: "var(--btn-radius)",
     fontWeight: 500,
     fontSize: "14px",
-    color: "rgba(255, 255, 255, 0.92)",
-    background: "rgba(255, 255, 255, 0.07)",
-    border: "1px solid rgba(255, 255, 255, 0.1)",
+    color: "var(--text-primary)",
+    background: "var(--secondary-btn-bg)",
+    border: "1px solid var(--secondary-btn-border)",
     cursor: "pointer",
     transition: "all 0.2s ease",
   };
@@ -98,14 +105,21 @@ export default function DashboardLayout({
             flexDirection: "column",
           }}
         >
-          <div style={{ padding: "28px 24px 20px", display: "flex", alignItems: "center", gap: "10px" }}>
+          <div
+            style={{
+              padding: "28px 24px 20px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+            }}
+          >
             <span
               style={{
                 width: "8px",
                 height: "8px",
                 borderRadius: "50%",
-                background: "#6366f1",
-                boxShadow: "0 0 12px rgba(99, 102, 241, 0.8)",
+                background: "var(--accent)",
+                boxShadow: "var(--accent-glow)",
                 flexShrink: 0,
               }}
             />
@@ -113,7 +127,7 @@ export default function DashboardLayout({
               style={{
                 fontSize: "18px",
                 fontWeight: 700,
-                color: "#ffffff",
+                color: "var(--logo-text)",
                 letterSpacing: "-0.02em",
               }}
             >
@@ -126,7 +140,7 @@ export default function DashboardLayout({
               fontSize: "10px",
               letterSpacing: "0.1em",
               textTransform: "uppercase",
-              color: "rgba(255, 255, 255, 0.25)",
+              color: "var(--menu-label)",
               padding: "0 24px",
               marginBottom: "8px",
             }}
@@ -137,29 +151,29 @@ export default function DashboardLayout({
           <nav style={{ display: "flex", flexDirection: "column", gap: "0" }}>
             {nav.map((item) => {
               const active = isActive(item.href);
-              const dotColor = navDotColors[item.href] ?? "#6366f1";
+              const dotColor = navDotColors[item.href] ?? "var(--accent)";
               const linkStyle: CSSProperties = {
                 display: "flex",
                 alignItems: "center",
                 gap: "10px",
                 padding: "11px 16px",
                 margin: "2px 12px",
-                borderRadius: "12px",
+                borderRadius: "var(--btn-radius)",
                 fontSize: "14px",
                 fontWeight: 500,
                 textDecoration: "none",
                 transition: "all 0.2s ease",
-                boxShadow: active ? "inset 3px 0 0 #6366f1" : "none",
+                boxShadow: active ? "inset 3px 0 0 var(--accent)" : "none",
                 ...(active
                   ? {
-                      background: "rgba(99, 102, 241, 0.15)",
-                      border: "1px solid rgba(99, 102, 241, 0.25)",
-                      color: "rgba(255, 255, 255, 0.95)",
+                      background: "var(--accent-bg)",
+                      border: "1px solid var(--accent-border)",
+                      color: "var(--nav-active-text)",
                     }
                   : {
                       background: "transparent",
                       border: "1px solid transparent",
-                      color: "rgba(255, 255, 255, 0.6)",
+                      color: "var(--nav-text)",
                     }),
               };
 
@@ -170,14 +184,14 @@ export default function DashboardLayout({
                   style={linkStyle}
                   onMouseEnter={(e) => {
                     if (!active) {
-                      e.currentTarget.style.background = "rgba(255, 255, 255, 0.07)";
-                      e.currentTarget.style.color = "rgba(255, 255, 255, 0.9)";
+                      e.currentTarget.style.background = "var(--glass-hover-bg)";
+                      e.currentTarget.style.color = "var(--nav-text-hover)";
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (!active) {
                       e.currentTarget.style.background = "transparent";
-                      e.currentTarget.style.color = "rgba(255, 255, 255, 0.6)";
+                      e.currentTarget.style.color = "var(--nav-text)";
                     }
                   }}
                 >
@@ -201,14 +215,14 @@ export default function DashboardLayout({
             <div
               style={{
                 height: "1px",
-                background: "rgba(255, 255, 255, 0.07)",
+                background: "var(--divider)",
                 margin: "16px 12px",
               }}
             />
             <div
               style={{
                 fontSize: "13px",
-                color: "rgba(255, 255, 255, 0.4)",
+                color: "var(--email-muted)",
                 padding: "0 24px",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -223,10 +237,10 @@ export default function DashboardLayout({
               onClick={onLogout}
               style={secondaryBtn}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.12)";
+                e.currentTarget.style.background = "var(--secondary-btn-hover)";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.07)";
+                e.currentTarget.style.background = "var(--secondary-btn-bg)";
               }}
             >
               Logout

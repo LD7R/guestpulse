@@ -16,35 +16,34 @@ type Hotel = {
 const pagePad: CSSProperties = { padding: "40px 48px" };
 
 const glass: CSSProperties = {
-  background: "rgba(255, 255, 255, 0.05)",
+  background: "var(--glass-bg)",
   backdropFilter: "blur(24px) saturate(180%)",
   WebkitBackdropFilter: "blur(24px) saturate(180%)",
-  border: "1px solid rgba(255, 255, 255, 0.09)",
-  borderRadius: "20px",
-  boxShadow:
-    "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+  border: "1px solid var(--glass-border)",
+  borderRadius: "var(--card-radius)",
+  boxShadow: "var(--glass-shadow), var(--glass-inner)",
 };
 
 const glassInput: CSSProperties = {
   width: "100%",
-  background: "rgba(255, 255, 255, 0.06)",
-  border: "1px solid rgba(255, 255, 255, 0.1)",
-  borderRadius: "12px",
+  background: "var(--glass-input-bg)",
+  border: "1px solid var(--glass-input-border)",
+  borderRadius: "var(--input-radius)",
   padding: "12px 16px",
-  color: "#ffffff",
+  color: "var(--input-text)",
   fontSize: "14px",
   outline: "none",
   boxSizing: "border-box",
 };
 
 const primaryBtn: CSSProperties = {
-  background: "rgba(99, 102, 241, 0.8)",
+  background: "var(--btn-primary-bg)",
   backdropFilter: "blur(12px)",
   WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid rgba(99, 102, 241, 0.4)",
-  borderRadius: "12px",
+  border: "1px solid var(--btn-primary-border)",
+  borderRadius: "var(--btn-radius)",
   padding: "12px 24px",
-  color: "#ffffff",
+  color: "var(--on-primary)",
   fontWeight: 500,
   fontSize: "14px",
   cursor: "pointer",
@@ -205,27 +204,41 @@ export default function HotelSettingsPage() {
   const label: CSSProperties = {
     display: "block",
     fontSize: "13px",
-    color: "rgba(255, 255, 255, 0.6)",
+    color: "var(--text-secondary)",
     marginBottom: "6px",
   };
 
   if (loading) {
     return (
       <div style={pagePad}>
-        <div style={{ ...glass, padding: "24px", display: "flex", alignItems: "center", gap: "12px" }}>
+        <div
+          style={{
+            ...glass,
+            padding: "24px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+          }}
+        >
           <span
             style={{
               width: "18px",
               height: "18px",
               borderRadius: "50%",
-              border: "2px solid rgba(255,255,255,0.1)",
-              borderTopColor: "#6366f1",
+              border: "2px solid var(--spinner-track)",
+              borderTopColor: "var(--accent)",
               animation: "sload 0.8s linear infinite",
             }}
           />
-          <span style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)" }}>Loading settings…</span>
+          <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
+            Loading settings…
+          </span>
         </div>
-        <style dangerouslySetInnerHTML={{ __html: `@keyframes sload { to { transform: rotate(360deg); } }` }} />
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `@keyframes sload { to { transform: rotate(360deg); } }`,
+          }}
+        />
       </div>
     );
   }
@@ -233,7 +246,16 @@ export default function HotelSettingsPage() {
   if (error) {
     return (
       <div style={pagePad}>
-        <div style={{ ...glass, padding: "24px", color: "#ef4444", fontSize: "14px" }}>{error}</div>
+        <div
+          style={{
+            ...glass,
+            padding: "24px",
+            color: "var(--error)",
+            fontSize: "14px",
+          }}
+        >
+          {error}
+        </div>
       </div>
     );
   }
@@ -245,7 +267,7 @@ export default function HotelSettingsPage() {
           fontSize: "26px",
           fontWeight: 700,
           letterSpacing: "-0.5px",
-          color: "rgba(255, 255, 255, 0.92)",
+          color: "var(--text-primary)",
           marginBottom: "24px",
         }}
       >
@@ -257,7 +279,7 @@ export default function HotelSettingsPage() {
           style={{
             fontSize: "17px",
             fontWeight: 600,
-            color: "rgba(255, 255, 255, 0.92)",
+            color: "var(--text-primary)",
             marginBottom: "20px",
           }}
         >
@@ -285,10 +307,10 @@ export default function HotelSettingsPage() {
               placeholder="My Boutique Hotel"
               style={glassInput}
               onFocus={(e) => {
-                e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+                e.target.style.borderColor = "var(--focus-ring)";
               }}
               onBlur={(e) => {
-                e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+                e.target.style.borderColor = "var(--glass-input-border)";
               }}
             />
           </div>
@@ -304,10 +326,10 @@ export default function HotelSettingsPage() {
               placeholder="https://tripadvisor.com/hotel/..."
               style={glassInput}
               onFocus={(e) => {
-                e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+                e.target.style.borderColor = "var(--focus-ring)";
               }}
               onBlur={(e) => {
-                e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+                e.target.style.borderColor = "var(--glass-input-border)";
               }}
             />
           </div>
@@ -325,10 +347,10 @@ export default function HotelSettingsPage() {
             placeholder="https://www.google.com/maps/place/..."
             style={glassInput}
             onFocus={(e) => {
-              e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+              e.target.style.borderColor = "var(--focus-ring)";
             }}
             onBlur={(e) => {
-              e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+              e.target.style.borderColor = "var(--glass-input-border)";
             }}
           />
         </div>
@@ -345,10 +367,10 @@ export default function HotelSettingsPage() {
             placeholder="https://booking.com/hotel/..."
             style={glassInput}
             onFocus={(e) => {
-              e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+              e.target.style.borderColor = "var(--focus-ring)";
             }}
             onBlur={(e) => {
-              e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+              e.target.style.borderColor = "var(--glass-input-border)";
             }}
           />
         </div>
@@ -358,11 +380,11 @@ export default function HotelSettingsPage() {
             style={{
               marginBottom: "16px",
               padding: "12px 16px",
-              borderRadius: "12px",
-              background: "rgba(239, 68, 68, 0.08)",
-              border: "1px solid rgba(239, 68, 68, 0.25)",
+              borderRadius: "var(--btn-radius)",
+              background: "var(--message-error-bg)",
+              border: "1px solid var(--message-error-border)",
               fontSize: "14px",
-              color: "#fca5a5",
+              color: "var(--text-error-soft)",
             }}
           >
             {saveError}
@@ -373,11 +395,11 @@ export default function HotelSettingsPage() {
             style={{
               marginBottom: "16px",
               padding: "12px 16px",
-              borderRadius: "12px",
-              background: "rgba(34, 197, 94, 0.08)",
-              border: "1px solid rgba(34, 197, 94, 0.2)",
+              borderRadius: "var(--btn-radius)",
+              background: "var(--message-success-bg)",
+              border: "1px solid var(--message-success-border)",
               fontSize: "14px",
-              color: "rgba(255,255,255,0.9)",
+              color: "var(--text-primary)",
             }}
           >
             {saveSuccess}
@@ -394,10 +416,11 @@ export default function HotelSettingsPage() {
               cursor: saving ? "not-allowed" : "pointer",
             }}
             onMouseEnter={(e) => {
-              if (!saving) e.currentTarget.style.background = "rgba(99, 102, 241, 1)";
+              if (!saving)
+                e.currentTarget.style.background = "var(--btn-primary-hover)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "rgba(99, 102, 241, 0.8)";
+              e.currentTarget.style.background = "var(--btn-primary-bg)";
             }}
           >
             {saving ? (hotelId ? "Updating…" : "Creating…") : hotelId ? "Save changes" : "Create hotel"}

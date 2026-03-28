@@ -42,31 +42,30 @@ type Review = {
 const pagePad: CSSProperties = { padding: "40px 48px" };
 
 const glass: CSSProperties = {
-  background: "rgba(255, 255, 255, 0.05)",
+  background: "var(--glass-bg)",
   backdropFilter: "blur(24px) saturate(180%)",
   WebkitBackdropFilter: "blur(24px) saturate(180%)",
-  border: "1px solid rgba(255, 255, 255, 0.09)",
-  borderRadius: "20px",
-  boxShadow:
-    "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+  border: "1px solid var(--glass-border)",
+  borderRadius: "var(--card-radius)",
+  boxShadow: "var(--glass-shadow), var(--glass-inner)",
 };
 
 const glassPrimary: CSSProperties = {
-  background: "rgba(99, 102, 241, 0.8)",
+  background: "var(--btn-primary-bg)",
   backdropFilter: "blur(12px)",
   WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid rgba(99, 102, 241, 0.4)",
-  borderRadius: "12px",
-  color: "#ffffff",
+  border: "1px solid var(--btn-primary-border)",
+  borderRadius: "var(--btn-radius)",
+  color: "var(--on-primary)",
   fontWeight: 500,
   transition: "all 0.2s ease",
 };
 
 const glassSecondary: CSSProperties = {
-  background: "rgba(255, 255, 255, 0.07)",
-  border: "1px solid rgba(255, 255, 255, 0.1)",
-  borderRadius: "12px",
-  color: "rgba(255, 255, 255, 0.92)",
+  background: "var(--secondary-btn-bg)",
+  border: "1px solid var(--secondary-btn-border)",
+  borderRadius: "var(--btn-radius)",
+  color: "var(--text-primary)",
   fontWeight: 500,
   transition: "all 0.2s ease",
 };
@@ -75,21 +74,21 @@ const selectStyle: CSSProperties = {
   width: "100%",
   height: "44px",
   padding: "0 14px",
-  borderRadius: "12px",
-  background: "rgba(255, 255, 255, 0.06)",
-  border: "1px solid rgba(255, 255, 255, 0.1)",
-  color: "rgba(255, 255, 255, 0.92)",
+  borderRadius: "var(--input-radius)",
+  background: "var(--glass-input-bg)",
+  border: "1px solid var(--glass-input-border)",
+  color: "var(--text-primary)",
   fontSize: "14px",
   outline: "none",
   cursor: "pointer",
 };
 
 const glassInput: CSSProperties = {
-  background: "rgba(255, 255, 255, 0.06)",
-  border: "1px solid rgba(255, 255, 255, 0.1)",
-  borderRadius: "12px",
+  background: "var(--glass-input-bg)",
+  border: "1px solid var(--glass-input-border)",
+  borderRadius: "var(--input-radius)",
   padding: "12px 16px",
-  color: "#ffffff",
+  color: "var(--input-text)",
   outline: "none",
   boxSizing: "border-box",
 };
@@ -99,19 +98,19 @@ const statLabel: CSSProperties = {
   fontWeight: 600,
   letterSpacing: "0.08em",
   textTransform: "uppercase",
-  color: "rgba(255, 255, 255, 0.35)",
+  color: "var(--text-label)",
 };
 
 const statNum: CSSProperties = {
   fontSize: "36px",
   fontWeight: 700,
-  color: "#ffffff",
+  color: "var(--text-primary)",
   marginTop: "8px",
 };
 
 const navLink: CSSProperties = {
   fontSize: "14px",
-  color: "rgba(255, 255, 255, 0.5)",
+  color: "var(--text-secondary)",
   textDecoration: "none",
 };
 
@@ -131,11 +130,11 @@ function SyncMessages({
           style={{
             marginTop: "16px",
             padding: "12px 16px",
-            borderRadius: "12px",
-            background: "rgba(239, 68, 68, 0.08)",
-            border: "1px solid rgba(239, 68, 68, 0.2)",
+            borderRadius: "var(--btn-radius)",
+            background: "var(--message-error-bg)",
+            border: "1px solid var(--message-error-border)",
             fontSize: "14px",
-            color: "#fca5a5",
+            color: "var(--text-error-soft)",
           }}
         >
           {syncError}
@@ -146,11 +145,11 @@ function SyncMessages({
           style={{
             marginTop: "12px",
             padding: "12px 16px",
-            borderRadius: "12px",
-            background: "rgba(34, 197, 94, 0.08)",
-            border: "1px solid rgba(34, 197, 94, 0.2)",
+            borderRadius: "var(--btn-radius)",
+            background: "var(--message-success-bg)",
+            border: "1px solid var(--message-success-border)",
             fontSize: "14px",
-            color: "rgba(255,255,255,0.9)",
+            color: "var(--text-primary)",
           }}
         >
           {syncMessage}
@@ -158,16 +157,37 @@ function SyncMessages({
       ) : null}
       {syncBreakdown ? (
         <p style={{ marginTop: "12px", fontSize: "13px" }}>
-          <span style={{ color: "rgba(255,255,255,0.35)" }}>Synced breakdown — </span>
-          <span style={{ color: syncBreakdown.tripadvisor > 0 ? "#86efac" : "rgba(255,255,255,0.35)" }}>
+          <span style={{ color: "var(--text-label)" }}>Synced breakdown — </span>
+          <span
+            style={{
+              color:
+                syncBreakdown.tripadvisor > 0
+                  ? "var(--breakdown-highlight)"
+                  : "var(--text-label)",
+            }}
+          >
             TripAdvisor: {syncBreakdown.tripadvisor}
           </span>
-          <span style={{ color: "rgba(255,255,255,0.35)" }}> · </span>
-          <span style={{ color: syncBreakdown.google > 0 ? "#86efac" : "rgba(255,255,255,0.35)" }}>
+          <span style={{ color: "var(--text-label)" }}> · </span>
+          <span
+            style={{
+              color:
+                syncBreakdown.google > 0
+                  ? "var(--breakdown-highlight)"
+                  : "var(--text-label)",
+            }}
+          >
             Google: {syncBreakdown.google}
           </span>
-          <span style={{ color: "rgba(255,255,255,0.35)" }}> · </span>
-          <span style={{ color: syncBreakdown.booking > 0 ? "#86efac" : "rgba(255,255,255,0.35)" }}>
+          <span style={{ color: "var(--text-label)" }}> · </span>
+          <span
+            style={{
+              color:
+                syncBreakdown.booking > 0
+                  ? "var(--breakdown-highlight)"
+                  : "var(--text-label)",
+            }}
+          >
             Booking: {syncBreakdown.booking}
           </span>
         </p>
@@ -195,7 +215,7 @@ function StarRow({ rating }: { rating: number | null }) {
   const filled = Math.max(0, Math.min(5, Math.round(safe)));
   if (filled <= 0) {
     return (
-      <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)" }}>No rating</span>
+      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>No rating</span>
     );
   }
   return (
@@ -204,7 +224,7 @@ function StarRow({ rating }: { rating: number | null }) {
         display: "inline-flex",
         alignItems: "center",
         gap: "2px",
-        color: "#f59e0b",
+        color: "var(--star)",
         fontSize: "16px",
       }}
     >
@@ -213,7 +233,7 @@ function StarRow({ rating }: { rating: number | null }) {
           ★
         </span>
       ))}
-      <span style={{ marginLeft: "6px", fontSize: "13px", color: "rgba(255,255,255,0.35)" }}>
+      <span style={{ marginLeft: "6px", fontSize: "13px", color: "var(--text-label)" }}>
         {safe.toFixed(1)}
       </span>
     </span>
@@ -235,27 +255,55 @@ function PlatformBadge({ platform }: { platform: string | null | undefined }) {
   };
   if (p === "tripadvisor") {
     return (
-      <span style={{ ...base, background: "rgba(52, 211, 153, 0.15)", color: "#34d399", borderColor: "rgba(52, 211, 153, 0.25)" }}>
+      <span
+        style={{
+          ...base,
+          background: "var(--platform-ta-bg)",
+          color: "var(--platform-ta)",
+          borderColor: "var(--platform-ta-border)",
+        }}
+      >
         {label}
       </span>
     );
   }
   if (p === "google") {
     return (
-      <span style={{ ...base, background: "rgba(96, 165, 250, 0.15)", color: "#60a5fa", borderColor: "rgba(96, 165, 250, 0.25)" }}>
+      <span
+        style={{
+          ...base,
+          background: "var(--platform-google-bg)",
+          color: "var(--platform-google)",
+          borderColor: "var(--platform-google-border)",
+        }}
+      >
         {label}
       </span>
     );
   }
   if (p === "booking") {
     return (
-      <span style={{ ...base, background: "rgba(167, 139, 250, 0.15)", color: "#a78bfa", borderColor: "rgba(167, 139, 250, 0.25)" }}>
+      <span
+        style={{
+          ...base,
+          background: "var(--platform-booking-bg)",
+          color: "var(--platform-booking)",
+          borderColor: "var(--platform-booking-border)",
+        }}
+      >
         {label}
       </span>
     );
   }
   return (
-    <span style={{ ...base, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)", borderColor: "rgba(255,255,255,0.1)" }}>
+    <span
+      style={{
+        ...base,
+        background: "var(--glass-input-bg)",
+        color: "var(--text-secondary)",
+        borderColor: "var(--glass-input-border)",
+      }}
+    >
       {label}
     </span>
   );
@@ -276,20 +324,41 @@ function SentimentBadge({ sentiment }: { sentiment: string | null | undefined })
   const text = raw.charAt(0).toUpperCase() + raw.slice(1);
   if (s === "positive") {
     return (
-      <span style={{ ...base, background: "rgba(34, 197, 94, 0.15)", color: "#22c55e", borderColor: "rgba(34, 197, 94, 0.25)" }}>
+      <span
+        style={{
+          ...base,
+          background: "var(--success-bg)",
+          color: "var(--success)",
+          borderColor: "var(--success-border)",
+        }}
+      >
         {text}
       </span>
     );
   }
   if (s === "negative") {
     return (
-      <span style={{ ...base, background: "rgba(239, 68, 68, 0.15)", color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.25)" }}>
+      <span
+        style={{
+          ...base,
+          background: "var(--error-bg)",
+          color: "var(--error)",
+          borderColor: "var(--error-border)",
+        }}
+      >
         {text}
       </span>
     );
   }
   return (
-    <span style={{ ...base, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", borderColor: "rgba(255,255,255,0.08)" }}>
+    <span
+      style={{
+        ...base,
+        background: "var(--neutral-sentiment-bg)",
+        color: "var(--text-secondary)",
+        borderColor: "var(--neutral-sentiment-border)",
+      }}
+    >
       {text}
     </span>
   );
@@ -321,10 +390,11 @@ function SyncAllButton({
         cursor: syncing ? "not-allowed" : "pointer",
       }}
       onMouseEnter={(e) => {
-        if (!syncing) e.currentTarget.style.background = "rgba(99, 102, 241, 1)";
+        if (!syncing)
+          e.currentTarget.style.background = "var(--btn-primary-hover)";
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.background = "rgba(99, 102, 241, 0.8)";
+        e.currentTarget.style.background = "var(--btn-primary-bg)";
       }}
     >
       {syncing ? (
@@ -334,8 +404,8 @@ function SyncAllButton({
               width: "16px",
               height: "16px",
               borderRadius: "50%",
-              border: "2px solid rgba(255,255,255,0.3)",
-              borderTopColor: "#fff",
+              border: "2px solid var(--spinner-track)",
+              borderTopColor: "var(--on-primary)",
               animation: "rvspin 0.8s linear infinite",
             }}
           />
@@ -774,12 +844,12 @@ export default function ReviewsInboxPage() {
               width: "20px",
               height: "20px",
               borderRadius: "50%",
-              border: "2px solid rgba(255,255,255,0.1)",
-              borderTopColor: "#6366f1",
+              border: "2px solid var(--spinner-track)",
+              borderTopColor: "var(--accent)",
               animation: "rvspin 0.8s linear infinite",
             }}
           />
-          <span style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)" }}>Loading reviews…</span>
+          <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>Loading reviews…</span>
         </div>
         <style dangerouslySetInnerHTML={{ __html: `@keyframes rvspin { to { transform: rotate(360deg); } }` }} />
       </div>
@@ -790,8 +860,17 @@ export default function ReviewsInboxPage() {
     return (
       <div style={pagePad}>
         <div style={{ ...glass, padding: "24px", maxWidth: "560px" }}>
-          <h1 style={{ fontSize: "17px", fontWeight: 600, color: "rgba(255,255,255,0.92)", marginBottom: "8px" }}>Error</h1>
-          <p style={{ fontSize: "14px", color: "#fca5a5", lineHeight: 1.6 }}>{error}</p>
+          <h1
+            style={{
+              fontSize: "17px",
+              fontWeight: 600,
+              color: "var(--text-primary)",
+              marginBottom: "8px",
+            }}
+          >
+            Error
+          </h1>
+          <p style={{ fontSize: "14px", color: "var(--text-error-soft)", lineHeight: 1.6 }}>{error}</p>
         </div>
       </div>
     );
@@ -802,30 +881,37 @@ export default function ReviewsInboxPage() {
       <div style={{ ...pagePad, display: "flex", flexDirection: "column", gap: "20px" }}>
         <nav style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
           <Link href="/dashboard" style={navLink}>
-            Overview
+            Dashboard
           </Link>
-          <span style={{ color: "rgba(255,255,255,0.2)" }}>/</span>
-          <span style={{ color: "rgba(255,255,255,0.35)" }}>Reviews inbox</span>
+          <span style={{ color: "var(--text-subtle)" }}>/</span>
+          <span style={{ color: "var(--text-label)" }}>Reviews inbox</span>
         </nav>
 
         <div style={{ ...glass, padding: "24px" }}>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
-            <h1 style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px", color: "rgba(255,255,255,0.92)" }}>
+            <h1
+              style={{
+                fontSize: "26px",
+                fontWeight: 700,
+                letterSpacing: "-0.5px",
+                color: "var(--text-primary)",
+              }}
+            >
               Reviews inbox
             </h1>
             <SyncAllButton syncing={syncing} onSync={handleSyncAllReviews} label="Sync all reviews" />
           </div>
 
           <div style={{ marginTop: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px" }}>
-            <div style={{ ...glass, padding: "16px", background: "rgba(255,255,255,0.04)" }}>
+            <div style={{ ...glass, padding: "16px", background: "var(--glass-muted)" }}>
               <div style={statLabel}>Total reviews</div>
               <div style={statNum}>{summary.total}</div>
             </div>
-            <div style={{ ...glass, padding: "16px", background: "rgba(255,255,255,0.04)" }}>
+            <div style={{ ...glass, padding: "16px", background: "var(--glass-muted)" }}>
               <div style={statLabel}>Average rating</div>
               <div style={statNum}>{summary.avgRating === null ? "—" : summary.avgRating.toFixed(2)}</div>
             </div>
-            <div style={{ ...glass, padding: "16px", background: "rgba(255,255,255,0.04)" }}>
+            <div style={{ ...glass, padding: "16px", background: "var(--glass-muted)" }}>
               <div style={statLabel}>Needing response</div>
               <div style={statNum}>{summary.needingResponse}</div>
             </div>
@@ -833,7 +919,15 @@ export default function ReviewsInboxPage() {
 
           <div style={{ ...glass, marginTop: "16px", padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
             <div>
-              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>Platform</div>
+              <div
+                style={{
+                  fontSize: "13px",
+                  color: "var(--text-secondary)",
+                  marginBottom: "8px",
+                }}
+              >
+                Platform
+              </div>
               <select
                 value={platformFilter}
                 onChange={(e) => setPlatformFilter(e.target.value)}
@@ -846,7 +940,15 @@ export default function ReviewsInboxPage() {
               </select>
             </div>
             <div>
-              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>Sentiment</div>
+              <div
+                style={{
+                  fontSize: "13px",
+                  color: "var(--text-secondary)",
+                  marginBottom: "8px",
+                }}
+              >
+                Sentiment
+              </div>
               <select
                 value={sentimentFilter}
                 onChange={(e) => setSentimentFilter(e.target.value)}
@@ -859,7 +961,15 @@ export default function ReviewsInboxPage() {
               </select>
             </div>
             <div>
-              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>Status</div>
+              <div
+                style={{
+                  fontSize: "13px",
+                  color: "var(--text-secondary)",
+                  marginBottom: "8px",
+                }}
+              >
+                Status
+              </div>
               <select
                 value={respondedFilter}
                 onChange={(e) => setRespondedFilter(e.target.value)}
@@ -876,7 +986,7 @@ export default function ReviewsInboxPage() {
         </div>
 
         <div style={{ ...glass, padding: "28px" }}>
-          <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", lineHeight: 1.7 }}>
+          <p style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.7 }}>
             No reviews yet. Once guests leave feedback, it will show up here for response.
           </p>
         </div>
@@ -887,31 +997,38 @@ export default function ReviewsInboxPage() {
   return (
     <div style={{ ...pagePad, display: "flex", flexDirection: "column", gap: "20px" }}>
       <nav style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
-        <Link href="/dashboard" style={navLink}>
-          Overview
+          <Link href="/dashboard" style={navLink}>
+          Dashboard
         </Link>
-        <span style={{ color: "rgba(255,255,255,0.2)" }}>/</span>
-        <span style={{ color: "rgba(255,255,255,0.35)" }}>Reviews inbox</span>
+        <span style={{ color: "var(--text-subtle)" }}>/</span>
+        <span style={{ color: "var(--text-label)" }}>Reviews inbox</span>
       </nav>
 
       <div style={{ ...glass, padding: "24px" }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
-          <h1 style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px", color: "rgba(255,255,255,0.92)" }}>
+          <h1
+            style={{
+              fontSize: "26px",
+              fontWeight: 700,
+              letterSpacing: "-0.5px",
+              color: "var(--text-primary)",
+            }}
+          >
             Reviews inbox
           </h1>
           <SyncAllButton syncing={syncing} onSync={handleSyncAllReviews} label="Sync all reviews" />
         </div>
 
         <div style={{ marginTop: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px" }}>
-          <div style={{ ...glass, padding: "16px", background: "rgba(255,255,255,0.04)" }}>
+          <div style={{ ...glass, padding: "16px", background: "var(--glass-muted)" }}>
             <div style={statLabel}>Total reviews</div>
             <div style={statNum}>{summary.total}</div>
           </div>
-          <div style={{ ...glass, padding: "16px", background: "rgba(255,255,255,0.04)" }}>
+          <div style={{ ...glass, padding: "16px", background: "var(--glass-muted)" }}>
             <div style={statLabel}>Average rating</div>
             <div style={statNum}>{summary.avgRating === null ? "—" : summary.avgRating.toFixed(2)}</div>
           </div>
-          <div style={{ ...glass, padding: "16px", background: "rgba(255,255,255,0.04)" }}>
+          <div style={{ ...glass, padding: "16px", background: "var(--glass-muted)" }}>
             <div style={statLabel}>Needing response</div>
             <div style={statNum}>{summary.needingResponse}</div>
           </div>
@@ -919,7 +1036,15 @@ export default function ReviewsInboxPage() {
 
         <div style={{ ...glass, marginTop: "16px", padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
           <div>
-            <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>Platform</div>
+            <div
+              style={{
+                fontSize: "13px",
+                color: "var(--text-secondary)",
+                marginBottom: "8px",
+              }}
+            >
+              Platform
+            </div>
             <select
               value={platformFilter}
               onChange={(e) => setPlatformFilter(e.target.value)}
@@ -932,7 +1057,15 @@ export default function ReviewsInboxPage() {
             </select>
           </div>
           <div>
-            <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>Sentiment</div>
+            <div
+              style={{
+                fontSize: "13px",
+                color: "var(--text-secondary)",
+                marginBottom: "8px",
+              }}
+            >
+              Sentiment
+            </div>
             <select
               value={sentimentFilter}
               onChange={(e) => setSentimentFilter(e.target.value)}
@@ -945,7 +1078,15 @@ export default function ReviewsInboxPage() {
             </select>
           </div>
           <div>
-            <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>Status</div>
+            <div
+              style={{
+                fontSize: "13px",
+                color: "var(--text-secondary)",
+                marginBottom: "8px",
+              }}
+            >
+              Status
+            </div>
             <select
               value={respondedFilter}
               onChange={(e) => setRespondedFilter(e.target.value)}
@@ -989,13 +1130,13 @@ export default function ReviewsInboxPage() {
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = "translateY(-1px)";
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
-                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.14)";
+                  e.currentTarget.style.background = "var(--glass-hover-bg)";
+                  e.currentTarget.style.borderColor = "var(--glass-hover-border)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.09)";
+                  e.currentTarget.style.background = "var(--glass-bg)";
+                  e.currentTarget.style.borderColor = "var(--glass-border)";
                 }}
               >
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", justifyContent: "space-between" }}>
@@ -1014,9 +1155,9 @@ export default function ReviewsInboxPage() {
                         padding: "6px 12px",
                         fontSize: "12px",
                         fontWeight: 600,
-                        background: "rgba(34, 197, 94, 0.15)",
-                        color: "#22c55e",
-                        border: "1px solid rgba(34, 197, 94, 0.25)",
+                        background: "var(--success-bg)",
+                        color: "var(--success)",
+                        border: "1px solid var(--success-border)",
                       }}
                     >
                       <span aria-hidden>✓</span> Responded
@@ -1038,11 +1179,11 @@ export default function ReviewsInboxPage() {
                       }}
                       onMouseEnter={(e) => {
                         if (!(isPanelOpen && draft.status === "loading")) {
-                          e.currentTarget.style.background = "rgba(99, 102, 241, 1)";
+                          e.currentTarget.style.background = "var(--btn-primary-hover)";
                         }
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "rgba(99, 102, 241, 0.8)";
+                        e.currentTarget.style.background = "var(--btn-primary-bg)";
                       }}
                     >
                       {isPanelOpen && draft.status === "loading" ? (
@@ -1052,8 +1193,8 @@ export default function ReviewsInboxPage() {
                               width: "14px",
                               height: "14px",
                               borderRadius: "50%",
-                              border: "2px solid rgba(255,255,255,0.3)",
-                              borderTopColor: "#fff",
+                              border: "2px solid var(--spinner-track)",
+                              borderTopColor: "var(--on-primary)",
                               animation: "rvspin 0.8s linear infinite",
                             }}
                           />
@@ -1070,8 +1211,12 @@ export default function ReviewsInboxPage() {
 
                 <div style={{ marginTop: "16px" }}>
                   <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "15px", fontWeight: 600, color: "#ffffff" }}>{reviewerName}</span>
-                    <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.35)" }}>• {formatDate(createdAt)}</span>
+                    <span style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)" }}>
+                      {reviewerName}
+                    </span>
+                    <span style={{ fontSize: "13px", color: "var(--text-label)" }}>
+                      • {formatDate(createdAt)}
+                    </span>
                     <SentimentBadge sentiment={sentiment} />
                     {complaintTopic ? (
                       <span
@@ -1081,9 +1226,9 @@ export default function ReviewsInboxPage() {
                           borderRadius: "100px",
                           padding: "4px 10px",
                           fontSize: "13px",
-                          background: "rgba(255,255,255,0.07)",
-                          color: "rgba(255,255,255,0.35)",
-                          border: "1px solid rgba(255,255,255,0.08)",
+                          background: "var(--complaint-pill-bg)",
+                          color: "var(--text-label)",
+                          border: "1px solid var(--complaint-pill-border)",
                         }}
                       >
                         {complaintTopic}
@@ -1095,7 +1240,7 @@ export default function ReviewsInboxPage() {
                 <div
                   style={{
                     marginTop: "12px",
-                    color: "rgba(255, 255, 255, 0.7)",
+                    color: "var(--review-text)",
                     fontSize: "14px",
                     lineHeight: 1.7,
                     whiteSpace: "pre-wrap",
@@ -1110,8 +1255,8 @@ export default function ReviewsInboxPage() {
                       marginTop: "16px",
                       padding: "16px",
                       borderRadius: "16px",
-                      background: "rgba(99, 102, 241, 0.05)",
-                      border: "1px solid rgba(99, 102, 241, 0.15)",
+                      background: "var(--accent-panel)",
+                      border: "1px solid var(--accent-panel-border)",
                       backdropFilter: "blur(12px)",
                       display: "flex",
                       flexDirection: "column",
@@ -1119,21 +1264,29 @@ export default function ReviewsInboxPage() {
                     }}
                   >
                     {draft.status === "loading" ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "rgba(255,255,255,0.45)" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          fontSize: "14px",
+                          color: "var(--text-secondary)",
+                        }}
+                      >
                         <span
                           style={{
                             width: "16px",
                             height: "16px",
                             borderRadius: "50%",
-                            border: "2px solid rgba(255,255,255,0.1)",
-                            borderTopColor: "#6366f1",
+                            border: "2px solid var(--spinner-track)",
+                            borderTopColor: "var(--accent)",
                             animation: "rvspin 0.8s linear infinite",
                           }}
                         />
                         Generating...
                       </div>
                     ) : draft.status === "error" ? (
-                      <p style={{ fontSize: "14px", color: "#fca5a5" }}>{draft.text}</p>
+                      <p style={{ fontSize: "14px", color: "var(--text-error-soft)" }}>{draft.text}</p>
                     ) : (
                       <>
                         <textarea
@@ -1149,10 +1302,10 @@ export default function ReviewsInboxPage() {
                             lineHeight: 1.6,
                           }}
                           onFocus={(e) => {
-                            e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+                            e.target.style.borderColor = "var(--focus-ring)";
                           }}
                           onBlur={(e) => {
-                            e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+                            e.target.style.borderColor = "var(--glass-input-border)";
                           }}
                         />
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
@@ -1169,10 +1322,10 @@ export default function ReviewsInboxPage() {
                               fontSize: "14px",
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.background = "rgba(255, 255, 255, 0.12)";
+                              e.currentTarget.style.background = "var(--secondary-btn-hover)";
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.background = "rgba(255, 255, 255, 0.07)";
+                              e.currentTarget.style.background = "var(--secondary-btn-bg)";
                             }}
                           >
                             {draft.copied ? "Copied!" : "Copy"}
@@ -1190,18 +1343,18 @@ export default function ReviewsInboxPage() {
                             }}
                             onMouseEnter={(e) => {
                               if (!draft.markingResponded) {
-                                e.currentTarget.style.background = "rgba(99, 102, 241, 1)";
+                                e.currentTarget.style.background = "var(--btn-primary-hover)";
                               }
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.background = "rgba(99, 102, 241, 0.8)";
+                              e.currentTarget.style.background = "var(--btn-primary-bg)";
                             }}
                           >
                             {draft.markingResponded ? "Saving..." : "Mark as responded"}
                           </button>
                         </div>
                         {draft.markError ? (
-                          <p style={{ fontSize: "14px", color: "#fca5a5" }}>{draft.markError}</p>
+                          <p style={{ fontSize: "14px", color: "var(--text-error-soft)" }}>{draft.markError}</p>
                         ) : null}
                       </>
                     )}

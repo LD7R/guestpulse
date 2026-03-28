@@ -9,13 +9,12 @@ import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { CSSProperties } from "react";
 
 const glassCard: CSSProperties = {
-  background: "rgba(255, 255, 255, 0.05)",
+  background: "var(--glass-bg)",
   backdropFilter: "blur(24px) saturate(180%)",
   WebkitBackdropFilter: "blur(24px) saturate(180%)",
-  border: "1px solid rgba(255, 255, 255, 0.09)",
-  borderRadius: "20px",
-  boxShadow:
-    "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+  border: "1px solid var(--glass-border)",
+  borderRadius: "var(--card-radius)",
+  boxShadow: "var(--glass-shadow), var(--glass-inner)",
   width: "420px",
   maxWidth: "100%",
   padding: "48px 40px",
@@ -23,11 +22,11 @@ const glassCard: CSSProperties = {
 
 const glassInput: CSSProperties = {
   width: "100%",
-  background: "rgba(255, 255, 255, 0.06)",
-  border: "1px solid rgba(255, 255, 255, 0.1)",
-  borderRadius: "12px",
+  background: "var(--glass-input-bg)",
+  border: "1px solid var(--glass-input-border)",
+  borderRadius: "var(--input-radius)",
   padding: "12px 16px",
-  color: "#ffffff",
+  color: "var(--input-text)",
   fontSize: "14px",
   outline: "none",
   boxSizing: "border-box",
@@ -36,12 +35,12 @@ const glassInput: CSSProperties = {
 const primaryBtn: CSSProperties = {
   width: "100%",
   height: "48px",
-  background: "rgba(99, 102, 241, 0.8)",
+  background: "var(--btn-primary-bg)",
   backdropFilter: "blur(12px)",
   WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid rgba(99, 102, 241, 0.4)",
-  borderRadius: "12px",
-  color: "#ffffff",
+  border: "1px solid var(--btn-primary-border)",
+  borderRadius: "var(--btn-radius)",
+  color: "var(--on-primary)",
   fontWeight: 500,
   fontSize: "14px",
   cursor: "pointer",
@@ -102,7 +101,7 @@ export function LoginForm() {
           width: "400px",
           height: "400px",
           borderRadius: "50%",
-          background: "radial-gradient(circle, #6366f1 0%, transparent 70%)",
+          background: "radial-gradient(circle, var(--accent) 0%, transparent 70%)",
           opacity: 0.15,
           top: "-100px",
           left: "-100px",
@@ -116,7 +115,7 @@ export function LoginForm() {
           width: "300px",
           height: "300px",
           borderRadius: "50%",
-          background: "radial-gradient(circle, #8b5cf6 0%, transparent 70%)",
+          background: "radial-gradient(circle, var(--platform-booking) 0%, transparent 70%)",
           opacity: 0.1,
           bottom: "-80px",
           right: "-80px",
@@ -140,15 +139,15 @@ export function LoginForm() {
               width: "8px",
               height: "8px",
               borderRadius: "50%",
-              background: "#6366f1",
-              boxShadow: "0 0 12px rgba(99, 102, 241, 0.8)",
+              background: "var(--accent)",
+              boxShadow: "var(--accent-glow)",
             }}
           />
           <span
             style={{
               fontSize: "20px",
               fontWeight: 700,
-              color: "#ffffff",
+              color: "var(--logo-text)",
               letterSpacing: "-0.03em",
             }}
           >
@@ -159,7 +158,7 @@ export function LoginForm() {
           style={{
             textAlign: "center",
             fontSize: "14px",
-            color: "rgba(255, 255, 255, 0.4)",
+            color: "var(--text-secondary)",
             marginBottom: "36px",
           }}
         >
@@ -173,7 +172,7 @@ export function LoginForm() {
               style={{
                 display: "block",
                 fontSize: "13px",
-                color: "rgba(255, 255, 255, 0.6)",
+                color: "var(--text-secondary)",
                 marginBottom: "6px",
               }}
             >
@@ -189,10 +188,10 @@ export function LoginForm() {
               placeholder="you@company.com"
               style={glassInput}
               onFocus={(e) => {
-                e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+                e.target.style.borderColor = "var(--focus-ring)";
               }}
               onBlur={(e) => {
-                e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+                e.target.style.borderColor = "var(--glass-input-border)";
               }}
             />
           </div>
@@ -203,7 +202,7 @@ export function LoginForm() {
               style={{
                 display: "block",
                 fontSize: "13px",
-                color: "rgba(255, 255, 255, 0.6)",
+                color: "var(--text-secondary)",
                 marginBottom: "6px",
               }}
             >
@@ -219,10 +218,10 @@ export function LoginForm() {
               placeholder="••••••••"
               style={glassInput}
               onFocus={(e) => {
-                e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+                e.target.style.borderColor = "var(--focus-ring)";
               }}
               onBlur={(e) => {
-                e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+                e.target.style.borderColor = "var(--glass-input-border)";
               }}
             />
           </div>
@@ -231,7 +230,7 @@ export function LoginForm() {
             <p
               style={{
                 fontSize: "13px",
-                color: "rgba(239, 68, 68, 0.95)",
+                color: "var(--error)",
                 marginTop: "12px",
                 marginBottom: "8px",
               }}
@@ -251,11 +250,11 @@ export function LoginForm() {
             }}
             onMouseEnter={(e) => {
               if (!isPending) {
-                e.currentTarget.style.background = "rgba(99, 102, 241, 1)";
+                e.currentTarget.style.background = "var(--btn-primary-hover)";
               }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "rgba(99, 102, 241, 0.8)";
+              e.currentTarget.style.background = "var(--btn-primary-bg)";
             }}
           >
             {isPending ? "Signing in…" : "Sign in"}
@@ -267,13 +266,13 @@ export function LoginForm() {
             marginTop: "24px",
             textAlign: "center",
             fontSize: "14px",
-            color: "rgba(255, 255, 255, 0.4)",
+            color: "var(--text-secondary)",
           }}
         >
           Don’t have an account?{" "}
           <Link
             href="/signup"
-            style={{ color: "rgba(99, 102, 241, 0.9)", fontWeight: 500, textDecoration: "none" }}
+            style={{ color: "var(--accent)", fontWeight: 500, textDecoration: "none" }}
           >
             Sign up
           </Link>

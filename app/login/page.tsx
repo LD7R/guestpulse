@@ -26,9 +26,9 @@ function LoginPageFallback() {
           width: "420px",
           maxWidth: "100%",
           height: "320px",
-          borderRadius: "20px",
-          background: "rgba(255, 255, 255, 0.05)",
-          border: "1px solid rgba(255, 255, 255, 0.09)",
+          borderRadius: "var(--card-radius)",
+          background: "var(--glass-bg)",
+          border: "1px solid var(--glass-border)",
           animation: "pulse 1.2s ease-in-out infinite",
         }}
       />
