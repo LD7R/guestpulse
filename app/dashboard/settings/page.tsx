@@ -2,6 +2,7 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 import { FormEvent, useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 
 type Hotel = {
   id: string;
@@ -10,6 +11,44 @@ type Hotel = {
   tripadvisor_url: string | null;
   google_url: string | null;
   booking_url: string | null;
+};
+
+const pagePad: CSSProperties = { padding: "40px 48px" };
+
+const glass: CSSProperties = {
+  background: "rgba(255, 255, 255, 0.05)",
+  backdropFilter: "blur(24px) saturate(180%)",
+  WebkitBackdropFilter: "blur(24px) saturate(180%)",
+  border: "1px solid rgba(255, 255, 255, 0.09)",
+  borderRadius: "20px",
+  boxShadow:
+    "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+};
+
+const glassInput: CSSProperties = {
+  width: "100%",
+  background: "rgba(255, 255, 255, 0.06)",
+  border: "1px solid rgba(255, 255, 255, 0.1)",
+  borderRadius: "12px",
+  padding: "12px 16px",
+  color: "#ffffff",
+  fontSize: "14px",
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+const primaryBtn: CSSProperties = {
+  background: "rgba(99, 102, 241, 0.8)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  border: "1px solid rgba(99, 102, 241, 0.4)",
+  borderRadius: "12px",
+  padding: "12px 24px",
+  color: "#ffffff",
+  fontWeight: 500,
+  fontSize: "14px",
+  cursor: "pointer",
+  transition: "all 0.2s ease",
 };
 
 export default function HotelSettingsPage() {
@@ -63,7 +102,6 @@ export default function HotelSettingsPage() {
           .single();
 
         if (hotelError) {
-          // No row found is valid for first-time setup.
           if (hotelError.code !== "PGRST116") {
             throw hotelError;
           }
@@ -164,119 +202,208 @@ export default function HotelSettingsPage() {
     }
   }
 
+  const label: CSSProperties = {
+    display: "block",
+    fontSize: "13px",
+    color: "rgba(255, 255, 255, 0.6)",
+    marginBottom: "6px",
+  };
+
   if (loading) {
     return (
-      <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-[#222222] border-t-[#6366f1]" />
-          <span className="text-sm text-[#888888]">Loading settings…</span>
+      <div style={pagePad}>
+        <div style={{ ...glass, padding: "24px", display: "flex", alignItems: "center", gap: "12px" }}>
+          <span
+            style={{
+              width: "18px",
+              height: "18px",
+              borderRadius: "50%",
+              border: "2px solid rgba(255,255,255,0.1)",
+              borderTopColor: "#6366f1",
+              animation: "sload 0.8s linear infinite",
+            }}
+          />
+          <span style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)" }}>Loading settings…</span>
         </div>
+        <style dangerouslySetInnerHTML={{ __html: `@keyframes sload { to { transform: rotate(360deg); } }` }} />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
-        <div className="text-sm text-red-400">{error}</div>
+      <div style={pagePad}>
+        <div style={{ ...glass, padding: "24px", color: "#ef4444", fontSize: "14px" }}>{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-white">
-          Hotel settings
-        </h1>
-        <p className="mt-1 text-sm text-[#888888]">
-          Manage the hotel details used for review scraping.
-        </p>
-      </div>
-
-      <form
-        onSubmit={onSubmit}
-        className="rounded-2xl border border-[#222222] bg-[#111111] p-6"
+    <div style={pagePad}>
+      <h1
+        style={{
+          fontSize: "26px",
+          fontWeight: 700,
+          letterSpacing: "-0.5px",
+          color: "rgba(255, 255, 255, 0.92)",
+          marginBottom: "24px",
+        }}
       >
-        <div className="space-y-5">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-[#888888]">
-                Hotel name
-              </label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
-                placeholder="My Boutique Hotel"
-              />
-            </div>
+        Hotel settings
+      </h1>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-[#888888]">
-                TripAdvisor URL
-              </label>
-              <input
-                type="url"
-                value={tripadvisorUrl}
-                onChange={(e) => setTripadvisorUrl(e.target.value)}
-                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
-                placeholder="https://tripadvisor.com/hotel/..."
-              />
-            </div>
+      <form onSubmit={onSubmit} style={{ ...glass, padding: "28px" }}>
+        <h2
+          style={{
+            fontSize: "17px",
+            fontWeight: 600,
+            color: "rgba(255, 255, 255, 0.92)",
+            marginBottom: "20px",
+          }}
+        >
+          Property details
+        </h2>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-[#888888]">
-                Google Maps URL
-              </label>
-              <input
-                type="url"
-                value={googleUrl}
-                onChange={(e) => setGoogleUrl(e.target.value)}
-                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
-                placeholder="https://www.google.com/maps/place/..."
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-[#888888]">
-                Booking.com URL
-              </label>
-              <input
-                type="url"
-                value={bookingUrl}
-                onChange={(e) => setBookingUrl(e.target.value)}
-                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
-                placeholder="https://booking.com/hotel/..."
-              />
-            </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: "16px",
+            marginBottom: "16px",
+          }}
+        >
+          <div>
+            <label htmlFor="hs-name" style={label}>
+              Hotel name
+            </label>
+            <input
+              id="hs-name"
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My Boutique Hotel"
+              style={glassInput}
+              onFocus={(e) => {
+                e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+              }}
+            />
           </div>
-
-          {saveError ? (
-            <div className="rounded-xl border border-red-900/50 bg-red-900/20 px-3 py-2 text-sm text-red-300">
-              {saveError}
-            </div>
-          ) : null}
-          {saveSuccess ? (
-            <div className="rounded-xl border border-emerald-900/50 bg-emerald-900/20 px-3 py-2 text-sm text-emerald-200">
-              {saveSuccess}
-            </div>
-          ) : null}
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {saving ? (hotelId ? "Updating…" : "Creating…") : hotelId ? "Update" : "Create hotel"}
-            </button>
+          <div>
+            <label htmlFor="hs-ta" style={label}>
+              TripAdvisor URL
+            </label>
+            <input
+              id="hs-ta"
+              type="url"
+              value={tripadvisorUrl}
+              onChange={(e) => setTripadvisorUrl(e.target.value)}
+              placeholder="https://tripadvisor.com/hotel/..."
+              style={glassInput}
+              onFocus={(e) => {
+                e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+              }}
+            />
           </div>
+        </div>
+
+        <div style={{ marginBottom: "16px" }}>
+          <label htmlFor="hs-g" style={label}>
+            Google Maps URL
+          </label>
+          <input
+            id="hs-g"
+            type="url"
+            value={googleUrl}
+            onChange={(e) => setGoogleUrl(e.target.value)}
+            placeholder="https://www.google.com/maps/place/..."
+            style={glassInput}
+            onFocus={(e) => {
+              e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+            }}
+          />
+        </div>
+
+        <div style={{ marginBottom: "20px" }}>
+          <label htmlFor="hs-b" style={label}>
+            Booking.com URL
+          </label>
+          <input
+            id="hs-b"
+            type="url"
+            value={bookingUrl}
+            onChange={(e) => setBookingUrl(e.target.value)}
+            placeholder="https://booking.com/hotel/..."
+            style={glassInput}
+            onFocus={(e) => {
+              e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+            }}
+          />
+        </div>
+
+        {saveError ? (
+          <div
+            style={{
+              marginBottom: "16px",
+              padding: "12px 16px",
+              borderRadius: "12px",
+              background: "rgba(239, 68, 68, 0.08)",
+              border: "1px solid rgba(239, 68, 68, 0.25)",
+              fontSize: "14px",
+              color: "#fca5a5",
+            }}
+          >
+            {saveError}
+          </div>
+        ) : null}
+        {saveSuccess ? (
+          <div
+            style={{
+              marginBottom: "16px",
+              padding: "12px 16px",
+              borderRadius: "12px",
+              background: "rgba(34, 197, 94, 0.08)",
+              border: "1px solid rgba(34, 197, 94, 0.2)",
+              fontSize: "14px",
+              color: "rgba(255,255,255,0.9)",
+            }}
+          >
+            {saveSuccess}
+          </div>
+        ) : null}
+
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
+            type="submit"
+            disabled={saving}
+            style={{
+              ...primaryBtn,
+              opacity: saving ? 0.6 : 1,
+              cursor: saving ? "not-allowed" : "pointer",
+            }}
+            onMouseEnter={(e) => {
+              if (!saving) e.currentTarget.style.background = "rgba(99, 102, 241, 1)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(99, 102, 241, 0.8)";
+            }}
+          >
+            {saving ? (hotelId ? "Updating…" : "Creating…") : hotelId ? "Save changes" : "Create hotel"}
+          </button>
         </div>
       </form>
     </div>
   );
 }
-

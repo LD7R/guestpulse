@@ -1,9 +1,17 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
+
+const navDotColors: Record<string, string> = {
+  "/dashboard": "#6366f1",
+  "/dashboard/reviews": "#34d399",
+  "/dashboard/sentiment": "#a78bfa",
+  "/dashboard/settings": "#60a5fa",
+};
 
 export default function DashboardLayout({
   children,
@@ -52,45 +60,174 @@ export default function DashboardLayout({
     return pathname === href || pathname?.startsWith(`${href}/`);
   }
 
+  const asideStyle: CSSProperties = {
+    width: "260px",
+    position: "fixed",
+    left: 0,
+    top: 0,
+    zIndex: 10,
+    height: "100vh",
+    background: "rgba(10, 10, 26, 0.8)",
+    backdropFilter: "blur(40px)",
+    WebkitBackdropFilter: "blur(40px)",
+    borderRight: "1px solid rgba(255, 255, 255, 0.07)",
+    boxShadow: "4px 0 24px rgba(0, 0, 0, 0.3)",
+  };
+
+  const secondaryBtn: CSSProperties = {
+    width: "calc(100% - 24px)",
+    margin: "8px 12px",
+    padding: "12px 16px",
+    borderRadius: "12px",
+    fontWeight: 500,
+    fontSize: "14px",
+    color: "rgba(255, 255, 255, 0.92)",
+    background: "rgba(255, 255, 255, 0.07)",
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+  };
+
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
-      <aside className="fixed left-0 top-0 z-10 h-screen w-[240px] border-r border-[#222222] bg-[#0f0f0f]">
-        <div className="flex h-full flex-col">
-          <div className="px-5 pt-6 pb-4">
-            <div className="text-base font-bold tracking-tight text-white">
+    <div style={{ minHeight: "100vh" }}>
+      <aside style={asideStyle}>
+        <div
+          style={{
+            display: "flex",
+            height: "100%",
+            flexDirection: "column",
+          }}
+        >
+          <div style={{ padding: "28px 24px 20px", display: "flex", alignItems: "center", gap: "10px" }}>
+            <span
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                background: "#6366f1",
+                boxShadow: "0 0 12px rgba(99, 102, 241, 0.8)",
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                fontSize: "18px",
+                fontWeight: 700,
+                color: "#ffffff",
+                letterSpacing: "-0.02em",
+              }}
+            >
               GuestPulse
-            </div>
+            </span>
           </div>
 
-          <nav className="flex flex-col gap-2 px-3">
+          <div
+            style={{
+              fontSize: "10px",
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "rgba(255, 255, 255, 0.25)",
+              padding: "0 24px",
+              marginBottom: "8px",
+            }}
+          >
+            MENU
+          </div>
+
+          <nav style={{ display: "flex", flexDirection: "column", gap: "0" }}>
             {nav.map((item) => {
               const active = isActive(item.href);
+              const dotColor = navDotColors[item.href] ?? "#6366f1";
+              const linkStyle: CSSProperties = {
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "11px 16px",
+                margin: "2px 12px",
+                borderRadius: "12px",
+                fontSize: "14px",
+                fontWeight: 500,
+                textDecoration: "none",
+                transition: "all 0.2s ease",
+                boxShadow: active ? "inset 3px 0 0 #6366f1" : "none",
+                ...(active
+                  ? {
+                      background: "rgba(99, 102, 241, 0.15)",
+                      border: "1px solid rgba(99, 102, 241, 0.25)",
+                      color: "rgba(255, 255, 255, 0.95)",
+                    }
+                  : {
+                      background: "transparent",
+                      border: "1px solid transparent",
+                      color: "rgba(255, 255, 255, 0.6)",
+                    }),
+              };
+
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={[
-                    "rounded-xl px-3 py-2 text-sm transition relative",
-                    active
-                      ? "bg-[#1a1a1a] text-white border-l-2 border-[#6366f1] pl-[11px]"
-                      : "text-[#888888] hover:bg-[#111111] hover:text-white",
-                  ].join(" ")}
+                  style={linkStyle}
+                  onMouseEnter={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.background = "rgba(255, 255, 255, 0.07)";
+                      e.currentTarget.style.color = "rgba(255, 255, 255, 0.9)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.background = "transparent";
+                      e.currentTarget.style.color = "rgba(255, 255, 255, 0.6)";
+                    }
+                  }}
                 >
+                  <span
+                    style={{
+                      width: "18px",
+                      height: "18px",
+                      borderRadius: "50%",
+                      background: dotColor,
+                      opacity: active ? 1 : 0.45,
+                      flexShrink: 0,
+                    }}
+                  />
                   {item.label}
                 </Link>
               );
             })}
           </nav>
 
-          <div className="mt-auto px-5 pb-6">
-            <div className="mb-3 truncate text-sm font-medium text-white">
+          <div style={{ marginTop: "auto", paddingBottom: "24px" }}>
+            <div
+              style={{
+                height: "1px",
+                background: "rgba(255, 255, 255, 0.07)",
+                margin: "16px 12px",
+              }}
+            />
+            <div
+              style={{
+                fontSize: "13px",
+                color: "rgba(255, 255, 255, 0.4)",
+                padding: "0 24px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={email ?? undefined}
+            >
               {email ?? ""}
             </div>
-
             <button
               type="button"
               onClick={onLogout}
-              className="w-full rounded-[8px] bg-[#6366f1] px-5 py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
+              style={secondaryBtn}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(255, 255, 255, 0.12)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(255, 255, 255, 0.07)";
+              }}
             >
               Logout
             </button>
@@ -98,8 +235,9 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      <main className="ml-[240px] min-h-screen p-6">{children}</main>
+      <main style={{ marginLeft: "260px", minHeight: "100vh", padding: 0 }}>
+        {children}
+      </main>
     </div>
   );
 }
-

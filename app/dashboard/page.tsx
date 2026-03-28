@@ -3,6 +3,7 @@
 import { createBrowserClient } from "@supabase/ssr";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { CSSProperties } from "react";
 
 type Hotel = {
   id: string;
@@ -15,7 +16,41 @@ type Stats = {
   totalReviews: number;
   avgRating: number | null;
   needingResponse: number;
+  positivePct: number;
 };
+
+const pagePad: CSSProperties = { padding: "40px 48px" };
+
+const glass: CSSProperties = {
+  background: "rgba(255, 255, 255, 0.05)",
+  backdropFilter: "blur(24px) saturate(180%)",
+  WebkitBackdropFilter: "blur(24px) saturate(180%)",
+  border: "1px solid rgba(255, 255, 255, 0.09)",
+  borderRadius: "20px",
+  boxShadow:
+    "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+};
+
+const glassPrimary: CSSProperties = {
+  background: "rgba(99, 102, 241, 0.8)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  border: "1px solid rgba(99, 102, 241, 0.4)",
+  borderRadius: "12px",
+  padding: "12px 24px",
+  color: "#ffffff",
+  fontWeight: 500,
+  fontSize: "14px",
+  cursor: "pointer",
+  transition: "all 0.2s ease",
+};
+
+function greetingLabel() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -24,10 +59,12 @@ export default function DashboardPage() {
 
   const [hasHotel, setHasHotel] = useState(false);
   const [primaryHotel, setPrimaryHotel] = useState<Hotel | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats>({
     totalReviews: 0,
     avgRating: null,
     needingResponse: 0,
+    positivePct: 0,
   });
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -134,7 +171,6 @@ export default function DashboardPage() {
             .join(" | ")}`,
         );
       }
-
     } finally {
       setSyncing(false);
     }
@@ -159,6 +195,8 @@ export default function DashboardPage() {
         if (userError) throw userError;
         if (!user) throw new Error("You must be signed in.");
 
+        setUserEmail(user.email ?? null);
+
         const { data: hotels, error: hotelsError } = await supabase
           .from("hotels")
           .select("id, tripadvisor_url, google_url, booking_url")
@@ -170,7 +208,12 @@ export default function DashboardPage() {
         if (hotelIds.length === 0) {
           setHasHotel(false);
           setPrimaryHotel(null);
-          setStats({ totalReviews: 0, avgRating: null, needingResponse: 0 });
+          setStats({
+            totalReviews: 0,
+            avgRating: null,
+            needingResponse: 0,
+            positivePct: 0,
+          });
           return;
         }
 
@@ -212,10 +255,25 @@ export default function DashboardPage() {
 
         if (needingError) throw needingError;
 
+        const { data: sentimentRows } = await supabase
+          .from("reviews")
+          .select("sentiment")
+          .in("hotel_id", hotelIds);
+
+        let positive = 0;
+        const total = totalCount ?? 0;
+        for (const row of sentimentRows ?? []) {
+          const s = (row.sentiment as string | null)?.toLowerCase() ?? "";
+          if (s === "positive") positive += 1;
+        }
+        const positivePct =
+          total === 0 ? 0 : Math.round((positive / total) * 100);
+
         setStats({
-          totalReviews: totalCount ?? 0,
+          totalReviews: total,
           avgRating,
           needingResponse: needingCount ?? 0,
+          positivePct,
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load dashboard.");
@@ -229,143 +287,311 @@ export default function DashboardPage() {
 
   const statCards = useMemo(() => {
     return [
-      { label: "Total Reviews", value: stats.totalReviews.toString() },
+      { label: "Total reviews", value: stats.totalReviews.toString() },
       {
-        label: "Average Rating",
+        label: "Average rating",
         value: stats.avgRating === null ? "—" : stats.avgRating.toFixed(1),
       },
       {
-        label: "Needing Response",
+        label: "Needing response",
         value: stats.needingResponse.toString(),
       },
+      { label: "Positive %", value: `${stats.positivePct}%` },
     ];
   }, [stats]);
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-[#222222] border-t-[#6366f1]" />
-          <span className="text-sm text-[#888888]">Loading…</span>
+      <div style={pagePad}>
+        <div style={{ ...glass, padding: "24px", display: "flex", alignItems: "center", gap: "12px" }}>
+          <span
+            style={{
+              width: "20px",
+              height: "20px",
+              borderRadius: "50%",
+              border: "2px solid rgba(255,255,255,0.1)",
+              borderTopColor: "#6366f1",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
+          <span style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)" }}>Loading…</span>
         </div>
+        <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
-        <div className="text-sm text-red-400">{error}</div>
+      <div style={pagePad}>
+        <div style={{ ...glass, padding: "24px", color: "#ef4444", fontSize: "14px" }}>{error}</div>
       </div>
     );
   }
 
+  const labelStyle: CSSProperties = {
+    fontSize: "11px",
+    fontWeight: 600,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color: "rgba(255, 255, 255, 0.35)",
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-white">
-          Welcome to GuestPulse
+    <div style={pagePad}>
+      <div style={{ marginBottom: "32px" }}>
+        <h1
+          style={{
+            fontSize: "26px",
+            fontWeight: 700,
+            letterSpacing: "-0.5px",
+            color: "rgba(255, 255, 255, 0.92)",
+            marginBottom: "4px",
+          }}
+        >
+          {greetingLabel()}
+          {userEmail ? (
+            <span style={{ fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>
+              , {userEmail}
+            </span>
+          ) : null}
         </h1>
+        <p style={{ fontSize: "14px", color: "rgba(255, 255, 255, 0.4)" }}>
+          Here&apos;s your reputation overview
+        </p>
       </div>
 
       {!hasHotel ? (
-        <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-6">
-          <div className="text-sm font-medium text-yellow-900">
-            No hotel added yet — go to Settings to add your hotel
+        <div
+          style={{
+            ...glass,
+            padding: "24px",
+            background: "rgba(245, 158, 11, 0.08)",
+            border: "1px solid rgba(245, 158, 11, 0.2)",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: "16px",
+            justifyContent: "space-between",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ fontSize: "22px" }} aria-hidden>
+              ⚠
+            </span>
+            <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.85)", lineHeight: 1.6 }}>
+              Add your hotel to start tracking reviews
+            </p>
           </div>
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard/settings")}
-              className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
-            >
-              Hotel settings
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard/settings")}
+            style={glassPrimary}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(99, 102, 241, 1)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(99, 102, 241, 0.8)";
+            }}
+          >
+            Hotel settings
+          </button>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+              gap: "16px",
+              marginBottom: "32px",
+            }}
+          >
             {statCards.map((card) => (
-              <div
-                key={card.label}
-                className="rounded-[12px] border border-[#222222] bg-[#111111] p-6"
-              >
-                <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
-                  {card.label}
-                </div>
-                <div className="mt-2 text-3xl font-semibold text-white">
+              <div key={card.label} style={{ ...glass, padding: "24px" }}>
+                <div style={labelStyle}>{card.label}</div>
+                <div
+                  style={{
+                    fontSize: "36px",
+                    fontWeight: 700,
+                    color: "#ffffff",
+                    margin: "8px 0 4px",
+                  }}
+                >
                   {card.value}
                 </div>
+                <div
+                  style={{
+                    width: "40px",
+                    height: "2px",
+                    borderRadius: "1px",
+                    background: "rgba(99, 102, 241, 0.4)",
+                  }}
+                />
               </div>
             ))}
           </div>
 
-          <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
-            <div className="text-sm font-semibold text-white">
+          <div style={{ marginBottom: "20px" }}>
+            <h2
+              style={{
+                fontSize: "17px",
+                fontWeight: 600,
+                color: "rgba(255, 255, 255, 0.92)",
+                marginBottom: "16px",
+              }}
+            >
               Quick actions
-            </div>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <button
-                type="button"
-                onClick={() => router.push("/dashboard/reviews")}
-                className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
-              >
-                View review inbox
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push("/dashboard/settings")}
-                className="inline-flex items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
-              >
-                Hotel settings
-              </button>
-              <button
-                type="button"
-                disabled={syncing}
-                onClick={handleSyncAllReviews}
-                className="inline-flex items-center justify-center gap-2 rounded-[8px] bg-[#6366f1] px-[20px] py-[10px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {syncing ? (
-                  <>
-                    <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                    Syncing...
-                  </>
-                ) : (
-                  "Sync all reviews"
-                )}
-              </button>
-            </div>
-            {syncMessage ? (
-              <p className="mt-3 text-sm text-emerald-300">{syncMessage}</p>
-            ) : null}
-            {syncError ? <p className="mt-2 text-sm text-red-400">{syncError}</p> : null}
-            {syncBreakdown ? (
-              <p className="mt-2 text-sm">
-                <span className="text-[#888888]">Synced breakdown — </span>
-                <span
-                  className={
-                    syncBreakdown.tripadvisor > 0
-                      ? "text-emerald-300"
-                      : "text-[#888888]"
-                  }
+            </h2>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                gap: "16px",
+              }}
+            >
+              {[
+                {
+                  title: "Review inbox",
+                  desc: "Read and respond to guest feedback",
+                  onClick: () => router.push("/dashboard/reviews"),
+                },
+                {
+                  title: "Hotel settings",
+                  desc: "Update property and listing URLs",
+                  onClick: () => router.push("/dashboard/settings"),
+                },
+              ].map((item) => (
+                <button
+                  key={item.title}
+                  type="button"
+                  onClick={item.onClick}
+                  style={{
+                    ...glass,
+                    padding: "20px",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    border: "1px solid rgba(255, 255, 255, 0.09)",
+                    transition: "transform 0.2s ease, border-color 0.2s ease, background 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+                    e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.14)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
+                    e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.09)";
+                  }}
                 >
+                  <div
+                    style={{
+                      width: "40px",
+                      height: "40px",
+                      borderRadius: "50%",
+                      background: "rgba(255, 255, 255, 0.07)",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                      marginBottom: "12px",
+                    }}
+                  />
+                  <div style={{ fontSize: "15px", fontWeight: 600, color: "#fff", marginBottom: "4px" }}>
+                    {item.title}
+                  </div>
+                  <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>
+                    {item.desc}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ ...glass, padding: "24px" }}>
+            <div
+              style={{
+                fontSize: "17px",
+                fontWeight: 600,
+                marginBottom: "12px",
+                color: "rgba(255, 255, 255, 0.92)",
+              }}
+            >
+              Sync reviews
+            </div>
+            <button
+              type="button"
+              disabled={syncing}
+              onClick={handleSyncAllReviews}
+              style={{
+                ...glassPrimary,
+                opacity: syncing ? 0.6 : 1,
+                cursor: syncing ? "not-allowed" : "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              {syncing ? (
+                <>
+                  <span
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      borderRadius: "50%",
+                      border: "2px solid rgba(255,255,255,0.3)",
+                      borderTopColor: "#fff",
+                      animation: "spin 0.8s linear infinite",
+                    }}
+                  />
+                  Syncing...
+                </>
+              ) : (
+                "Sync all reviews"
+              )}
+            </button>
+            <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
+
+            {syncMessage ? (
+              <div
+                style={{
+                  marginTop: "16px",
+                  padding: "12px 16px",
+                  borderRadius: "12px",
+                  background: "rgba(34, 197, 94, 0.08)",
+                  border: "1px solid rgba(34, 197, 94, 0.2)",
+                  fontSize: "14px",
+                  color: "rgba(255,255,255,0.85)",
+                }}
+              >
+                {syncMessage}
+              </div>
+            ) : null}
+            {syncError ? (
+              <div
+                style={{
+                  marginTop: "12px",
+                  padding: "12px 16px",
+                  borderRadius: "12px",
+                  background: "rgba(239, 68, 68, 0.08)",
+                  border: "1px solid rgba(239, 68, 68, 0.25)",
+                  fontSize: "14px",
+                  color: "#fca5a5",
+                }}
+              >
+                {syncError}
+              </div>
+            ) : null}
+            {syncBreakdown ? (
+              <p style={{ marginTop: "12px", fontSize: "13px", color: "rgba(255,255,255,0.5)" }}>
+                <span style={{ color: "rgba(255,255,255,0.35)" }}>Breakdown — </span>
+                <span style={{ color: syncBreakdown.tripadvisor > 0 ? "#86efac" : "rgba(255,255,255,0.35)" }}>
                   TripAdvisor: {syncBreakdown.tripadvisor}
                 </span>
-                <span className="text-[#888888]"> · </span>
-                <span
-                  className={
-                    syncBreakdown.google > 0 ? "text-emerald-300" : "text-[#888888]"
-                  }
-                >
+                {" · "}
+                <span style={{ color: syncBreakdown.google > 0 ? "#86efac" : "rgba(255,255,255,0.35)" }}>
                   Google: {syncBreakdown.google}
                 </span>
-                <span className="text-[#888888]"> · </span>
-                <span
-                  className={
-                    syncBreakdown.booking > 0 ? "text-emerald-300" : "text-[#888888]"
-                  }
-                >
+                {" · "}
+                <span style={{ color: syncBreakdown.booking > 0 ? "#86efac" : "rgba(255,255,255,0.35)" }}>
                   Booking: {syncBreakdown.booking}
                 </span>
               </p>
@@ -376,4 +602,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

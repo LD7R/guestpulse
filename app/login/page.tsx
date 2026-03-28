@@ -12,19 +12,31 @@ export default function LoginPage() {
 
 function LoginPageFallback() {
   return (
-    <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 py-16 dark:bg-black">
-      <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="space-y-2">
-          <div className="h-7 w-28 rounded bg-zinc-200 dark:bg-zinc-800" />
-          <div className="h-4 w-64 rounded bg-zinc-200 dark:bg-zinc-800" />
-        </div>
-        <div className="mt-8 space-y-4">
-          <div className="h-11 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-          <div className="h-11 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
-          <div className="h-11 w-full rounded-xl bg-zinc-900/20 dark:bg-zinc-50/20" />
-        </div>
-      </div>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "24px",
+      }}
+    >
+      <div
+        style={{
+          width: "420px",
+          maxWidth: "100%",
+          height: "320px",
+          borderRadius: "20px",
+          background: "rgba(255, 255, 255, 0.05)",
+          border: "1px solid rgba(255, 255, 255, 0.09)",
+          animation: "pulse 1.2s ease-in-out infinite",
+        }}
+      />
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `@keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:0.75} }`,
+        }}
+      />
     </div>
   );
 }
-

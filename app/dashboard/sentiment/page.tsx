@@ -2,6 +2,7 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import {
   Bar,
   BarChart,
@@ -26,17 +27,17 @@ type ReviewRow = {
   created_at?: string | null;
 };
 
-const glass: React.CSSProperties = {
-  background: "rgba(255, 255, 255, 0.04)",
-  backdropFilter: "blur(20px) saturate(180%)",
-  WebkitBackdropFilter: "blur(20px) saturate(180%)",
-  border: "1px solid rgba(255, 255, 255, 0.08)",
+const glass: CSSProperties = {
+  background: "rgba(255, 255, 255, 0.05)",
+  backdropFilter: "blur(24px) saturate(180%)",
+  WebkitBackdropFilter: "blur(24px) saturate(180%)",
+  border: "1px solid rgba(255, 255, 255, 0.09)",
   borderRadius: "20px",
   boxShadow:
     "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
 };
 
-const labelStyle: React.CSSProperties = {
+const labelStyle: CSSProperties = {
   fontSize: "11px",
   fontWeight: 500,
   letterSpacing: "0.08em",
@@ -44,7 +45,7 @@ const labelStyle: React.CSSProperties = {
   color: "rgba(255, 255, 255, 0.4)",
 };
 
-const sectionTitle: React.CSSProperties = {
+const sectionTitle: CSSProperties = {
   fontSize: "15px",
   fontWeight: 500,
   color: "rgba(255, 255, 255, 0.9)",
@@ -72,7 +73,7 @@ function dayKey(iso: string | null | undefined): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-const tooltipContentStyle: React.CSSProperties = {
+const tooltipContentStyle: CSSProperties = {
   background: "rgba(20, 20, 30, 0.95)",
   border: "1px solid rgba(255, 255, 255, 0.1)",
   borderRadius: "12px",
@@ -265,7 +266,12 @@ export default function SentimentDashboardPage() {
 
   if (loading) {
     return (
-      <div style={{ background: "#0a0a0f", minHeight: "100vh", padding: "32px" }}>
+      <div
+      style={{
+        minHeight: "100vh",
+        padding: "32px",
+      }}
+    >
         <style
           dangerouslySetInnerHTML={{
             __html: `@keyframes sentiment-glass-pulse { 0%,100%{opacity:0.45} 50%{opacity:0.9} }`,
@@ -334,7 +340,12 @@ export default function SentimentDashboardPage() {
 
   if (error) {
     return (
-      <div style={{ background: "#0a0a0f", minHeight: "100vh", padding: "32px" }}>
+      <div
+      style={{
+        minHeight: "100vh",
+        padding: "32px",
+      }}
+    >
         <div style={{ ...glass, padding: "24px", color: "rgba(255,255,255,0.92)" }}>
           {error}
         </div>
@@ -343,7 +354,12 @@ export default function SentimentDashboardPage() {
   }
 
   return (
-    <div style={{ background: "#0a0a0f", minHeight: "100vh", padding: "32px" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        padding: "32px",
+      }}
+    >
       <h1
         style={{
           fontSize: "24px",

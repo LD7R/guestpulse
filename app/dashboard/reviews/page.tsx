@@ -2,6 +2,7 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 
 type Hotel = {
@@ -38,8 +39,141 @@ type Review = {
   is_responded?: boolean | null;
 };
 
-function cn(...classes: Array<string | false | undefined | null>) {
-  return classes.filter(Boolean).join(" ");
+const pagePad: CSSProperties = { padding: "40px 48px" };
+
+const glass: CSSProperties = {
+  background: "rgba(255, 255, 255, 0.05)",
+  backdropFilter: "blur(24px) saturate(180%)",
+  WebkitBackdropFilter: "blur(24px) saturate(180%)",
+  border: "1px solid rgba(255, 255, 255, 0.09)",
+  borderRadius: "20px",
+  boxShadow:
+    "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+};
+
+const glassPrimary: CSSProperties = {
+  background: "rgba(99, 102, 241, 0.8)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  border: "1px solid rgba(99, 102, 241, 0.4)",
+  borderRadius: "12px",
+  color: "#ffffff",
+  fontWeight: 500,
+  transition: "all 0.2s ease",
+};
+
+const glassSecondary: CSSProperties = {
+  background: "rgba(255, 255, 255, 0.07)",
+  border: "1px solid rgba(255, 255, 255, 0.1)",
+  borderRadius: "12px",
+  color: "rgba(255, 255, 255, 0.92)",
+  fontWeight: 500,
+  transition: "all 0.2s ease",
+};
+
+const selectStyle: CSSProperties = {
+  width: "100%",
+  height: "44px",
+  padding: "0 14px",
+  borderRadius: "12px",
+  background: "rgba(255, 255, 255, 0.06)",
+  border: "1px solid rgba(255, 255, 255, 0.1)",
+  color: "rgba(255, 255, 255, 0.92)",
+  fontSize: "14px",
+  outline: "none",
+  cursor: "pointer",
+};
+
+const glassInput: CSSProperties = {
+  background: "rgba(255, 255, 255, 0.06)",
+  border: "1px solid rgba(255, 255, 255, 0.1)",
+  borderRadius: "12px",
+  padding: "12px 16px",
+  color: "#ffffff",
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+const statLabel: CSSProperties = {
+  fontSize: "11px",
+  fontWeight: 600,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "rgba(255, 255, 255, 0.35)",
+};
+
+const statNum: CSSProperties = {
+  fontSize: "36px",
+  fontWeight: 700,
+  color: "#ffffff",
+  marginTop: "8px",
+};
+
+const navLink: CSSProperties = {
+  fontSize: "14px",
+  color: "rgba(255, 255, 255, 0.5)",
+  textDecoration: "none",
+};
+
+function SyncMessages({
+  syncError,
+  syncMessage,
+  syncBreakdown,
+}: {
+  syncError: string | null;
+  syncMessage: string | null;
+  syncBreakdown: { tripadvisor: number; google: number; booking: number } | null;
+}) {
+  return (
+    <>
+      {syncError ? (
+        <div
+          style={{
+            marginTop: "16px",
+            padding: "12px 16px",
+            borderRadius: "12px",
+            background: "rgba(239, 68, 68, 0.08)",
+            border: "1px solid rgba(239, 68, 68, 0.2)",
+            fontSize: "14px",
+            color: "#fca5a5",
+          }}
+        >
+          {syncError}
+        </div>
+      ) : null}
+      {syncMessage ? (
+        <div
+          style={{
+            marginTop: "12px",
+            padding: "12px 16px",
+            borderRadius: "12px",
+            background: "rgba(34, 197, 94, 0.08)",
+            border: "1px solid rgba(34, 197, 94, 0.2)",
+            fontSize: "14px",
+            color: "rgba(255,255,255,0.9)",
+          }}
+        >
+          {syncMessage}
+        </div>
+      ) : null}
+      {syncBreakdown ? (
+        <p style={{ marginTop: "12px", fontSize: "13px" }}>
+          <span style={{ color: "rgba(255,255,255,0.35)" }}>Synced breakdown — </span>
+          <span style={{ color: syncBreakdown.tripadvisor > 0 ? "#86efac" : "rgba(255,255,255,0.35)" }}>
+            TripAdvisor: {syncBreakdown.tripadvisor}
+          </span>
+          <span style={{ color: "rgba(255,255,255,0.35)" }}> · </span>
+          <span style={{ color: syncBreakdown.google > 0 ? "#86efac" : "rgba(255,255,255,0.35)" }}>
+            Google: {syncBreakdown.google}
+          </span>
+          <span style={{ color: "rgba(255,255,255,0.35)" }}> · </span>
+          <span style={{ color: syncBreakdown.booking > 0 ? "#86efac" : "rgba(255,255,255,0.35)" }}>
+            Booking: {syncBreakdown.booking}
+          </span>
+        </p>
+      ) : null}
+    </>
+  );
 }
 
 function normalizeRating(value: unknown): number | null {
@@ -56,64 +190,108 @@ function formatDate(value: string | null | undefined) {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
 }
 
-function renderStars(rating: number | null) {
+function StarRow({ rating }: { rating: number | null }) {
   const safe = rating ?? 0;
   const filled = Math.max(0, Math.min(5, Math.round(safe)));
-  if (filled <= 0) return <span className="text-xs text-zinc-500">No rating</span>;
-
+  if (filled <= 0) {
+    return (
+      <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.3)" }}>No rating</span>
+    );
+  }
   return (
-    <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-300">
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "2px",
+        color: "#f59e0b",
+        fontSize: "16px",
+      }}
+    >
       {Array.from({ length: filled }).map((_, i) => (
         <span key={i} aria-hidden>
           ★
         </span>
       ))}
-      <span className="ml-1 text-xs text-zinc-500 dark:text-zinc-400">{safe.toFixed(1)}</span>
+      <span style={{ marginLeft: "6px", fontSize: "13px", color: "rgba(255,255,255,0.35)" }}>
+        {safe.toFixed(1)}
+      </span>
     </span>
   );
 }
 
-function platformBadge(platform: string | null | undefined) {
+function PlatformBadge({ platform }: { platform: string | null | undefined }) {
   const p = (platform ?? "").toLowerCase();
+  const label =
+    (platform ?? "").charAt(0).toUpperCase() + (platform ?? "").slice(1) || "Platform";
+  const base: CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: "100px",
+    padding: "4px 10px",
+    fontSize: "12px",
+    fontWeight: 600,
+    border: "1px solid",
+  };
   if (p === "tripadvisor") {
-    return cn(
-      "inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800",
-      "dark:border-emerald-800/40 dark:bg-emerald-900/20 dark:text-emerald-200",
+    return (
+      <span style={{ ...base, background: "rgba(52, 211, 153, 0.15)", color: "#34d399", borderColor: "rgba(52, 211, 153, 0.25)" }}>
+        {label}
+      </span>
     );
   }
   if (p === "google") {
-    return cn(
-      "inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800",
-      "dark:border-blue-800/40 dark:bg-blue-900/20 dark:text-blue-200",
+    return (
+      <span style={{ ...base, background: "rgba(96, 165, 250, 0.15)", color: "#60a5fa", borderColor: "rgba(96, 165, 250, 0.25)" }}>
+        {label}
+      </span>
     );
   }
   if (p === "booking") {
-    return cn(
-      "inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800",
-      "dark:border-amber-800/40 dark:bg-amber-900/20 dark:text-amber-200",
+    return (
+      <span style={{ ...base, background: "rgba(167, 139, 250, 0.15)", color: "#a78bfa", borderColor: "rgba(167, 139, 250, 0.25)" }}>
+        {label}
+      </span>
     );
   }
-  return cn(
-    "inline-flex items-center rounded-full border border-[#222222] bg-[#0f0f0f] px-2 py-0.5 text-xs font-medium text-[#888888]",
+  return (
+    <span style={{ ...base, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)", borderColor: "rgba(255,255,255,0.1)" }}>
+      {label}
+    </span>
   );
 }
 
-function sentimentBadge(sentiment: string | null | undefined) {
-  const s = (sentiment ?? "").toLowerCase();
+function SentimentBadge({ sentiment }: { sentiment: string | null | undefined }) {
+  const raw = (sentiment ?? "neutral").toString();
+  const s = raw.toLowerCase();
+  const base: CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: "100px",
+    padding: "4px 10px",
+    fontSize: "12px",
+    fontWeight: 600,
+    border: "1px solid",
+  };
+  const text = raw.charAt(0).toUpperCase() + raw.slice(1);
   if (s === "positive") {
-    return cn(
-      "inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800",
-      "dark:border-emerald-800/40 dark:bg-emerald-900/20 dark:text-emerald-200",
+    return (
+      <span style={{ ...base, background: "rgba(34, 197, 94, 0.15)", color: "#22c55e", borderColor: "rgba(34, 197, 94, 0.25)" }}>
+        {text}
+      </span>
     );
   }
   if (s === "negative") {
-    return cn(
-      "inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700",
-      "dark:border-red-800/40 dark:bg-red-900/20 dark:text-red-200",
+    return (
+      <span style={{ ...base, background: "rgba(239, 68, 68, 0.15)", color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.25)" }}>
+        {text}
+      </span>
     );
   }
-  return cn(
-    "inline-flex items-center rounded-full border border-[#222222] bg-[#0f0f0f] px-2 py-0.5 text-xs font-medium text-[#888888]",
+  return (
+    <span style={{ ...base, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", borderColor: "rgba(255,255,255,0.08)" }}>
+      {text}
+    </span>
   );
 }
 
@@ -131,13 +309,38 @@ function SyncAllButton({
       type="button"
       onClick={onSync}
       disabled={syncing}
-      className="inline-flex h-10 items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5] disabled:cursor-not-allowed disabled:opacity-60"
+      style={{
+        ...glassPrimary,
+        padding: "12px 24px",
+        fontSize: "14px",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "8px",
+        opacity: syncing ? 0.65 : 1,
+        cursor: syncing ? "not-allowed" : "pointer",
+      }}
+      onMouseEnter={(e) => {
+        if (!syncing) e.currentTarget.style.background = "rgba(99, 102, 241, 1)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "rgba(99, 102, 241, 0.8)";
+      }}
     >
       {syncing ? (
-        <span className="inline-flex items-center gap-2">
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900 dark:border-zinc-700 dark:border-t-zinc-50" />
+        <>
+          <span
+            style={{
+              width: "16px",
+              height: "16px",
+              borderRadius: "50%",
+              border: "2px solid rgba(255,255,255,0.3)",
+              borderTopColor: "#fff",
+              animation: "rvspin 0.8s linear infinite",
+            }}
+          />
           Syncing…
-        </span>
+        </>
       ) : (
         label
       )}
@@ -564,21 +767,31 @@ export default function ReviewsInboxPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 py-16 dark:bg-black">
-        <div className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-5 py-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900 dark:border-zinc-700 dark:border-t-zinc-50" />
-          <span className="text-sm text-zinc-700 dark:text-zinc-200">Loading reviews…</span>
+      <div style={{ ...pagePad, display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+        <div style={{ ...glass, padding: "20px 28px", display: "flex", alignItems: "center", gap: "12px" }}>
+          <span
+            style={{
+              width: "20px",
+              height: "20px",
+              borderRadius: "50%",
+              border: "2px solid rgba(255,255,255,0.1)",
+              borderTopColor: "#6366f1",
+              animation: "rvspin 0.8s linear infinite",
+            }}
+          />
+          <span style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)" }}>Loading reviews…</span>
         </div>
+        <style dangerouslySetInnerHTML={{ __html: `@keyframes rvspin { to { transform: rotate(360deg); } }` }} />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 py-16 dark:bg-black">
-        <div className="w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Error</h1>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{error}</p>
+      <div style={pagePad}>
+        <div style={{ ...glass, padding: "24px", maxWidth: "560px" }}>
+          <h1 style={{ fontSize: "17px", fontWeight: 600, color: "rgba(255,255,255,0.92)", marginBottom: "8px" }}>Error</h1>
+          <p style={{ fontSize: "14px", color: "#fca5a5", lineHeight: 1.6 }}>{error}</p>
         </div>
       </div>
     );
@@ -586,61 +799,45 @@ export default function ReviewsInboxPage() {
 
   if (reviews.length === 0) {
     return (
-      <div className="space-y-5">
-        <nav className="flex items-center gap-2 text-sm text-[#888888]">
-          <Link href="/dashboard" className="hover:text-white">
+      <div style={{ ...pagePad, display: "flex", flexDirection: "column", gap: "20px" }}>
+        <nav style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
+          <Link href="/dashboard" style={navLink}>
             Overview
           </Link>
-          <span className="text-[#444444]">/</span>
-          <span className="text-[#888888]">Reviews inbox</span>
+          <span style={{ color: "rgba(255,255,255,0.2)" }}>/</span>
+          <span style={{ color: "rgba(255,255,255,0.35)" }}>Reviews inbox</span>
         </nav>
 
-        <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight text-white">
+        <div style={{ ...glass, padding: "24px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+            <h1 style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px", color: "rgba(255,255,255,0.92)" }}>
               Reviews inbox
             </h1>
-            <SyncAllButton
-              syncing={syncing}
-              onSync={handleSyncAllReviews}
-              label="Sync all reviews"
-            />
+            <SyncAllButton syncing={syncing} onSync={handleSyncAllReviews} label="Sync all reviews" />
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-[#222222] bg-[#111111] p-4">
-              <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
-                Total reviews
-              </div>
-              <div className="mt-1 text-3xl font-semibold text-white">
-                {summary.total}
-              </div>
+          <div style={{ marginTop: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px" }}>
+            <div style={{ ...glass, padding: "16px", background: "rgba(255,255,255,0.04)" }}>
+              <div style={statLabel}>Total reviews</div>
+              <div style={statNum}>{summary.total}</div>
             </div>
-            <div className="rounded-xl border border-[#222222] bg-[#111111] p-4">
-              <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
-                Average rating
-              </div>
-              <div className="mt-1 text-3xl font-semibold text-white">
-                {summary.avgRating === null ? "—" : summary.avgRating.toFixed(2)}
-              </div>
+            <div style={{ ...glass, padding: "16px", background: "rgba(255,255,255,0.04)" }}>
+              <div style={statLabel}>Average rating</div>
+              <div style={statNum}>{summary.avgRating === null ? "—" : summary.avgRating.toFixed(2)}</div>
             </div>
-            <div className="rounded-xl border border-[#222222] bg-[#111111] p-4">
-              <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
-                Needing response
-              </div>
-              <div className="mt-1 text-3xl font-semibold text-white">
-                {summary.needingResponse}
-              </div>
+            <div style={{ ...glass, padding: "16px", background: "rgba(255,255,255,0.04)" }}>
+              <div style={statLabel}>Needing response</div>
+              <div style={statNum}>{summary.needingResponse}</div>
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="space-y-2">
-              <div className="text-sm font-medium text-[#888888]">Platform</div>
+          <div style={{ ...glass, marginTop: "16px", padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
+            <div>
+              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>Platform</div>
               <select
                 value={platformFilter}
                 onChange={(e) => setPlatformFilter(e.target.value)}
-                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+                style={selectStyle}
               >
                 <option value="all">All</option>
                 <option value="tripadvisor">TripAdvisor</option>
@@ -648,12 +845,12 @@ export default function ReviewsInboxPage() {
                 <option value="booking">Booking.com</option>
               </select>
             </div>
-            <div className="space-y-2">
-              <div className="text-sm font-medium text-[#888888]">Sentiment</div>
+            <div>
+              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>Sentiment</div>
               <select
                 value={sentimentFilter}
                 onChange={(e) => setSentimentFilter(e.target.value)}
-                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+                style={selectStyle}
               >
                 <option value="all">All</option>
                 <option value="positive">Positive</option>
@@ -661,12 +858,12 @@ export default function ReviewsInboxPage() {
                 <option value="negative">Negative</option>
               </select>
             </div>
-            <div className="space-y-2">
-              <div className="text-sm font-medium text-[#888888]">Status</div>
+            <div>
+              <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>Status</div>
               <select
                 value={respondedFilter}
                 onChange={(e) => setRespondedFilter(e.target.value)}
-                className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+                style={selectStyle}
               >
                 <option value="all">All</option>
                 <option value="needsResponse">Needs response</option>
@@ -675,44 +872,11 @@ export default function ReviewsInboxPage() {
             </div>
           </div>
 
-          {syncError ? (
-            <p className="mt-3 text-sm text-red-400">{syncError}</p>
-          ) : null}
-          {syncMessage ? (
-            <p className="mt-3 text-sm text-emerald-300">{syncMessage}</p>
-          ) : null}
-          {syncBreakdown ? (
-            <p className="mt-2 text-sm">
-              <span className="text-[#888888]">Synced breakdown — </span>
-              <span
-                className={
-                  syncBreakdown.tripadvisor > 0 ? "text-emerald-300" : "text-[#888888]"
-                }
-              >
-                TripAdvisor: {syncBreakdown.tripadvisor}
-              </span>
-              <span className="text-[#888888]"> · </span>
-              <span
-                className={
-                  syncBreakdown.google > 0 ? "text-emerald-300" : "text-[#888888]"
-                }
-              >
-                Google: {syncBreakdown.google}
-              </span>
-              <span className="text-[#888888]"> · </span>
-              <span
-                className={
-                  syncBreakdown.booking > 0 ? "text-emerald-300" : "text-[#888888]"
-                }
-              >
-                Booking: {syncBreakdown.booking}
-              </span>
-            </p>
-          ) : null}
+          <SyncMessages syncError={syncError} syncMessage={syncMessage} syncBreakdown={syncBreakdown} />
         </div>
 
-        <div className="rounded-2xl border border-[#222222] bg-[#111111] p-8">
-          <p className="text-sm text-[#888888]">
+        <div style={{ ...glass, padding: "28px" }}>
+          <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", lineHeight: 1.7 }}>
             No reviews yet. Once guests leave feedback, it will show up here for response.
           </p>
         </div>
@@ -721,61 +885,45 @@ export default function ReviewsInboxPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <nav className="flex items-center gap-2 text-sm text-[#888888]">
-        <Link href="/dashboard" className="hover:text-white">
+    <div style={{ ...pagePad, display: "flex", flexDirection: "column", gap: "20px" }}>
+      <nav style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
+        <Link href="/dashboard" style={navLink}>
           Overview
         </Link>
-        <span className="text-[#444444]">/</span>
-        <span className="text-[#888888]">Reviews inbox</span>
+        <span style={{ color: "rgba(255,255,255,0.2)" }}>/</span>
+        <span style={{ color: "rgba(255,255,255,0.35)" }}>Reviews inbox</span>
       </nav>
 
-      <div className="rounded-2xl border border-[#222222] bg-[#111111] p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-white">
+      <div style={{ ...glass, padding: "24px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+          <h1 style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px", color: "rgba(255,255,255,0.92)" }}>
             Reviews inbox
           </h1>
-          <SyncAllButton
-            syncing={syncing}
-            onSync={handleSyncAllReviews}
-            label="Sync all reviews"
-          />
+          <SyncAllButton syncing={syncing} onSync={handleSyncAllReviews} label="Sync all reviews" />
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-[#222222] bg-[#111111] p-4">
-            <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
-              Total reviews
-            </div>
-            <div className="mt-1 text-3xl font-semibold text-white">
-              {summary.total}
-            </div>
+        <div style={{ marginTop: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px" }}>
+          <div style={{ ...glass, padding: "16px", background: "rgba(255,255,255,0.04)" }}>
+            <div style={statLabel}>Total reviews</div>
+            <div style={statNum}>{summary.total}</div>
           </div>
-          <div className="rounded-xl border border-[#222222] bg-[#111111] p-4">
-            <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
-              Average rating
-            </div>
-            <div className="mt-1 text-3xl font-semibold text-white">
-              {summary.avgRating === null ? "—" : summary.avgRating.toFixed(2)}
-            </div>
+          <div style={{ ...glass, padding: "16px", background: "rgba(255,255,255,0.04)" }}>
+            <div style={statLabel}>Average rating</div>
+            <div style={statNum}>{summary.avgRating === null ? "—" : summary.avgRating.toFixed(2)}</div>
           </div>
-          <div className="rounded-xl border border-[#222222] bg-[#111111] p-4">
-            <div className="text-xs font-medium uppercase tracking-wide text-[#888888]">
-              Needing response
-            </div>
-            <div className="mt-1 text-3xl font-semibold text-white">
-              {summary.needingResponse}
-            </div>
+          <div style={{ ...glass, padding: "16px", background: "rgba(255,255,255,0.04)" }}>
+            <div style={statLabel}>Needing response</div>
+            <div style={statNum}>{summary.needingResponse}</div>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="space-y-2">
-            <div className="text-sm font-medium text-[#888888]">Platform</div>
+        <div style={{ ...glass, marginTop: "16px", padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
+          <div>
+            <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>Platform</div>
             <select
               value={platformFilter}
               onChange={(e) => setPlatformFilter(e.target.value)}
-              className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+              style={selectStyle}
             >
               <option value="all">All</option>
               <option value="tripadvisor">TripAdvisor</option>
@@ -783,12 +931,12 @@ export default function ReviewsInboxPage() {
               <option value="booking">Booking.com</option>
             </select>
           </div>
-          <div className="space-y-2">
-            <div className="text-sm font-medium text-[#888888]">Sentiment</div>
+          <div>
+            <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>Sentiment</div>
             <select
               value={sentimentFilter}
               onChange={(e) => setSentimentFilter(e.target.value)}
-              className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+              style={selectStyle}
             >
               <option value="all">All</option>
               <option value="positive">Positive</option>
@@ -796,12 +944,12 @@ export default function ReviewsInboxPage() {
               <option value="negative">Negative</option>
             </select>
           </div>
-          <div className="space-y-2">
-            <div className="text-sm font-medium text-[#888888]">Status</div>
+          <div>
+            <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "8px" }}>Status</div>
             <select
               value={respondedFilter}
               onChange={(e) => setRespondedFilter(e.target.value)}
-              className="h-11 w-full rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 text-sm text-white outline-none focus:border-[#6366f1]"
+              style={selectStyle}
             >
               <option value="all">All</option>
               <option value="needsResponse">Needs response</option>
@@ -810,43 +958,11 @@ export default function ReviewsInboxPage() {
           </div>
         </div>
 
-        {syncError ? (
-          <p className="mt-3 text-sm text-red-400">{syncError}</p>
-        ) : null}
-        {syncMessage ? (
-          <p className="mt-3 text-sm text-emerald-300">{syncMessage}</p>
-        ) : null}
-        {syncBreakdown ? (
-          <p className="mt-2 text-sm">
-            <span className="text-[#888888]">Synced breakdown — </span>
-            <span
-              className={
-                syncBreakdown.tripadvisor > 0 ? "text-emerald-300" : "text-[#888888]"
-              }
-            >
-              TripAdvisor: {syncBreakdown.tripadvisor}
-            </span>
-            <span className="text-[#888888]"> · </span>
-            <span
-              className={
-                syncBreakdown.google > 0 ? "text-emerald-300" : "text-[#888888]"
-              }
-            >
-              Google: {syncBreakdown.google}
-            </span>
-            <span className="text-[#888888]"> · </span>
-            <span
-              className={
-                syncBreakdown.booking > 0 ? "text-emerald-300" : "text-[#888888]"
-              }
-            >
-              Booking: {syncBreakdown.booking}
-            </span>
-          </p>
-        ) : null}
+        <SyncMessages syncError={syncError} syncMessage={syncMessage} syncBreakdown={syncBreakdown} />
       </div>
 
-      <div className="space-y-4">
+      <style dangerouslySetInnerHTML={{ __html: `@keyframes rvspin { to { transform: rotate(360deg); } }` }} />
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {visibleReviews.map((review, idx) => {
             const platform = review.platform ?? review.source ?? "";
             const rating = normalizeRating(review.rating ?? review.stars);
@@ -866,18 +982,43 @@ export default function ReviewsInboxPage() {
             return (
               <div
                 key={reviewId}
-                className="rounded-2xl border border-[#222222] bg-[#111111] p-6"
+                style={{
+                  ...glass,
+                  padding: "24px",
+                  transition: "transform 0.2s ease, border-color 0.2s ease, background 0.2s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "translateY(-1px)";
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.14)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
+                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.09)";
+                }}
               >
-                <div className="flex flex-wrap items-center gap-2 justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className={platformBadge(platform)}>
-                      {(platform ?? "").charAt(0).toUpperCase() + (platform ?? "").slice(1) || "Platform"}
-                    </span>
-                    {renderStars(rating)}
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                    <PlatformBadge platform={platform} />
+                    <StarRow rating={rating} />
                   </div>
 
                   {responded ? (
-                    <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-900/20 dark:text-emerald-200">
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        borderRadius: "100px",
+                        padding: "6px 12px",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        background: "rgba(34, 197, 94, 0.15)",
+                        color: "#22c55e",
+                        border: "1px solid rgba(34, 197, 94, 0.25)",
+                      }}
+                    >
                       <span aria-hidden>✓</span> Responded
                     </span>
                   ) : hasStableId ? (
@@ -885,13 +1026,39 @@ export default function ReviewsInboxPage() {
                       type="button"
                       onClick={() => handleDraftResponse(review)}
                       disabled={isPanelOpen && draft.status === "loading"}
-                      className="inline-flex h-10 items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5] disabled:cursor-not-allowed disabled:opacity-60"
+                      style={{
+                        ...glassPrimary,
+                        padding: "8px 16px",
+                        fontSize: "13px",
+                        opacity: isPanelOpen && draft.status === "loading" ? 0.65 : 1,
+                        cursor: isPanelOpen && draft.status === "loading" ? "not-allowed" : "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!(isPanelOpen && draft.status === "loading")) {
+                          e.currentTarget.style.background = "rgba(99, 102, 241, 1)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "rgba(99, 102, 241, 0.8)";
+                      }}
                     >
                       {isPanelOpen && draft.status === "loading" ? (
-                        <span className="inline-flex items-center gap-2">
-                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900 dark:border-zinc-700 dark:border-t-zinc-50" />
+                        <>
+                          <span
+                            style={{
+                              width: "14px",
+                              height: "14px",
+                              borderRadius: "50%",
+                              border: "2px solid rgba(255,255,255,0.3)",
+                              borderTopColor: "#fff",
+                              animation: "rvspin 0.8s linear infinite",
+                            }}
+                          />
                           Generating...
-                        </span>
+                        </>
                       ) : isPanelOpen ? (
                         "Hide draft"
                       ) : (
@@ -901,74 +1068,140 @@ export default function ReviewsInboxPage() {
                   ) : null}
                 </div>
 
-                <div className="mt-4 text-sm text-[#888888]">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-white">
-                      {reviewerName}
-                    </span>
-                    <span className="text-[#444444]">• {formatDate(createdAt)}</span>
-                    <span className={sentimentBadge(sentiment)}>
-                      {sentiment.charAt(0).toUpperCase() + sentiment.slice(1)}
-                    </span>
+                <div style={{ marginTop: "16px" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "15px", fontWeight: 600, color: "#ffffff" }}>{reviewerName}</span>
+                    <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.35)" }}>• {formatDate(createdAt)}</span>
+                    <SentimentBadge sentiment={sentiment} />
                     {complaintTopic ? (
-                      <span className="inline-flex items-center rounded-full bg-[#0f0f0f] px-2 py-1 text-xs font-medium text-[#888888] border border-[#222222]">
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          borderRadius: "100px",
+                          padding: "4px 10px",
+                          fontSize: "13px",
+                          background: "rgba(255,255,255,0.07)",
+                          color: "rgba(255,255,255,0.35)",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                        }}
+                      >
                         {complaintTopic}
                       </span>
                     ) : null}
                   </div>
                 </div>
 
-                <div className="mt-3 text-white whitespace-pre-wrap text-sm leading-6">
+                <div
+                  style={{
+                    marginTop: "12px",
+                    color: "rgba(255, 255, 255, 0.7)",
+                    fontSize: "14px",
+                    lineHeight: 1.7,
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
                   {reviewText || "—"}
                 </div>
 
                 {isPanelOpen && draft.status !== "idle" && hasStableId && (
-                  <div className="mt-4 border-t border-[#222222] pt-4 space-y-3">
+                  <div
+                    style={{
+                      marginTop: "16px",
+                      padding: "16px",
+                      borderRadius: "16px",
+                      background: "rgba(99, 102, 241, 0.05)",
+                      border: "1px solid rgba(99, 102, 241, 0.15)",
+                      backdropFilter: "blur(12px)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                    }}
+                  >
                     {draft.status === "loading" ? (
-                      <div className="flex items-center gap-2 text-sm text-[#888888]">
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#222222] border-t-[#6366f1]" />
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "rgba(255,255,255,0.45)" }}>
+                        <span
+                          style={{
+                            width: "16px",
+                            height: "16px",
+                            borderRadius: "50%",
+                            border: "2px solid rgba(255,255,255,0.1)",
+                            borderTopColor: "#6366f1",
+                            animation: "rvspin 0.8s linear infinite",
+                          }}
+                        />
                         Generating...
                       </div>
                     ) : draft.status === "error" ? (
-                      <p className="text-sm text-red-400">{draft.text}</p>
+                      <p style={{ fontSize: "14px", color: "#fca5a5" }}>{draft.text}</p>
                     ) : (
                       <>
                         <textarea
                           value={draft.text}
                           onChange={(e) => setDraft(reviewId, { text: e.target.value })}
                           rows={5}
-                          className="w-full resize-y rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 py-2 text-sm text-white outline-none focus:border-[#6366f1]"
+                          style={{
+                            ...glassInput,
+                            width: "100%",
+                            minHeight: "120px",
+                            resize: "vertical",
+                            fontSize: "14px",
+                            lineHeight: 1.6,
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+                          }}
                         />
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                           <button
                             type="button"
                             onClick={async () => {
                               await navigator.clipboard.writeText(draft.text);
                               setDraft(reviewId, { copied: true });
-                              setTimeout(
-                                () => setDraft(reviewId, { copied: false }),
-                                2000,
-                              );
+                              setTimeout(() => setDraft(reviewId, { copied: false }), 2000);
                             }}
-                            className="inline-flex h-9 items-center justify-center rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-4 text-sm font-medium text-white transition hover:border-[#6366f1]"
+                            style={{
+                              ...glassSecondary,
+                              padding: "10px 18px",
+                              fontSize: "14px",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "rgba(255, 255, 255, 0.12)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "rgba(255, 255, 255, 0.07)";
+                            }}
                           >
                             {draft.copied ? "Copied!" : "Copy"}
                           </button>
                           <button
                             type="button"
-                            onClick={() =>
-                              review.id && handleMarkResponded(review.id)
-                            }
+                            onClick={() => review.id && handleMarkResponded(review.id)}
                             disabled={draft.markingResponded}
-                            className="inline-flex h-9 items-center justify-center rounded-[8px] bg-emerald-600 px-4 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            style={{
+                              ...glassPrimary,
+                              padding: "10px 18px",
+                              fontSize: "14px",
+                              opacity: draft.markingResponded ? 0.6 : 1,
+                              cursor: draft.markingResponded ? "not-allowed" : "pointer",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!draft.markingResponded) {
+                                e.currentTarget.style.background = "rgba(99, 102, 241, 1)";
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "rgba(99, 102, 241, 0.8)";
+                            }}
                           >
-                            {draft.markingResponded
-                              ? "Saving..."
-                              : "Mark as responded"}
+                            {draft.markingResponded ? "Saving..." : "Mark as responded"}
                           </button>
                         </div>
                         {draft.markError ? (
-                          <p className="text-sm text-red-400">{draft.markError}</p>
+                          <p style={{ fontSize: "14px", color: "#fca5a5" }}>{draft.markError}</p>
                         ) : null}
                       </>
                     )}

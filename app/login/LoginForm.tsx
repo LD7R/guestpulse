@@ -6,6 +6,48 @@ import { FormEvent, useMemo, useState, useTransition } from "react";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
+import type { CSSProperties } from "react";
+
+const glassCard: CSSProperties = {
+  background: "rgba(255, 255, 255, 0.05)",
+  backdropFilter: "blur(24px) saturate(180%)",
+  WebkitBackdropFilter: "blur(24px) saturate(180%)",
+  border: "1px solid rgba(255, 255, 255, 0.09)",
+  borderRadius: "20px",
+  boxShadow:
+    "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+  width: "420px",
+  maxWidth: "100%",
+  padding: "48px 40px",
+};
+
+const glassInput: CSSProperties = {
+  width: "100%",
+  background: "rgba(255, 255, 255, 0.06)",
+  border: "1px solid rgba(255, 255, 255, 0.1)",
+  borderRadius: "12px",
+  padding: "12px 16px",
+  color: "#ffffff",
+  fontSize: "14px",
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+const primaryBtn: CSSProperties = {
+  width: "100%",
+  height: "48px",
+  background: "rgba(99, 102, 241, 0.8)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  border: "1px solid rgba(99, 102, 241, 0.4)",
+  borderRadius: "12px",
+  color: "#ffffff",
+  fontWeight: 500,
+  fontSize: "14px",
+  cursor: "pointer",
+  transition: "all 0.2s ease",
+};
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -43,22 +85,97 @@ export function LoginForm() {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 py-16 dark:bg-black">
-      <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Sign in
-          </h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Use your email and password to access your dashboard.
-          </p>
-        </div>
+    <div
+      style={{
+        position: "relative",
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "24px",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          width: "400px",
+          height: "400px",
+          borderRadius: "50%",
+          background: "radial-gradient(circle, #6366f1 0%, transparent 70%)",
+          opacity: 0.15,
+          top: "-100px",
+          left: "-100px",
+          filter: "blur(60px)",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          width: "300px",
+          height: "300px",
+          borderRadius: "50%",
+          background: "radial-gradient(circle, #8b5cf6 0%, transparent 70%)",
+          opacity: 0.1,
+          bottom: "-80px",
+          right: "-80px",
+          filter: "blur(60px)",
+          pointerEvents: "none",
+        }}
+      />
 
-        <form onSubmit={onSubmit} className="mt-8 space-y-4">
-          <div className="space-y-2">
+      <div style={glassCard}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "10px",
+            marginBottom: "8px",
+          }}
+        >
+          <span
+            style={{
+              width: "8px",
+              height: "8px",
+              borderRadius: "50%",
+              background: "#6366f1",
+              boxShadow: "0 0 12px rgba(99, 102, 241, 0.8)",
+            }}
+          />
+          <span
+            style={{
+              fontSize: "20px",
+              fontWeight: 700,
+              color: "#ffffff",
+              letterSpacing: "-0.03em",
+            }}
+          >
+            GuestPulse
+          </span>
+        </div>
+        <p
+          style={{
+            textAlign: "center",
+            fontSize: "14px",
+            color: "rgba(255, 255, 255, 0.4)",
+            marginBottom: "36px",
+          }}
+        >
+          Sign in to your account
+        </p>
+
+        <form onSubmit={onSubmit}>
+          <div style={{ marginBottom: "16px" }}>
             <label
               htmlFor="email"
-              className="text-sm font-medium text-zinc-900 dark:text-zinc-100"
+              style={{
+                display: "block",
+                fontSize: "13px",
+                color: "rgba(255, 255, 255, 0.6)",
+                marginBottom: "6px",
+              }}
             >
               Email
             </label>
@@ -69,15 +186,26 @@ export function LoginForm() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 shadow-sm outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-zinc-200 dark:focus:ring-zinc-200/10"
               placeholder="you@company.com"
+              style={glassInput}
+              onFocus={(e) => {
+                e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+              }}
             />
           </div>
 
-          <div className="space-y-2">
+          <div style={{ marginBottom: "16px" }}>
             <label
               htmlFor="password"
-              className="text-sm font-medium text-zinc-900 dark:text-zinc-100"
+              style={{
+                display: "block",
+                fontSize: "13px",
+                color: "rgba(255, 255, 255, 0.6)",
+                marginBottom: "6px",
+              }}
             >
               Password
             </label>
@@ -88,31 +216,64 @@ export function LoginForm() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 shadow-sm outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-zinc-200 dark:focus:ring-zinc-200/10"
               placeholder="••••••••"
+              style={glassInput}
+              onFocus={(e) => {
+                e.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+              }}
             />
           </div>
 
           {error ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+            <p
+              style={{
+                fontSize: "13px",
+                color: "rgba(239, 68, 68, 0.95)",
+                marginTop: "12px",
+                marginBottom: "8px",
+              }}
+            >
               {error}
-            </div>
+            </p>
           ) : null}
 
           <button
             type="submit"
             disabled={isPending}
-            className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-zinc-900 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            style={{
+              ...primaryBtn,
+              opacity: isPending ? 0.6 : 1,
+              cursor: isPending ? "not-allowed" : "pointer",
+              marginTop: error ? "8px" : "0",
+            }}
+            onMouseEnter={(e) => {
+              if (!isPending) {
+                e.currentTarget.style.background = "rgba(99, 102, 241, 1)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(99, 102, 241, 0.8)";
+            }}
           >
             {isPending ? "Signing in…" : "Sign in"}
           </button>
         </form>
 
-        <p className="mt-6 text-sm text-zinc-600 dark:text-zinc-400">
+        <p
+          style={{
+            marginTop: "24px",
+            textAlign: "center",
+            fontSize: "14px",
+            color: "rgba(255, 255, 255, 0.4)",
+          }}
+        >
           Don’t have an account?{" "}
           <Link
             href="/signup"
-            className="font-medium text-zinc-900 underline underline-offset-4 hover:text-zinc-700 dark:text-zinc-50 dark:hover:text-zinc-200"
+            style={{ color: "rgba(99, 102, 241, 0.9)", fontWeight: 500, textDecoration: "none" }}
           >
             Sign up
           </Link>
@@ -121,4 +282,3 @@ export function LoginForm() {
     </div>
   );
 }
-
