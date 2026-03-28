@@ -27,7 +27,7 @@ export default function DashboardLayout({
     () => [
       { href: "/dashboard", label: "Overview" },
       { href: "/dashboard/reviews", label: "Review Inbox" },
-      { href: "/dashboard/settings", label: "Hotel Setup" },
+      { href: "/dashboard/settings", label: "Settings" },
       { href: "/dashboard/pricing", label: "Pricing" },
     ],
     [],
