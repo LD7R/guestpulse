@@ -99,6 +99,32 @@ function computeInitials(fullName: string | null | undefined, email: string | nu
 
 type ToastState = { type: "success" | "error"; message: string } | null;
 
+function Skeleton({
+  width = "100%",
+  height = "20px",
+  radius = "8px",
+  style,
+}: {
+  width?: string;
+  height?: string;
+  radius?: string;
+  style?: CSSProperties;
+}) {
+  return (
+    <div
+      style={{
+        width,
+        height,
+        borderRadius: radius,
+        background: "var(--glass-bg)",
+        border: "1px solid var(--glass-border)",
+        animation: "skeleton-pulse 1.5s ease-in-out infinite",
+        ...style,
+      }}
+    />
+  );
+}
+
 function ToggleSwitch({
   checked,
   onChange,
@@ -406,28 +432,22 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="settings-page">
-        <div style={{ ...glass, padding: "24px", marginBottom: "24px", maxWidth: "720px" }}>
-          <div
-            style={{
-              height: "22px",
-              width: "40%",
-              borderRadius: "8px",
-              background: "var(--glass-muted)",
-              marginBottom: "20px",
-            }}
-          />
-          <div style={{ display: "grid", gap: "12px" }}>
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                style={{
-                  height: "72px",
-                  borderRadius: "12px",
-                  background: "var(--glass-muted)",
-                }}
-              />
-            ))}
-          </div>
+        <div style={{ marginBottom: "24px", maxWidth: "720px" }}>
+          <Skeleton width="220px" height="28px" radius="8px" />
+          <Skeleton width="min(100%, 360px)" height="18px" radius="6px" style={{ marginTop: "10px" }} />
+        </div>
+        <div style={{ ...tabBar, marginBottom: "24px", maxWidth: "720px" }}>
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} width="88px" height="38px" radius="10px" />
+          ))}
+        </div>
+        <div style={{ ...glass, padding: "28px", maxWidth: "720px" }}>
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} style={{ marginBottom: i === 4 ? 0 : "20px" }}>
+              <Skeleton width="120px" height="14px" radius="6px" />
+              <Skeleton height="44px" radius="var(--input-radius)" style={{ marginTop: "8px" }} />
+            </div>
+          ))}
         </div>
       </div>
     );

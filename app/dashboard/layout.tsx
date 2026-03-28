@@ -22,6 +22,7 @@ export default function DashboardLayout({
   const router = useRouter();
 
   const [email, setEmail] = useState<string | null>(null);
+  const [inboxUnrespondedCount, setInboxUnrespondedCount] = useState(0);
 
   const nav = useMemo(
     () => [
@@ -54,6 +55,39 @@ export default function DashboardLayout({
       setEmail(data.user?.email ?? null);
     });
   }, []);
+
+  useEffect(() => {
+    async function loadInboxBadge() {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user?.id) {
+        setInboxUnrespondedCount(0);
+        return;
+      }
+      const { data: hotels } = await supabase.from("hotels").select("id").eq("user_id", user.id);
+      const hotelIds = (hotels ?? []).map((h: { id: string }) => h.id).filter(Boolean);
+      if (hotelIds.length === 0) {
+        setInboxUnrespondedCount(0);
+        return;
+      }
+      const { count, error } = await supabase
+        .from("reviews")
+        .select("id", { count: "exact", head: true })
+        .in("hotel_id", hotelIds)
+        .eq("responded", false);
+      if (error) {
+        setInboxUnrespondedCount(0);
+        return;
+      }
+      setInboxUnrespondedCount(count ?? 0);
+    }
+    loadInboxBadge();
+  }, [pathname]);
 
   async function onLogout() {
     const supabase = createBrowserClient(
@@ -181,6 +215,9 @@ export default function DashboardLayout({
                     }),
               };
 
+              const showInboxBadge =
+                item.href === "/dashboard/reviews" && inboxUnrespondedCount > 0;
+
               return (
                 <Link
                   key={item.href}
@@ -209,7 +246,29 @@ export default function DashboardLayout({
                       flexShrink: 0,
                     }}
                   />
-                  {item.label}
+                  <span style={{ flex: 1, minWidth: 0 }}>{item.label}</span>
+                  {showInboxBadge ? (
+                    <span
+                      style={{
+                        marginLeft: "auto",
+                        minWidth: "18px",
+                        height: "18px",
+                        padding: "0 5px",
+                        borderRadius: "100px",
+                        background: "#ef4444",
+                        color: "#ffffff",
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {inboxUnrespondedCount > 99 ? "99+" : inboxUnrespondedCount}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}

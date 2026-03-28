@@ -113,6 +113,48 @@ function formatTrend(
   return { text: `${arrow} ${abs} vs last week`, color };
 }
 
+function arcPathD(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const x1 = cx + r * Math.cos(rad(startDeg));
+  const y1 = cy + r * Math.sin(rad(startDeg));
+  const x2 = cx + r * Math.cos(rad(endDeg));
+  const y2 = cy + r * Math.sin(rad(endDeg));
+  let diff = endDeg - startDeg;
+  while (diff < 0) diff += 360;
+  while (diff > 360) diff -= 360;
+  const largeArc = diff > 180 ? 1 : 0;
+  return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`;
+}
+
+function ResponseRateGauge({ pct, stroke }: { pct: number; stroke: string }) {
+  const cx = 30;
+  const cy = 30;
+  const r = 24;
+  const start = 210;
+  const sweep = 240;
+  const end = start + (sweep * Math.min(100, Math.max(0, pct))) / 100;
+  return (
+    <svg width="60" height="60" viewBox="0 0 60 60" aria-hidden>
+      <path
+        d={arcPathD(cx, cy, r, start, start + sweep)}
+        fill="none"
+        stroke="var(--glass-border)"
+        strokeWidth={6}
+        strokeLinecap="round"
+      />
+      {pct > 0 ? (
+        <path
+          d={arcPathD(cx, cy, r, start, end)}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={6}
+          strokeLinecap="round"
+        />
+      ) : null}
+    </svg>
+  );
+}
+
 export default function CommandCenterPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -131,6 +173,12 @@ export default function CommandCenterPage() {
   const [trendAvg, setTrendAvg] = useState({ text: "", color: "var(--text-muted)" });
   const [trendNeeding, setTrendNeeding] = useState({ text: "", color: "var(--text-muted)" });
   const [trendWeek, setTrendWeek] = useState({ text: "", color: "var(--text-muted)" });
+
+  const [ratingMonthTrend, setRatingMonthTrend] = useState({
+    text: "",
+    color: "var(--text-muted)",
+  });
+  const [responseRatePct, setResponseRatePct] = useState<number | null>(null);
 
   const [analyticsRows, setAnalyticsRows] = useState<AnalyticsRow[]>([]);
   const [urgentList, setUrgentList] = useState<ReviewRow[]>([]);
@@ -199,6 +247,8 @@ export default function CommandCenterPage() {
       setTrendAvg(neutral);
       setTrendNeeding(neutral);
       setTrendWeek(neutral);
+      setRatingMonthTrend({ text: "—", color: "var(--text-muted)" });
+      setResponseRatePct(null);
       return;
     }
 
@@ -302,6 +352,64 @@ export default function CommandCenterPage() {
 
     const uL = unrespLast7c ?? 0;
     const uP = unrespPrev7c ?? 0;
+
+    const { data: ratingsWithDates } = await supabase
+      .from("reviews")
+      .select("rating, created_at")
+      .in("hotel_id", hotelIds);
+
+    const tNow = new Date();
+    const y = tNow.getFullYear();
+    const mo = tNow.getMonth();
+    const startThisMonth = new Date(y, mo, 1).getTime();
+    const startPrevMonth = new Date(y, mo - 1, 1).getTime();
+
+    let sumThis = 0;
+    let nThis = 0;
+    let sumPrev = 0;
+    let nPrev = 0;
+    for (const row of ratingsWithDates ?? []) {
+      const raw = row as { rating: unknown; created_at: string | null };
+      const t = raw.created_at ? new Date(raw.created_at).getTime() : NaN;
+      if (Number.isNaN(t)) continue;
+      const rv = normalizeRating(raw.rating);
+      if (rv === null) continue;
+      if (t >= startThisMonth) {
+        sumThis += rv;
+        nThis += 1;
+      } else if (t >= startPrevMonth && t < startThisMonth) {
+        sumPrev += rv;
+        nPrev += 1;
+      }
+    }
+    const avgThisM = nThis === 0 ? null : sumThis / nThis;
+    const avgPrevM = nPrev === 0 ? null : sumPrev / nPrev;
+
+    if (avgThisM != null && avgPrevM != null) {
+      const dM = avgThisM - avgPrevM;
+      if (Math.abs(dM) < 0.05) {
+        setRatingMonthTrend({ text: "→ Same as last month", color: "var(--text-muted)" });
+      } else if (dM > 0) {
+        setRatingMonthTrend({
+          text: `↑ +${dM.toFixed(1)} vs last month`,
+          color: "#22c55e",
+        });
+      } else {
+        setRatingMonthTrend({
+          text: `↓ ${dM.toFixed(1)} vs last month`,
+          color: "#ef4444",
+        });
+      }
+    } else if (avgThisM != null && avgPrevM == null) {
+      setRatingMonthTrend({ text: "— No prior month to compare", color: "var(--text-muted)" });
+    } else {
+      setRatingMonthTrend({ text: "→ Same as last month", color: "var(--text-muted)" });
+    }
+
+    const totalN = totalCount ?? 0;
+    const needN = needingCount ?? 0;
+    const respondedN = Math.max(0, totalN - needN);
+    setResponseRatePct(totalN === 0 ? null : Math.round((respondedN / totalN) * 100));
 
     setTotalReviews(totalCount ?? 0);
     setAvgRating(avg);
@@ -627,22 +735,93 @@ export default function CommandCenterPage() {
   }, [analyticsRows]);
 
   if (loading) {
+    const Sk = ({
+      w = "100%",
+      h = "20px",
+      rad = "8px",
+    }: {
+      w?: string;
+      h?: string;
+      rad?: string;
+    }) => (
+      <div
+        style={{
+          width: w,
+          height: h,
+          borderRadius: rad,
+          background: "var(--glass-bg)",
+          border: "1px solid var(--glass-border)",
+          animation: "skeleton-pulse 1.5s ease-in-out infinite",
+        }}
+      />
+    );
     return (
       <div className="dash-page cmd-loading">
-        <div style={{ ...glass, padding: "24px", display: "flex", alignItems: "center", gap: "12px" }}>
-          <span
-            style={{
-              width: "20px",
-              height: "20px",
-              borderRadius: "50%",
-              border: "2px solid var(--spinner-track)",
-              borderTopColor: "var(--accent)",
-              animation: "cc-spin 0.8s linear infinite",
-            }}
-          />
-          <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>Loading…</span>
+        <div className="cc-header-row" style={{ marginBottom: "24px" }}>
+          <div>
+            <Sk w="240px" h="28px" />
+            <div style={{ marginTop: "10px" }}>
+              <Sk w="320px" h="14px" />
+            </div>
+          </div>
+          <Sk w="160px" h="14px" />
         </div>
-        <style dangerouslySetInnerHTML={{ __html: `@keyframes cc-spin { to { transform: rotate(360deg); } }` }} />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: "16px",
+            marginBottom: "24px",
+          }}
+        >
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} style={{ ...glass, padding: "24px", minHeight: "120px" }}>
+              <Sk w="60%" h="12px" />
+              <div style={{ marginTop: "12px" }}>
+                <Sk w="50%" h="32px" rad="10px" />
+              </div>
+              <div style={{ marginTop: "10px" }}>
+                <Sk w="80%" h="10px" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "16px", marginBottom: "16px" }}>
+          <div style={{ ...glass, padding: "24px", height: "280px" }}>
+            <Sk w="40%" h="16px" />
+            <div style={{ marginTop: "20px", height: "200px" }}>
+              <Sk w="100%" h="100%" rad="12px" />
+            </div>
+          </div>
+          <div style={{ ...glass, padding: "24px", height: "280px" }}>
+            <Sk w="50%" h="16px" />
+            <div style={{ marginTop: "20px", height: "200px" }}>
+              <Sk w="100%" h="100%" rad="12px" />
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+          <div style={{ ...glass, padding: "24px", minHeight: "200px" }}>
+            <Sk w="45%" h="16px" />
+            <div style={{ marginTop: "16px" }}>
+              <Sk w="100%" h="12px" />
+            </div>
+            <div style={{ marginTop: "8px" }}>
+              <Sk w="90%" h="12px" />
+            </div>
+          </div>
+          <div style={{ ...glass, padding: "24px", minHeight: "200px" }}>
+            <Sk w="40%" h="16px" />
+            <div style={{ marginTop: "16px" }}>
+              <Sk w="100%" h="12px" />
+            </div>
+          </div>
+        </div>
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `@keyframes cc-spin { to { transform: rotate(360deg); } }`,
+          }}
+        />
       </div>
     );
   }
@@ -666,6 +845,7 @@ export default function CommandCenterPage() {
       label: "Average rating",
       value: avgRating === null ? "—" : avgRating.toFixed(1),
       trend: trendAvg,
+      monthLine: true as const,
       icon: "⭐",
     },
     {
@@ -682,13 +862,19 @@ export default function CommandCenterPage() {
     },
   ];
 
+  const rrPct = responseRatePct ?? 0;
+  const rrColor =
+    rrPct >= 80 ? "#22c55e" : rrPct >= 50 ? "#f59e0b" : "#ef4444";
+  const rrSubtitle =
+    rrPct >= 80 ? "Excellent — keep it up" : rrPct >= 50 ? "Good — aim for 80%+" : "Needs attention";
+
   return (
     <div className="dash-page command-center">
       <style
         dangerouslySetInnerHTML={{
           __html: `
             .command-center .cc-header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
-            .command-center .cc-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+            .command-center .cc-stat-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
             .command-center .cc-stat-card { position: relative; padding: 24px; }
             .command-center .cc-stat-icon { position: absolute; top: 20px; right: 20px; width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: var(--glass-bg); border: 1px solid var(--glass-border); }
             .command-center .cc-quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
@@ -696,7 +882,7 @@ export default function CommandCenterPage() {
             .command-center .cc-analytics-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; align-items: stretch; }
             .command-center .cc-pie-wrap { display: flex; flex: 1; align-items: center; gap: 20px; min-height: 0; min-width: 0; }
             @media (max-width: 1024px) {
-              .command-center .cc-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+              .command-center .cc-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
               .command-center .cc-analytics-row1 { grid-template-columns: 1fr; }
             }
             @media (max-width: 768px) {
@@ -787,11 +973,61 @@ export default function CommandCenterPage() {
                 >
                   {card.value}
                 </div>
-                <div style={{ fontSize: "12px", color: card.trend.color, marginTop: "6px" }}>
-                  {card.trend.text}
-                </div>
+                {"monthLine" in card && card.monthLine ? (
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: 500,
+                      color: ratingMonthTrend.color,
+                      marginTop: "6px",
+                    }}
+                  >
+                    {ratingMonthTrend.text}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: "12px", color: card.trend.color, marginTop: "6px" }}>
+                    {card.trend.text}
+                  </div>
+                )}
               </div>
             ))}
+            <div className="cc-stat-card" style={{ ...glass }}>
+              <div className="cc-stat-icon">✅</div>
+              <div
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "var(--text-label)",
+                  paddingRight: "48px",
+                }}
+              >
+                Response rate
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  marginTop: "8px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "36px",
+                    fontWeight: 700,
+                    color: totalReviews === 0 ? "var(--text-muted)" : rrColor,
+                  }}
+                >
+                  {totalReviews === 0 ? "—" : `${rrPct}%`}
+                </div>
+                {totalReviews > 0 ? <ResponseRateGauge pct={rrPct} stroke={rrColor} /> : null}
+              </div>
+              <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "6px" }}>
+                {totalReviews === 0 ? "—" : rrSubtitle}
+              </div>
+            </div>
           </div>
 
           {urgentCount > 0 ? (

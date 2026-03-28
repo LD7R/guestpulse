@@ -1,7 +1,7 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 
@@ -37,6 +37,11 @@ type Review = {
   sentiment_label?: string | null;
   has_responded?: boolean | null;
   is_responded?: boolean | null;
+
+  flagged?: boolean | null;
+  internal_note?: string | null;
+  flag_color?: string | null;
+  review_date?: string | null;
 };
 
 
@@ -138,6 +143,94 @@ const navLink: CSSProperties = {
   color: "var(--text-secondary)",
   textDecoration: "none",
 };
+
+function Skeleton({
+  width = "100%",
+  height = "20px",
+  radius = "8px",
+}: {
+  width?: string;
+  height?: string;
+  radius?: string;
+}) {
+  return (
+    <div
+      style={{
+        width,
+        height,
+        borderRadius: radius,
+        background: "var(--glass-bg)",
+        border: "1px solid var(--glass-border)",
+        animation: "skeleton-pulse 1.5s ease-in-out infinite",
+      }}
+    />
+  );
+}
+
+function getReviewDate(r: Review): string | null {
+  const v = r.review_date ?? r.created_at ?? r.date ?? null;
+  return v || null;
+}
+
+function daysSinceReview(r: Review): number | null {
+  const d = getReviewDate(r);
+  if (!d) return null;
+  const t = new Date(d).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.floor((Date.now() - t) / 86400000);
+}
+
+function agePillForReview(r: Review, responded: boolean): ReactNode {
+  if (responded) return null;
+  const days = daysSinceReview(r);
+  if (days === null || days <= 2) return null;
+  if (days >= 14) {
+    return (
+      <span
+        style={{
+          fontSize: "11px",
+          fontWeight: 600,
+          padding: "2px 8px",
+          borderRadius: "100px",
+          background: "rgba(239,68,68,0.15)",
+          color: "#ef4444",
+        }}
+      >
+        14d+ old
+      </span>
+    );
+  }
+  if (days >= 7) {
+    return (
+      <span
+        style={{
+          fontSize: "11px",
+          fontWeight: 600,
+          padding: "2px 8px",
+          borderRadius: "100px",
+          background: "rgba(249,115,22,0.15)",
+          color: "#fb923c",
+        }}
+      >
+        {days}d ago
+      </span>
+    );
+  }
+  return (
+    <span
+      style={{
+        fontSize: "11px",
+        fontWeight: 600,
+        padding: "2px 8px",
+        borderRadius: "100px",
+        background: "rgba(245,158,11,0.15)",
+        color: "#f59e0b",
+      }}
+    >
+      {days}d ago
+    </span>
+  );
+}
 
 function SyncMessages({
   syncError,
@@ -487,8 +580,31 @@ export default function ReviewsInboxPage() {
   const [sentimentFilter, setSentimentFilter] = useState<string>("all");
   const [respondedFilter, setRespondedFilter] = useState<string>("all");
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [periodDays, setPeriodDays] = useState<7 | 30 | 90 | "all">(30);
+  const [sortBy, setSortBy] = useState<
+    "newest" | "oldest" | "lowRating" | "highRating" | "needsFirst" | "flaggedFirst"
+  >("newest");
+
+  const [flagMenuOpenId, setFlagMenuOpenId] = useState<string | null>(null);
+
+  const [noteEditorId, setNoteEditorId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      const el = e.target as HTMLElement;
+      if (el.closest("[data-flag-menu-root]")) return;
+      setFlagMenuOpenId(null);
+    }
+    if (flagMenuOpenId) {
+      document.addEventListener("mousedown", handle);
+      return () => document.removeEventListener("mousedown", handle);
+    }
+  }, [flagMenuOpenId]);
+
   const visibleReviews = useMemo(() => {
-    return reviews.filter((r) => {
+    let list = reviews.filter((r) => {
       const platform = (r.platform ?? r.source ?? "").toString().toLowerCase();
       const sentimentRaw = (r.sentiment ?? r.sentiment_label ?? "").toString().toLowerCase();
       const sentiment =
@@ -512,7 +628,81 @@ export default function ReviewsInboxPage() {
 
       return platformOk && sentimentOk && respondedOk;
     });
-  }, [reviews, platformFilter, sentimentFilter, respondedFilter]);
+
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((r) => {
+        const name = (r.reviewer_name ?? r.name ?? "").toLowerCase();
+        const text = (r.review_text ?? r.body ?? r.text ?? "").toLowerCase();
+        const topic = (r.complaint_topic ?? r.topic ?? "").toLowerCase();
+        return name.includes(q) || text.includes(q) || topic.includes(q);
+      });
+    }
+
+    if (periodDays !== "all") {
+      const cut = Date.now() - periodDays * 86400000;
+      list = list.filter((r) => {
+        const d = getReviewDate(r);
+        if (!d) return false;
+        return new Date(d).getTime() >= cut;
+      });
+    }
+
+    const ratingVal = (x: Review) => normalizeRating(x.rating ?? x.stars);
+    const respondedVal = (x: Review) => x.responded ?? x.has_responded ?? x.is_responded ?? false;
+    const flaggedVal = (x: Review) => Boolean(x.flagged);
+
+    list = [...list].sort((a, b) => {
+      const dateA = new Date(getReviewDate(a) || 0).getTime();
+      const dateB = new Date(getReviewDate(b) || 0).getTime();
+      const ra = ratingVal(a);
+      const rb = ratingVal(b);
+      const respA = respondedVal(a);
+      const respB = respondedVal(b);
+      const flA = flaggedVal(a);
+      const flB = flaggedVal(b);
+
+      switch (sortBy) {
+        case "newest":
+          return dateB - dateA;
+        case "oldest":
+          return dateA - dateB;
+        case "lowRating": {
+          const na = ra ?? 999;
+          const nb = rb ?? 999;
+          return na - nb;
+        }
+        case "highRating": {
+          const na = ra ?? -1;
+          const nb = rb ?? -1;
+          return nb - na;
+        }
+        case "needsFirst": {
+          if (respA === respB) return dateB - dateA;
+          return respA ? 1 : -1;
+        }
+        case "flaggedFirst": {
+          if (flA === flB) return dateB - dateA;
+          return flA ? -1 : 1;
+        }
+        default:
+          return dateB - dateA;
+      }
+    });
+
+    return list;
+  }, [
+    reviews,
+    platformFilter,
+    sentimentFilter,
+    respondedFilter,
+    searchQuery,
+    periodDays,
+    sortBy,
+  ]);
+
+  const filteredCount = visibleReviews.length;
+  const totalCount = reviews.length;
 
   function setDraft(reviewId: string, patch: Partial<DraftState>) {
     setDrafts((prev) => ({
@@ -620,6 +810,55 @@ export default function ReviewsInboxPage() {
       status: "idle",
       text: "",
     });
+  }
+
+  async function updateReviewFlag(
+    reviewId: string,
+    patch: { flagged: boolean; flag_color?: "red" | "amber" | "green" },
+  ) {
+    setReviews((prev) =>
+      prev.map((r) =>
+        r.id === reviewId
+          ? {
+              ...r,
+              flagged: patch.flagged,
+              flag_color: patch.flagged ? patch.flag_color ?? r.flag_color ?? "red" : "red",
+            }
+          : r,
+      ),
+    );
+    setFlagMenuOpenId(null);
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+    const payload = patch.flagged
+      ? { flagged: true as const, flag_color: patch.flag_color ?? "red" }
+      : { flagged: false as const };
+    const { error } = await supabase.from("reviews").update(payload).eq("id", reviewId);
+    if (error) {
+      console.error(error);
+    }
+  }
+
+  async function saveInternalNote(reviewId: string, text: string) {
+    const trimmed = text.trim();
+    setReviews((prev) =>
+      prev.map((r) => (r.id === reviewId ? { ...r, internal_note: trimmed || null } : r)),
+    );
+    setNoteEditorId(null);
+    setNoteDraft("");
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+    const { error } = await supabase
+      .from("reviews")
+      .update({ internal_note: trimmed || null })
+      .eq("id", reviewId);
+    if (error) {
+      console.error(error);
+    }
   }
 
   async function syncPlatform(
@@ -865,22 +1104,38 @@ export default function ReviewsInboxPage() {
 
   if (loading) {
     return (
-      <div
-        className="reviews-page"
-        style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}
-      >
-        <div style={{ ...glass, padding: "20px 28px", display: "flex", alignItems: "center", gap: "12px" }}>
-          <span
-            style={{
-              width: "20px",
-              height: "20px",
-              borderRadius: "50%",
-              border: "2px solid var(--spinner-track)",
-              borderTopColor: "var(--accent)",
-              animation: "rvspin 0.8s linear infinite",
-            }}
-          />
-          <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>Loading reviews…</span>
+      <div className="reviews-page" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        <Skeleton width="200px" height="22px" />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px" }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ ...glass, padding: "16px", minHeight: "88px" }}>
+              <Skeleton width="50%" height="12px" />
+              <div style={{ marginTop: "12px" }}>
+                <Skeleton width="40%" height="28px" radius="10px" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ ...glass, padding: "20px" }}>
+          <Skeleton width="100%" height="44px" radius="12px" />
+          <div style={{ marginTop: "16px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <Skeleton width="120px" height="32px" radius="100px" />
+            <Skeleton width="200px" height="44px" radius="12px" />
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} style={{ ...glass, padding: "20px" }}>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+                <Skeleton width="56px" height="22px" radius="100px" />
+                <Skeleton width="80px" height="16px" />
+              </div>
+              <Skeleton width="70%" height="14px" />
+              <div style={{ marginTop: "8px" }}>
+                <Skeleton width="50%" height="14px" />
+              </div>
+            </div>
+          ))}
         </div>
         <style dangerouslySetInnerHTML={{ __html: `@keyframes rvspin { to { transform: rotate(360deg); } }` }} />
       </div>
@@ -1069,6 +1324,121 @@ export default function ReviewsInboxPage() {
           </div>
         </div>
 
+        <div style={{ ...glass, marginTop: "16px", padding: "16px 20px" }}>
+          <div style={{ position: "relative", marginBottom: "16px" }}>
+            <span
+              style={{
+                position: "absolute",
+                left: "14px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                fontSize: "16px",
+                color: "var(--text-muted)",
+                pointerEvents: "none",
+              }}
+              aria-hidden
+            >
+              ⌕
+            </span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search reviews by guest name, content, or topic..."
+              style={{
+                ...glassInput,
+                width: "100%",
+                paddingLeft: "40px",
+                paddingRight: searchQuery.trim() ? "40px" : "16px",
+              }}
+            />
+            {searchQuery.trim() ? (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setSearchQuery("")}
+                style={{
+                  position: "absolute",
+                  right: "10px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  border: "none",
+                  background: "transparent",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: "18px",
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "flex-end",
+              justifyContent: "space-between",
+              gap: "16px",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "8px" }}>Period</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                {(
+                  [
+                    { v: 7 as const, label: "7 days" },
+                    { v: 30 as const, label: "30 days" },
+                    { v: 90 as const, label: "90 days" },
+                    { v: "all" as const, label: "All time" },
+                  ] as const
+                ).map((p) => {
+                  const active = periodDays === p.v;
+                  return (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setPeriodDays(p.v)}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "100px",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        border: active ? "1px solid var(--accent-border)" : "1px solid var(--glass-border)",
+                        background: active ? "var(--accent-bg)" : "var(--glass-bg)",
+                        color: active ? "var(--accent)" : "var(--text-secondary)",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ minWidth: "200px", flex: "1 1 200px" }}>
+              <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "8px" }}>Sort</div>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                style={selectStyle}
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="lowRating">Lowest rating first</option>
+                <option value="highRating">Highest rating first</option>
+                <option value="needsFirst">Needs response first</option>
+                <option value="flaggedFirst">Flagged first</option>
+              </select>
+            </div>
+          </div>
+          <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "12px 0 0 0" }}>
+            Showing {filteredCount} of {totalCount} reviews
+          </p>
+        </div>
+
         <div
           className="rv-filters"
           style={{ ...glass, marginTop: "16px", padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}
@@ -1161,6 +1531,17 @@ export default function ReviewsInboxPage() {
             const draft = drafts[reviewId] ?? defaultDraft();
             const isPanelOpen = openDraftId === reviewId;
             const hasStableId = Boolean(review.id);
+            const dateLabel = formatDate(getReviewDate(review) ?? createdAt);
+            const flagAccent = review.flagged
+              ? review.flag_color === "amber"
+                ? "#f59e0b"
+                : review.flag_color === "green"
+                  ? "#22c55e"
+                  : "#ef4444"
+              : undefined;
+            const flagIconColor = review.flagged
+              ? flagAccent
+              : "var(--text-muted)";
 
             return (
               <div
@@ -1169,7 +1550,9 @@ export default function ReviewsInboxPage() {
                 style={{
                   ...glass,
                   padding: "24px",
+                  position: "relative",
                   transition: "transform 0.2s ease, border-color 0.2s ease, background 0.2s ease",
+                  ...(flagAccent ? { borderLeft: `3px solid ${flagAccent}` } : {}),
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = "translateY(-1px)";
@@ -1188,24 +1571,129 @@ export default function ReviewsInboxPage() {
                     <StarRow rating={rating} />
                   </div>
 
-                  {responded ? (
-                    <span
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        borderRadius: "100px",
-                        padding: "6px 12px",
-                        fontSize: "12px",
-                        fontWeight: 600,
-                        background: "var(--success-bg)",
-                        color: "var(--success)",
-                        border: "1px solid var(--success-border)",
-                      }}
-                    >
-                      <span aria-hidden>✓</span> Responded
-                    </span>
-                  ) : null}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "auto" }}>
+                    {hasStableId ? (
+                      <div data-flag-menu-root style={{ position: "relative" }}>
+                        <button
+                          type="button"
+                          aria-label={review.flagged ? "Remove flag" : "Flag review"}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!review.id) return;
+                            if (review.flagged) {
+                              void updateReviewFlag(review.id, { flagged: false });
+                            } else {
+                              setFlagMenuOpenId((cur) => (cur === review.id ? null : review.id!));
+                            }
+                          }}
+                          style={{
+                            width: "36px",
+                            height: "36px",
+                            borderRadius: "10px",
+                            border: "1px solid var(--glass-border)",
+                            background: "transparent",
+                            color: flagIconColor,
+                            cursor: "pointer",
+                            fontSize: "18px",
+                            lineHeight: 1,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          ⚑
+                        </button>
+                        {!review.flagged && flagMenuOpenId === review.id ? (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: "calc(100% + 6px)",
+                              right: 0,
+                              zIndex: 10,
+                              minWidth: "200px",
+                              ...glass,
+                              padding: "8px",
+                              borderRadius: "12px",
+                              boxShadow: "var(--glass-shadow)",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => review.id && updateReviewFlag(review.id, { flagged: true, flag_color: "red" })}
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                textAlign: "left",
+                                padding: "10px 12px",
+                                border: "none",
+                                borderRadius: "8px",
+                                background: "transparent",
+                                color: "var(--text-primary)",
+                                cursor: "pointer",
+                                fontSize: "13px",
+                              }}
+                            >
+                              🔴 Flag as urgent
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => review.id && updateReviewFlag(review.id, { flagged: true, flag_color: "amber" })}
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                textAlign: "left",
+                                padding: "10px 12px",
+                                border: "none",
+                                borderRadius: "8px",
+                                background: "transparent",
+                                color: "var(--text-primary)",
+                                cursor: "pointer",
+                                fontSize: "13px",
+                              }}
+                            >
+                              🟡 Flag for follow-up
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => review.id && updateReviewFlag(review.id, { flagged: true, flag_color: "green" })}
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                textAlign: "left",
+                                padding: "10px 12px",
+                                border: "none",
+                                borderRadius: "8px",
+                                background: "transparent",
+                                color: "var(--text-primary)",
+                                cursor: "pointer",
+                                fontSize: "13px",
+                              }}
+                            >
+                              🟢 Flag as resolved
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {responded ? (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          borderRadius: "100px",
+                          padding: "6px 12px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          background: "var(--success-bg)",
+                          color: "var(--success)",
+                          border: "1px solid var(--success-border)",
+                        }}
+                      >
+                        <span aria-hidden>✓</span> Responded
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="rv-meta-row" style={{ marginTop: "12px" }}>
@@ -1220,7 +1708,8 @@ export default function ReviewsInboxPage() {
                     <span style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)" }}>
                       {reviewerName}
                     </span>
-                    <span style={{ fontSize: "13px", color: "var(--text-label)" }}>{formatDate(createdAt)}</span>
+                    <span style={{ fontSize: "13px", color: "var(--text-label)" }}>{dateLabel}</span>
+                    {agePillForReview(review, responded)}
                   </div>
                   <div
                     style={{
@@ -1422,6 +1911,158 @@ export default function ReviewsInboxPage() {
                     )}
                   </div>
                 )}
+
+                {hasStableId ? (
+                  <div
+                    style={{ marginTop: "16px" }}
+                    title="Private note — only visible to you"
+                  >
+                    {noteEditorId === review.id ? (
+                      <>
+                        <textarea
+                          value={noteDraft}
+                          onChange={(e) => setNoteDraft(e.target.value)}
+                          rows={3}
+                          placeholder="Add a private note... (only you can see this)"
+                          style={{
+                            ...glassInput,
+                            width: "100%",
+                            fontSize: "13px",
+                            lineHeight: 1.5,
+                            resize: "vertical",
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.borderColor = "var(--focus-ring)";
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.borderColor = "var(--glass-input-border)";
+                          }}
+                        />
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px" }}>
+                          <button
+                            type="button"
+                            onClick={() => review.id && void saveInternalNote(review.id, noteDraft)}
+                            style={{
+                              ...glassPrimary,
+                              padding: "6px 14px",
+                              fontSize: "13px",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "var(--btn-primary-hover)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "var(--btn-primary-bg)";
+                            }}
+                          >
+                            Save note
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNoteEditorId(null);
+                              setNoteDraft("");
+                            }}
+                            style={{
+                              ...glassSecondary,
+                              padding: "6px 14px",
+                              fontSize: "13px",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "var(--secondary-btn-hover)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "var(--secondary-btn-bg)";
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </>
+                    ) : review.internal_note ? (
+                      <div
+                        style={{
+                          padding: "12px 14px",
+                          borderRadius: "12px",
+                          background: "rgba(245,158,11,0.05)",
+                          border: "1px solid rgba(245,158,11,0.1)",
+                          fontSize: "13px",
+                          color: "var(--text-secondary)",
+                          fontStyle: "italic",
+                          display: "flex",
+                          alignItems: "flex-start",
+                          justifyContent: "space-between",
+                          gap: "10px",
+                        }}
+                      >
+                        <span style={{ flex: 1, minWidth: 0, wordBreak: "break-word" }}>
+                          📝 {review.internal_note}
+                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+                          <button
+                            type="button"
+                            aria-label="Edit note"
+                            title="Edit note"
+                            onClick={() => {
+                              setNoteEditorId(review.id!);
+                              setNoteDraft(review.internal_note ?? "");
+                            }}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              color: "var(--text-muted)",
+                              cursor: "pointer",
+                              fontSize: "16px",
+                              lineHeight: 1,
+                              padding: "4px",
+                            }}
+                          >
+                            ✎
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Delete note"
+                            title="Delete note"
+                            onClick={() => {
+                              if (typeof window !== "undefined" && window.confirm("Delete this private note?")) {
+                                void saveInternalNote(review.id!, "");
+                              }
+                            }}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              color: "var(--text-muted)",
+                              cursor: "pointer",
+                              fontSize: "18px",
+                              lineHeight: 1,
+                              padding: "4px",
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNoteEditorId(review.id!);
+                          setNoteDraft("");
+                        }}
+                        style={{
+                          marginTop: "8px",
+                          border: "none",
+                          background: "transparent",
+                          color: "var(--text-muted)",
+                          fontSize: "13px",
+                          cursor: "pointer",
+                          padding: 0,
+                        }}
+                      >
+                        ＋ Add note
+                      </button>
+                    )}
+                  </div>
+                ) : null}
               </div>
             );
           })}
