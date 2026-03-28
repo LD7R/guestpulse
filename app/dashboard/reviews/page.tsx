@@ -1,7 +1,7 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 type Hotel = {
@@ -145,12 +145,33 @@ function SyncAllButton({
   );
 }
 
+type DraftState = {
+  status: "idle" | "loading" | "done" | "error";
+  text: string;
+  copied: boolean;
+  markingResponded: boolean;
+  markError: string | null;
+};
+
+const defaultDraft = (): DraftState => ({
+  status: "idle",
+  text: "",
+  copied: false,
+  markingResponded: false,
+  markError: null,
+});
+
 export default function ReviewsInboxPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [reviews, setReviews] = useState<Review[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // reviewId of the currently open draft panel (only one at a time)
+  const [openDraftId, setOpenDraftId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
+  const draftAbortRef = useRef<AbortController | null>(null);
 
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -191,6 +212,114 @@ export default function ReviewsInboxPage() {
       return platformOk && sentimentOk && respondedOk;
     });
   }, [reviews, platformFilter, sentimentFilter, respondedFilter]);
+
+  function setDraft(reviewId: string, patch: Partial<DraftState>) {
+    setDrafts((prev) => ({
+      ...prev,
+      [reviewId]: { ...defaultDraft(), ...prev[reviewId], ...patch },
+    }));
+  }
+
+  async function handleDraftResponse(review: Review) {
+    const id = review.id;
+    if (!id) return;
+
+    if (openDraftId === id) {
+      draftAbortRef.current?.abort();
+      draftAbortRef.current = null;
+      setOpenDraftId(null);
+      return;
+    }
+
+    draftAbortRef.current?.abort();
+    const controller = new AbortController();
+    draftAbortRef.current = controller;
+
+    setOpenDraftId(id);
+
+    if (drafts[id]?.status === "done") {
+      draftAbortRef.current = null;
+      return;
+    }
+
+    setDraft(id, {
+      status: "loading",
+      text: "",
+      markError: null,
+      copied: false,
+    });
+
+    try {
+      const res = await fetch("/api/draft-response", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          review_text: review.review_text ?? review.body ?? review.text ?? "",
+          rating: review.rating ?? review.stars ?? null,
+          reviewer_name: review.reviewer_name ?? review.name ?? null,
+          platform: review.platform ?? review.source ?? null,
+        }),
+        signal: controller.signal,
+      });
+
+      const json = (await res.json()) as {
+        success?: boolean;
+        response?: string;
+        error?: string;
+      };
+
+      if (controller.signal.aborted) return;
+
+      if (!res.ok || json.success !== true || !json.response) {
+        throw new Error(json.error ?? "Failed to generate draft");
+      }
+
+      setDraft(id, { status: "done", text: json.response });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      setDraft(id, {
+        status: "error",
+        text: err instanceof Error ? err.message : "Failed to generate draft",
+      });
+    } finally {
+      if (draftAbortRef.current === controller) {
+        draftAbortRef.current = null;
+      }
+    }
+  }
+
+  async function handleMarkResponded(reviewId: string) {
+    setDraft(reviewId, { markingResponded: true, markError: null });
+
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+
+    const { error: updateError } = await supabase
+      .from("reviews")
+      .update({ responded: true })
+      .eq("id", reviewId);
+
+    if (updateError) {
+      setDraft(reviewId, {
+        markingResponded: false,
+        markError: updateError.message,
+      });
+      return;
+    }
+
+    setReviews((prev) =>
+      prev.map((r) => (r.id === reviewId ? { ...r, responded: true } : r)),
+    );
+    setOpenDraftId(null);
+    setDraft(reviewId, {
+      markingResponded: false,
+      markError: null,
+      status: "idle",
+      text: "",
+    });
+  }
 
   async function syncPlatform(
     platform: "tripadvisor" | "google" | "booking",
@@ -729,9 +858,14 @@ export default function ReviewsInboxPage() {
             const complaintTopic = review.complaint_topic ?? review.topic ?? null;
             const responded = review.responded ?? review.has_responded ?? review.is_responded ?? false;
 
+            const reviewId = review.id ?? `${idx}-${platform}-${createdAt}`;
+            const draft = drafts[reviewId] ?? defaultDraft();
+            const isPanelOpen = openDraftId === reviewId;
+            const hasStableId = Boolean(review.id);
+
             return (
               <div
-                key={review.id ?? `${idx}-${platform}-${createdAt}`}
+                key={reviewId}
                 className="rounded-2xl border border-[#222222] bg-[#111111] p-6"
               >
                 <div className="flex flex-wrap items-center gap-2 justify-between">
@@ -746,15 +880,25 @@ export default function ReviewsInboxPage() {
                     <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-900/20 dark:text-emerald-200">
                       <span aria-hidden>✓</span> Responded
                     </span>
-                  ) : (
+                  ) : hasStableId ? (
                     <button
                       type="button"
-                      onClick={() => {}}
-                      className="inline-flex h-10 items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5]"
+                      onClick={() => handleDraftResponse(review)}
+                      disabled={isPanelOpen && draft.status === "loading"}
+                      className="inline-flex h-10 items-center justify-center rounded-[8px] bg-[#6366f1] px-[20px] text-sm font-medium text-white shadow-sm transition hover:bg-[#4f46e5] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Draft response
+                      {isPanelOpen && draft.status === "loading" ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900 dark:border-zinc-700 dark:border-t-zinc-50" />
+                          Generating...
+                        </span>
+                      ) : isPanelOpen ? (
+                        "Hide draft"
+                      ) : (
+                        "Draft response"
+                      )}
                     </button>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="mt-4 text-sm text-[#888888]">
@@ -777,6 +921,59 @@ export default function ReviewsInboxPage() {
                 <div className="mt-3 text-white whitespace-pre-wrap text-sm leading-6">
                   {reviewText || "—"}
                 </div>
+
+                {isPanelOpen && draft.status !== "idle" && hasStableId && (
+                  <div className="mt-4 border-t border-[#222222] pt-4 space-y-3">
+                    {draft.status === "loading" ? (
+                      <div className="flex items-center gap-2 text-sm text-[#888888]">
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#222222] border-t-[#6366f1]" />
+                        Generating...
+                      </div>
+                    ) : draft.status === "error" ? (
+                      <p className="text-sm text-red-400">{draft.text}</p>
+                    ) : (
+                      <>
+                        <textarea
+                          value={draft.text}
+                          onChange={(e) => setDraft(reviewId, { text: e.target.value })}
+                          rows={5}
+                          className="w-full resize-y rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-3 py-2 text-sm text-white outline-none focus:border-[#6366f1]"
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(draft.text);
+                              setDraft(reviewId, { copied: true });
+                              setTimeout(
+                                () => setDraft(reviewId, { copied: false }),
+                                2000,
+                              );
+                            }}
+                            className="inline-flex h-9 items-center justify-center rounded-[8px] border border-[#222222] bg-[#0f0f0f] px-4 text-sm font-medium text-white transition hover:border-[#6366f1]"
+                          >
+                            {draft.copied ? "Copied!" : "Copy"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              review.id && handleMarkResponded(review.id)
+                            }
+                            disabled={draft.markingResponded}
+                            className="inline-flex h-9 items-center justify-center rounded-[8px] bg-emerald-600 px-4 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {draft.markingResponded
+                              ? "Saving..."
+                              : "Mark as responded"}
+                          </button>
+                        </div>
+                        {draft.markError ? (
+                          <p className="text-sm text-red-400">{draft.markError}</p>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
