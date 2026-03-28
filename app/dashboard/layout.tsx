@@ -19,6 +19,7 @@ export default function DashboardLayout({
     () => [
       { href: "/dashboard", label: "Overview" },
       { href: "/dashboard/reviews", label: "Reviews" },
+      { href: "/dashboard/sentiment", label: "Sentiment" },
       { href: "/dashboard/settings", label: "Settings" },
     ],
     [],
