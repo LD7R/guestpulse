@@ -19,7 +19,6 @@ type Stats = {
   positivePct: number;
 };
 
-const pagePad: CSSProperties = { padding: "40px 48px" };
 
 const glass: CSSProperties = {
   background: "var(--glass-bg)",
@@ -301,7 +300,7 @@ export default function OverviewPage() {
 
   if (loading) {
     return (
-      <div style={pagePad}>
+      <div className="overview-page">
         <div
           style={{
             ...glass,
@@ -336,7 +335,7 @@ export default function OverviewPage() {
 
   if (error) {
     return (
-      <div style={pagePad}>
+      <div className="overview-page">
         <div
           style={{
             ...glass,
@@ -360,7 +359,7 @@ export default function OverviewPage() {
   };
 
   return (
-    <div style={pagePad}>
+    <div className="overview-page">
       <div style={{ marginBottom: "32px" }}>
         <h1
           style={{
@@ -428,6 +427,7 @@ export default function OverviewPage() {
       ) : (
         <>
           <div
+            className="ov-stat-row"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
@@ -472,6 +472,7 @@ export default function OverviewPage() {
               Quick actions
             </h2>
             <div
+              className="ov-quick-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
@@ -675,6 +676,20 @@ export default function OverviewPage() {
           </div>
         </>
       )}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media (max-width: 768px) {
+              .overview-page .ov-stat-row {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+              }
+              .overview-page .ov-quick-grid {
+                grid-template-columns: 1fr !important;
+              }
+            }
+          `,
+        }}
+      />
     </div>
   );
 }

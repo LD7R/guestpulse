@@ -1,1 +1,1 @@
-export { default } from "./sentiment-dashboard";
+export { default } from "./command-center";

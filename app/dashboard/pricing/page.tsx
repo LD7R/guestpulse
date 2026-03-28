@@ -14,9 +14,9 @@ const glass: CSSProperties = {
 export default function PricingPage() {
   return (
     <div
+      className="pricing-page"
       style={{
         minHeight: "100vh",
-        padding: "40px 48px",
         background: "var(--bg-gradient)",
         backgroundAttachment: "fixed",
       }}

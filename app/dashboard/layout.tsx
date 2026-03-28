@@ -33,6 +33,16 @@ export default function DashboardLayout({
     [],
   );
 
+  const bottomNav = useMemo(
+    () => [
+      { href: "/dashboard", label: "Home", icon: "⌂" },
+      { href: "/dashboard/reviews", label: "Inbox", icon: "✉" },
+      { href: "/dashboard/settings", label: "Settings", icon: "⚙" },
+      { href: "/dashboard/pricing", label: "Pricing", icon: "$" },
+    ],
+    [],
+  );
+
   useEffect(() => {
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -63,7 +73,6 @@ export default function DashboardLayout({
   }
 
   const asideStyle: CSSProperties = {
-    width: "260px",
     position: "fixed",
     left: 0,
     top: 0,
@@ -92,7 +101,7 @@ export default function DashboardLayout({
 
   return (
     <div style={{ minHeight: "100vh" }}>
-      <aside style={asideStyle}>
+      <aside className="sidebar" style={asideStyle}>
         <div
           style={{
             display: "flex",
@@ -244,9 +253,98 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      <main style={{ marginLeft: "260px", minHeight: "100vh", padding: 0 }}>
-        {children}
-      </main>
+      <main className="main-content">{children}</main>
+
+      <nav className="bottom-nav" aria-label="Mobile navigation">
+        {bottomNav.map((item) => {
+          const active = isActive(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "4px",
+                flex: 1,
+                textDecoration: "none",
+                color: active ? "var(--accent)" : "var(--text-muted)",
+                minWidth: 0,
+              }}
+            >
+              <span style={{ fontSize: "22px", lineHeight: 1, color: "inherit" }}>{item.icon}</span>
+              <span
+                style={{
+                  fontSize: "10px",
+                  fontWeight: 500,
+                  color: "inherit",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            .sidebar {
+              width: 260px;
+            }
+            .main-content {
+              margin-left: 260px;
+              min-height: 100vh;
+              padding: 40px 48px;
+              box-sizing: border-box;
+            }
+            .bottom-nav {
+              display: none;
+              position: fixed;
+              bottom: 0;
+              left: 0;
+              right: 0;
+              z-index: 100;
+              height: 64px;
+              align-items: center;
+              justify-content: space-around;
+              background: var(--sidebar-bg);
+              backdrop-filter: blur(20px);
+              -webkit-backdrop-filter: blur(20px);
+              border-top: 1px solid var(--divider);
+            }
+            @media (min-width: 769px) and (max-width: 1024px) {
+              .sidebar {
+                width: 200px !important;
+              }
+              .main-content {
+                margin-left: 200px !important;
+              }
+            }
+            @media (max-width: 768px) {
+              .sidebar {
+                display: none !important;
+              }
+              .bottom-nav {
+                display: flex !important;
+              }
+              .main-content {
+                margin-left: 0 !important;
+                padding: 20px 16px 80px !important;
+              }
+            }
+            @media (min-width: 769px) {
+              .bottom-nav {
+                display: none !important;
+              }
+            }
+          `,
+        }}
+      />
     </div>
   );
 }

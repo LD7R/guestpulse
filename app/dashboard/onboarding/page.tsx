@@ -117,6 +117,7 @@ export default function HotelOnboardingPage() {
 
   return (
     <div
+      className="onboarding-page"
       style={{
         position: "relative",
         width: "100%",
@@ -131,7 +132,14 @@ export default function HotelOnboardingPage() {
     >
       <style
         dangerouslySetInnerHTML={{
-          __html: `@keyframes ob-spin { to { transform: rotate(360deg) } }`,
+          __html: `
+            @keyframes ob-spin { to { transform: rotate(360deg) } }
+            @media (max-width: 768px) {
+              .onboarding-page {
+                padding: 20px 16px 100px !important;
+              }
+            }
+          `,
         }}
       />
       <div

@@ -39,7 +39,6 @@ type Review = {
   is_responded?: boolean | null;
 };
 
-const pagePad: CSSProperties = { padding: "40px 48px" };
 
 const glass: CSSProperties = {
   background: "var(--glass-bg)",
@@ -107,6 +106,32 @@ const statNum: CSSProperties = {
   color: "var(--text-primary)",
   marginTop: "8px",
 };
+
+const reviewsResponsiveCss = `
+  @media (max-width: 768px) {
+    .reviews-page .rv-filters {
+      grid-template-columns: 1fr !important;
+    }
+    .reviews-page .rv-card-shell {
+      padding: 16px !important;
+    }
+    .reviews-page .rv-star-row {
+      font-size: 14px !important;
+    }
+    .reviews-page .rv-star-row span[aria-hidden] {
+      font-size: 14px !important;
+    }
+    .reviews-page .rv-meta-row > div:first-child {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+    }
+    .reviews-page .rv-draft-wrap button {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+`;
 
 const navLink: CSSProperties = {
   fontSize: "14px",
@@ -215,11 +240,14 @@ function StarRow({ rating }: { rating: number | null }) {
   const filled = Math.max(0, Math.min(5, Math.round(safe)));
   if (filled <= 0) {
     return (
-      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>No rating</span>
+      <span className="rv-star-row" style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+        No rating
+      </span>
     );
   }
   return (
     <span
+      className="rv-star-row"
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -837,7 +865,10 @@ export default function ReviewsInboxPage() {
 
   if (loading) {
     return (
-      <div style={{ ...pagePad, display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+      <div
+        className="reviews-page"
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}
+      >
         <div style={{ ...glass, padding: "20px 28px", display: "flex", alignItems: "center", gap: "12px" }}>
           <span
             style={{
@@ -858,7 +889,7 @@ export default function ReviewsInboxPage() {
 
   if (error) {
     return (
-      <div style={pagePad}>
+      <div className="reviews-page">
         <div style={{ ...glass, padding: "24px", maxWidth: "560px" }}>
           <h1
             style={{
@@ -878,7 +909,7 @@ export default function ReviewsInboxPage() {
 
   if (reviews.length === 0) {
     return (
-      <div style={{ ...pagePad, display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div className="reviews-page" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
         <nav style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
           <Link href="/dashboard" style={navLink}>
             Dashboard
@@ -917,7 +948,10 @@ export default function ReviewsInboxPage() {
             </div>
           </div>
 
-          <div style={{ ...glass, marginTop: "16px", padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
+          <div
+            className="rv-filters"
+            style={{ ...glass, marginTop: "16px", padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}
+          >
             <div>
               <div
                 style={{
@@ -990,12 +1024,13 @@ export default function ReviewsInboxPage() {
             No reviews yet. Once guests leave feedback, it will show up here for response.
           </p>
         </div>
+        <style dangerouslySetInnerHTML={{ __html: reviewsResponsiveCss }} />
       </div>
     );
   }
 
   return (
-    <div style={{ ...pagePad, display: "flex", flexDirection: "column", gap: "20px" }}>
+    <div className="reviews-page" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       <nav style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
           <Link href="/dashboard" style={navLink}>
           Dashboard
@@ -1034,7 +1069,10 @@ export default function ReviewsInboxPage() {
           </div>
         </div>
 
-        <div style={{ ...glass, marginTop: "16px", padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
+        <div
+          className="rv-filters"
+          style={{ ...glass, marginTop: "16px", padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}
+        >
           <div>
             <div
               style={{
@@ -1102,7 +1140,11 @@ export default function ReviewsInboxPage() {
         <SyncMessages syncError={syncError} syncMessage={syncMessage} syncBreakdown={syncBreakdown} />
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `@keyframes rvspin { to { transform: rotate(360deg); } }` }} />
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `@keyframes rvspin { to { transform: rotate(360deg); } } ${reviewsResponsiveCss}`,
+        }}
+      />
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {visibleReviews.map((review, idx) => {
             const platform = review.platform ?? review.source ?? "";
@@ -1123,6 +1165,7 @@ export default function ReviewsInboxPage() {
             return (
               <div
                 key={reviewId}
+                className="rv-card-shell"
                 style={{
                   ...glass,
                   padding: "24px",
@@ -1162,7 +1205,66 @@ export default function ReviewsInboxPage() {
                     >
                       <span aria-hidden>✓</span> Responded
                     </span>
-                  ) : hasStableId ? (
+                  ) : null}
+                </div>
+
+                <div className="rv-meta-row" style={{ marginTop: "12px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <span style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)" }}>
+                      {reviewerName}
+                    </span>
+                    <span style={{ fontSize: "13px", color: "var(--text-label)" }}>{formatDate(createdAt)}</span>
+                  </div>
+                  <div
+                    style={{
+                      marginTop: "8px",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <SentimentBadge sentiment={sentiment} />
+                    {complaintTopic ? (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          borderRadius: "100px",
+                          padding: "4px 10px",
+                          fontSize: "13px",
+                          background: "var(--complaint-pill-bg)",
+                          color: "var(--text-label)",
+                          border: "1px solid var(--complaint-pill-border)",
+                        }}
+                      >
+                        {complaintTopic}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: "12px",
+                    color: "var(--review-text)",
+                    fontSize: "14px",
+                    lineHeight: 1.7,
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {reviewText || "—"}
+                </div>
+
+                {!responded && hasStableId ? (
+                  <div className="rv-draft-wrap" style={{ marginTop: "16px" }}>
                     <button
                       type="button"
                       onClick={() => handleDraftResponse(review)}
@@ -1206,48 +1308,8 @@ export default function ReviewsInboxPage() {
                         "Draft response"
                       )}
                     </button>
-                  ) : null}
-                </div>
-
-                <div style={{ marginTop: "16px" }}>
-                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)" }}>
-                      {reviewerName}
-                    </span>
-                    <span style={{ fontSize: "13px", color: "var(--text-label)" }}>
-                      • {formatDate(createdAt)}
-                    </span>
-                    <SentimentBadge sentiment={sentiment} />
-                    {complaintTopic ? (
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          borderRadius: "100px",
-                          padding: "4px 10px",
-                          fontSize: "13px",
-                          background: "var(--complaint-pill-bg)",
-                          color: "var(--text-label)",
-                          border: "1px solid var(--complaint-pill-border)",
-                        }}
-                      >
-                        {complaintTopic}
-                      </span>
-                    ) : null}
                   </div>
-                </div>
-
-                <div
-                  style={{
-                    marginTop: "12px",
-                    color: "var(--review-text)",
-                    fontSize: "14px",
-                    lineHeight: 1.7,
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {reviewText || "—"}
-                </div>
+                ) : null}
 
                 {isPanelOpen && draft.status !== "idle" && hasStableId && (
                   <div

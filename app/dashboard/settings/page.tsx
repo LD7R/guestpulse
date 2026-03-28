@@ -13,7 +13,6 @@ type Hotel = {
   booking_url: string | null;
 };
 
-const pagePad: CSSProperties = { padding: "40px 48px" };
 
 const glass: CSSProperties = {
   background: "var(--glass-bg)",
@@ -210,7 +209,7 @@ export default function HotelSettingsPage() {
 
   if (loading) {
     return (
-      <div style={pagePad}>
+      <div className="settings-page">
         <div
           style={{
             ...glass,
@@ -245,7 +244,7 @@ export default function HotelSettingsPage() {
 
   if (error) {
     return (
-      <div style={pagePad}>
+      <div className="settings-page">
         <div
           style={{
             ...glass,
@@ -261,7 +260,7 @@ export default function HotelSettingsPage() {
   }
 
   return (
-    <div style={pagePad}>
+    <div className="settings-page">
       <h1
         style={{
           fontSize: "26px",
@@ -287,6 +286,7 @@ export default function HotelSettingsPage() {
         </h2>
 
         <div
+          className="settings-form-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
@@ -427,6 +427,17 @@ export default function HotelSettingsPage() {
           </button>
         </div>
       </form>
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media (max-width: 768px) {
+              .settings-page .settings-form-grid {
+                grid-template-columns: 1fr !important;
+              }
+            }
+          `,
+        }}
+      />
     </div>
   );
 }

@@ -279,9 +279,9 @@ export default function SentimentDashboard() {
   if (loading) {
     return (
       <div
+        className="analytics-page"
         style={{
           minHeight: "100vh",
-          padding: "40px 48px",
           background: "var(--bg-gradient)",
           backgroundAttachment: "fixed",
         }}
@@ -302,6 +302,7 @@ export default function SentimentDashboard() {
           }}
         />
         <div
+          className="sd-stat-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, 1fr)",
@@ -329,9 +330,9 @@ export default function SentimentDashboard() {
   if (error) {
     return (
       <div
+        className="analytics-page"
         style={{
           minHeight: "100vh",
-          padding: "40px 48px",
           background: "var(--bg-gradient)",
           backgroundAttachment: "fixed",
         }}
@@ -343,7 +344,6 @@ export default function SentimentDashboard() {
 
   const pageWrap: CSSProperties = {
     minHeight: "100vh",
-    padding: "40px 48px",
     background: "var(--bg-gradient)",
     backgroundAttachment: "fixed",
   };
@@ -384,7 +384,7 @@ export default function SentimentDashboard() {
   ];
 
   return (
-    <div style={pageWrap}>
+    <div className="analytics-page" style={pageWrap}>
       <header style={{ marginBottom: "24px" }}>
         <h1
           style={{
@@ -401,6 +401,7 @@ export default function SentimentDashboard() {
       </header>
 
       <div
+        className="sd-stat-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
@@ -449,6 +450,7 @@ export default function SentimentDashboard() {
       </div>
 
       <div
+        className="sd-chart-row"
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)",
@@ -623,6 +625,7 @@ export default function SentimentDashboard() {
       </div>
 
       <div
+        className="sd-bottom-row"
         style={{
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
@@ -752,6 +755,28 @@ export default function SentimentDashboard() {
           </Link>
         </div>
       </div>
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media (max-width: 1024px) {
+              .analytics-page .sd-stat-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+              }
+              .analytics-page .sd-chart-row {
+                grid-template-columns: 1fr !important;
+              }
+              .analytics-page .sd-bottom-row {
+                grid-template-columns: 1fr !important;
+              }
+            }
+            @media (max-width: 768px) {
+              .analytics-page .sd-stat-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+              }
+            }
+          `,
+        }}
+      />
     </div>
   );
 }
