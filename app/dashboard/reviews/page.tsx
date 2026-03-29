@@ -42,6 +42,7 @@ type Review = {
   internal_note?: string | null;
   flag_color?: string | null;
   review_date?: string | null;
+  review_url?: string | null;
 };
 
 
@@ -428,6 +429,23 @@ function PlatformBadge({ platform }: { platform: string | null | undefined }) {
       {label}
     </span>
   );
+}
+
+function platformReviewLinkColor(platform: string | null | undefined): string {
+  const p = (platform ?? "").toLowerCase();
+  if (p === "tripadvisor") return "#34d399";
+  if (p === "google") return "#60a5fa";
+  if (p === "booking") return "#a78bfa";
+  return "var(--accent)";
+}
+
+function platformViewOnLabel(platform: string | null | undefined): string {
+  const p = (platform ?? "").toLowerCase();
+  if (p === "tripadvisor") return "TripAdvisor";
+  if (p === "google") return "Google";
+  if (p === "booking") return "Booking.com";
+  const raw = (platform ?? "Platform").trim();
+  return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "Platform";
 }
 
 function SentimentBadge({ sentiment }: { sentiment: string | null | undefined }) {
@@ -1102,6 +1120,11 @@ export default function ReviewsInboxPage() {
     return { total, avgRating, needingResponse };
   }, [reviews]);
 
+  const someReviewsMissingUrl = useMemo(
+    () => reviews.length > 0 && reviews.some((r) => !r.review_url?.trim()),
+    [reviews],
+  );
+
   if (loading) {
     return (
       <div className="reviews-page" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -1185,7 +1208,23 @@ export default function ReviewsInboxPage() {
             >
               Reviews inbox
             </h1>
-            <SyncAllButton syncing={syncing} onSync={handleSyncAllReviews} label="Sync all reviews" />
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
+              <SyncAllButton syncing={syncing} onSync={handleSyncAllReviews} label="Sync all reviews" />
+              {someReviewsMissingUrl ? (
+                <p
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--text-muted)",
+                    fontStyle: "italic",
+                    margin: 0,
+                    textAlign: "right",
+                    maxWidth: "320px",
+                  }}
+                >
+                  Sync reviews to load direct links for older reviews
+                </p>
+              ) : null}
+            </div>
           </div>
 
           <div style={{ marginTop: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px" }}>
@@ -1306,7 +1345,23 @@ export default function ReviewsInboxPage() {
           >
             Reviews inbox
           </h1>
-          <SyncAllButton syncing={syncing} onSync={handleSyncAllReviews} label="Sync all reviews" />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
+            <SyncAllButton syncing={syncing} onSync={handleSyncAllReviews} label="Sync all reviews" />
+            {someReviewsMissingUrl ? (
+              <p
+                style={{
+                  fontSize: "12px",
+                  color: "var(--text-muted)",
+                  fontStyle: "italic",
+                  margin: 0,
+                  textAlign: "right",
+                  maxWidth: "320px",
+                }}
+              >
+                Sync reviews to load direct links for older reviews
+              </p>
+            ) : null}
+          </div>
         </div>
 
         <div style={{ marginTop: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px" }}>
@@ -1526,6 +1581,7 @@ export default function ReviewsInboxPage() {
               review.sentiment ?? review.sentiment_label ?? "neutral";
             const complaintTopic = review.complaint_topic ?? review.topic ?? null;
             const responded = review.responded ?? review.has_responded ?? review.is_responded ?? false;
+            const externalReviewUrl = review.review_url?.trim() || null;
 
             const reviewId = review.id ?? `${idx}-${platform}-${createdAt}`;
             const draft = drafts[reviewId] ?? defaultDraft();
@@ -1568,6 +1624,28 @@ export default function ReviewsInboxPage() {
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                     <PlatformBadge platform={platform} />
+                    {externalReviewUrl ? (
+                      <a
+                        href={externalReviewUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontSize: "12px",
+                          color: platformReviewLinkColor(platform),
+                          textDecoration: "none",
+                          background: "transparent",
+                          lineHeight: 1.4,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.textDecoration = "underline";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.textDecoration = "none";
+                        }}
+                      >
+                        View on {platformViewOnLabel(platform)} ↗
+                      </a>
+                    ) : null}
                     <StarRow rating={rating} />
                   </div>
 

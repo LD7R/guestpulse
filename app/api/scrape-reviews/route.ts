@@ -20,6 +20,8 @@ type ApifyReviewItem = {
   review?: string | { positive?: string; negative?: string };
   reviewDate?: string;
   stayDate?: string;
+  url?: string;
+  reviewUrl?: string;
   [key: string]: unknown;
 };
 
@@ -307,6 +309,7 @@ export async function POST(request: NextRequest) {
       review_date: string | null;
       sentiment: null;
       responded: boolean;
+      review_url: string | null;
     }> = [];
     let skippedDuplicates = 0;
 
@@ -346,6 +349,8 @@ export async function POST(request: NextRequest) {
           : platform === "booking"
             ? Boolean(item.ownerResponse)
           : Boolean(item.ownerResponse);
+
+      const reviewUrl = (item.url || item.reviewUrl || null) as string | null;
 
       // Skip duplicate only when reviewer_name matches and review_date is on the same day.
       const dayBounds = getDayBounds(reviewDate);
@@ -388,6 +393,7 @@ export async function POST(request: NextRequest) {
         review_date: reviewDate,
         sentiment: null,
         responded,
+        review_url: reviewUrl,
       });
     }
 
