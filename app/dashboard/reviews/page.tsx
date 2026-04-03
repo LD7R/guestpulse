@@ -43,6 +43,7 @@ type Review = {
   flag_color?: string | null;
   review_date?: string | null;
   review_url?: string | null;
+  topic_type?: string | null;
 };
 
 
@@ -446,6 +447,92 @@ function platformViewOnLabel(platform: string | null | undefined): string {
   if (p === "booking") return "Booking.com";
   const raw = (platform ?? "Platform").trim();
   return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "Platform";
+}
+
+const IMPROVEMENT_TOPIC_PILL_COLORS: Record<string, string> = {
+  wifi: "#60a5fa",
+  noise: "#fb923c",
+  cleanliness: "#ef4444",
+  breakfast: "#eab308",
+  value: "#f59e0b",
+  room: "#6366f1",
+  checkin: "#14b8a6",
+  bathroom: "#ef4444",
+  parking: "#6b7280",
+  staff: "#ef4444",
+  location: "#f97316",
+  service: "#ef4444",
+  amenities: "#a855f7",
+  food: "#eab308",
+  pool: "#06b6d4",
+};
+
+function improvementTopicColor(slug: string): string {
+  return IMPROVEMENT_TOPIC_PILL_COLORS[slug.toLowerCase()] ?? "#ef4444";
+}
+
+function TopicPill({
+  topicSlug,
+  topicType,
+}: {
+  topicSlug: string;
+  topicType: string | null | undefined;
+}) {
+  const tt = (topicType ?? "").toLowerCase().trim();
+  const label = topicSlug.charAt(0).toUpperCase() + topicSlug.slice(1);
+  if (tt === "strength") {
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          borderRadius: "100px",
+          padding: "4px 10px",
+          fontSize: "13px",
+          background: "rgba(34,197,94,0.12)",
+          color: "#22c55e",
+          border: "1px solid rgba(34,197,94,0.25)",
+        }}
+      >
+        ✓ {label}
+      </span>
+    );
+  }
+  if (tt === "improvement") {
+    const c = improvementTopicColor(topicSlug);
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          borderRadius: "100px",
+          padding: "4px 10px",
+          fontSize: "13px",
+          background: `${c}22`,
+          color: c,
+          border: `1px solid ${c}55`,
+        }}
+      >
+        ↑ {label}
+      </span>
+    );
+  }
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        borderRadius: "100px",
+        padding: "4px 10px",
+        fontSize: "13px",
+        background: "var(--complaint-pill-bg)",
+        color: "var(--text-label)",
+        border: "1px solid var(--complaint-pill-border)",
+      }}
+    >
+      {label}
+    </span>
+  );
 }
 
 function SentimentBadge({ sentiment }: { sentiment: string | null | undefined }) {
@@ -1972,20 +2059,7 @@ export default function ReviewsInboxPage() {
                   >
                     <SentimentBadge sentiment={sentiment} />
                     {complaintTopic ? (
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          borderRadius: "100px",
-                          padding: "4px 10px",
-                          fontSize: "13px",
-                          background: "var(--complaint-pill-bg)",
-                          color: "var(--text-label)",
-                          border: "1px solid var(--complaint-pill-border)",
-                        }}
-                      >
-                        {complaintTopic}
-                      </span>
+                      <TopicPill topicSlug={complaintTopic} topicType={review.topic_type} />
                     ) : null}
                   </div>
                 </div>

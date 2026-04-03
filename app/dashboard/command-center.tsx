@@ -40,7 +40,58 @@ type AnalyticsRow = {
   rating: unknown;
   sentiment: string | null;
   complaint_topic: string | null;
+  topic_type: string | null;
 };
+
+/** Progress / pill colors for "What guests love" (all green family) */
+const STRENGTH_TOPIC_GREEN: Record<string, string> = {
+  staff: "#22c55e",
+  location: "#16a34a",
+  breakfast: "#4ade80",
+  room: "#86efac",
+  service: "#bbf7d0",
+  amenities: "#22c55e",
+  cleanliness: "#15803d",
+  wifi: "#4ade80",
+  noise: "#16a34a",
+  value: "#22c55e",
+  checkin: "#4ade80",
+  bathroom: "#86efac",
+  food: "#4ade80",
+  parking: "#15803d",
+  pool: "#22c55e",
+};
+
+function strengthGreenForTopic(topic: string): string {
+  return STRENGTH_TOPIC_GREEN[topic.toLowerCase()] ?? "#22c55e";
+}
+
+/** "What to improve" topic-specific colors */
+const IMPROVEMENT_TOPIC_COLORS: Record<string, string> = {
+  wifi: "#60a5fa",
+  noise: "#fb923c",
+  cleanliness: "#ef4444",
+  breakfast: "#eab308",
+  value: "#f59e0b",
+  room: "#6366f1",
+  checkin: "#14b8a6",
+  bathroom: "#ef4444",
+  parking: "#6b7280",
+  staff: "#ef4444",
+  location: "#f97316",
+  service: "#ef4444",
+  amenities: "#a855f7",
+  food: "#eab308",
+  pool: "#06b6d4",
+};
+
+function improvementColorForTopic(topic: string): string {
+  return IMPROVEMENT_TOPIC_COLORS[topic.toLowerCase()] ?? "#ef4444";
+}
+
+function normTopicType(v: string | null | undefined): string {
+  return (v ?? "").toLowerCase().trim();
+}
 
 const RATING_BAR_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"];
 
@@ -272,7 +323,7 @@ export default function CommandCenterPage() {
 
     const { data: ratingRows, error: ratingError } = await supabase
       .from("reviews")
-      .select("rating, sentiment, complaint_topic")
+      .select("rating, sentiment, complaint_topic, topic_type")
       .in("hotel_id", hotelIds);
 
     if (ratingError) throw ratingError;
@@ -721,15 +772,32 @@ export default function CommandCenterPage() {
     };
   }, [analyticsRows]);
 
-  const topComplaints = useMemo(() => {
+  const topStrengthTopics = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of analyticsRows) {
+      if (normTopicType(r.topic_type) !== "strength") continue;
       const t = r.complaint_topic?.trim();
       if (!t) continue;
-      map.set(t, (map.get(t) ?? 0) + 1);
+      const key = t.toLowerCase();
+      map.set(key, (map.get(key) ?? 0) + 1);
     }
     const sorted = [...map.entries()].sort((a, b) => b[1] - a[1]);
-    const top = sorted.slice(0, 6);
+    const top = sorted.slice(0, 5);
+    const max = top.length ? Math.max(...top.map(([, c]) => c)) : 1;
+    return top.map(([topic, count]) => ({ topic, count, max }));
+  }, [analyticsRows]);
+
+  const topImprovementTopics = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of analyticsRows) {
+      if (normTopicType(r.topic_type) !== "improvement") continue;
+      const t = r.complaint_topic?.trim();
+      if (!t) continue;
+      const key = t.toLowerCase();
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    const sorted = [...map.entries()].sort((a, b) => b[1] - a[1]);
+    const top = sorted.slice(0, 5);
     const max = top.length ? Math.max(...top.map(([, c]) => c)) : 1;
     return top.map(([topic, count]) => ({ topic, count, max }));
   }, [analyticsRows]);
@@ -879,7 +947,8 @@ export default function CommandCenterPage() {
             .command-center .cc-stat-icon { position: absolute; top: 20px; right: 20px; width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: var(--glass-bg); border: 1px solid var(--glass-border); }
             .command-center .cc-quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
             .command-center .cc-analytics-row1 { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-bottom: 16px; align-items: stretch; }
-            .command-center .cc-analytics-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; align-items: stretch; }
+            .command-center .cc-analytics-row-topics { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 16px; align-items: stretch; }
+            .command-center .cc-analytics-row2 { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 24px; align-items: stretch; }
             .command-center .cc-pie-wrap { display: flex; flex: 1; align-items: center; gap: 20px; min-height: 0; min-width: 0; }
             @media (max-width: 1024px) {
               .command-center .cc-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -887,6 +956,7 @@ export default function CommandCenterPage() {
             }
             @media (max-width: 768px) {
               .command-center .cc-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+              .command-center .cc-analytics-row-topics { grid-template-columns: 1fr; }
               .command-center .cc-analytics-row2 { grid-template-columns: 1fr; }
               .command-center .cc-pie-wrap { flex-direction: column; }
             }
@@ -1208,90 +1278,197 @@ export default function CommandCenterPage() {
               </div>
             </div>
 
-            <div className="cc-analytics-row2">
-              <div style={{ ...glass, padding: "24px" }}>
+            <div className="cc-analytics-row-topics">
+              <div
+                style={{
+                  ...glass,
+                  padding: "24px",
+                  background: "rgba(34,197,94,0.04)",
+                  border: "1px solid rgba(34,197,94,0.12)",
+                }}
+              >
                 <h2
                   style={{
                     fontSize: "17px",
                     fontWeight: 600,
-                    color: "var(--text-primary)",
+                    color: "#22c55e",
                     margin: "0 0 16px 0",
                   }}
                 >
-                  Top complaint topics
+                  What guests love ✓
                 </h2>
-                {topComplaints.length === 0 ? (
+                {topStrengthTopics.length === 0 ? (
                   <p style={{ color: "var(--text-muted)", fontSize: "14px", margin: 0, lineHeight: 1.6 }}>
-                    No complaint data yet — sync and classify reviews to see topics
+                    No strength data yet — classify your reviews to see what guests love most
                   </p>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                    {topComplaints.map(({ topic, count, max }) => (
-                      <div
-                        key={topic}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "12px",
-                        }}
-                      >
+                    {topStrengthTopics.map(({ topic, count, max }) => {
+                      const g = strengthGreenForTopic(topic);
+                      return (
                         <div
+                          key={topic}
                           style={{
-                            flex: "0 0 28%",
-                            minWidth: 0,
-                            fontSize: "13px",
-                            padding: "6px 10px",
-                            borderRadius: "100px",
-                            background: "var(--glass-bg)",
-                            border: "1px solid var(--glass-border)",
-                            color: "var(--text-primary)",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                          title={topic}
-                        >
-                          {topic}
-                        </div>
-                        <div
-                          style={{
-                            flex: 1,
-                            height: "6px",
-                            borderRadius: "100px",
-                            background: "var(--glass-bg)",
-                            overflow: "hidden",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "12px",
                           }}
                         >
                           <div
                             style={{
-                              height: "100%",
-                              width: `${(count / max) * 100}%`,
+                              flex: "0 0 28%",
+                              minWidth: 0,
+                              fontSize: "13px",
+                              padding: "6px 10px",
                               borderRadius: "100px",
-                              background: "linear-gradient(90deg, #6366f1, #8b5cf6)",
-                              transition: "width 0.8s ease",
+                              background: "rgba(34,197,94,0.12)",
+                              border: `1px solid ${g}33`,
+                              color: g,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              fontWeight: 600,
                             }}
-                          />
+                            title={topic}
+                          >
+                            {topic.charAt(0).toUpperCase() + topic.slice(1)}
+                          </div>
+                          <div
+                            style={{
+                              flex: 1,
+                              height: "6px",
+                              borderRadius: "100px",
+                              background: "var(--glass-bg)",
+                              overflow: "hidden",
+                            }}
+                          >
+                            <div
+                              style={{
+                                height: "100%",
+                                width: `${(count / max) * 100}%`,
+                                borderRadius: "100px",
+                                background: g,
+                                transition: "width 0.8s ease",
+                              }}
+                            />
+                          </div>
+                          <span
+                            style={{
+                              flex: "0 0 auto",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              padding: "2px 10px",
+                              borderRadius: "100px",
+                              background: "rgba(34,197,94,0.15)",
+                              color: "#15803d",
+                              border: "1px solid rgba(34,197,94,0.25)",
+                            }}
+                          >
+                            {count}
+                          </span>
                         </div>
-                        <span
-                          style={{
-                            flex: "0 0 auto",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            padding: "2px 10px",
-                            borderRadius: "100px",
-                            background: "var(--accent-bg)",
-                            color: "var(--accent)",
-                            border: "1px solid var(--accent-border)",
-                          }}
-                        >
-                          {count}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
 
+              <div
+                style={{
+                  ...glass,
+                  padding: "24px",
+                  background: "rgba(239,68,68,0.04)",
+                  border: "1px solid rgba(239,68,68,0.12)",
+                }}
+              >
+                <h2
+                  style={{
+                    fontSize: "17px",
+                    fontWeight: 600,
+                    color: "#ef4444",
+                    margin: "0 0 16px 0",
+                  }}
+                >
+                  What to improve ↑
+                </h2>
+                {topImprovementTopics.length === 0 ? (
+                  <p style={{ color: "var(--text-muted)", fontSize: "14px", margin: 0, lineHeight: 1.6 }}>
+                    No improvement data yet — classify your reviews first
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                    {topImprovementTopics.map(({ topic, count, max }) => {
+                      const c = improvementColorForTopic(topic);
+                      return (
+                        <div
+                          key={topic}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "12px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              flex: "0 0 28%",
+                              minWidth: 0,
+                              fontSize: "13px",
+                              padding: "6px 10px",
+                              borderRadius: "100px",
+                              background: `${c}22`,
+                              border: `1px solid ${c}44`,
+                              color: c,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              fontWeight: 600,
+                            }}
+                            title={topic}
+                          >
+                            {topic.charAt(0).toUpperCase() + topic.slice(1)}
+                          </div>
+                          <div
+                            style={{
+                              flex: 1,
+                              height: "6px",
+                              borderRadius: "100px",
+                              background: "var(--glass-bg)",
+                              overflow: "hidden",
+                            }}
+                          >
+                            <div
+                              style={{
+                                height: "100%",
+                                width: `${(count / max) * 100}%`,
+                                borderRadius: "100px",
+                                background: c,
+                                transition: "width 0.8s ease",
+                              }}
+                            />
+                          </div>
+                          <span
+                            style={{
+                              flex: "0 0 auto",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              padding: "2px 10px",
+                              borderRadius: "100px",
+                              background: "rgba(239,68,68,0.1)",
+                              color: "#ef4444",
+                              border: "1px solid rgba(239,68,68,0.2)",
+                            }}
+                          >
+                            {count}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="cc-analytics-row2">
               <div style={{ ...glass, padding: "24px" }}>
                 <h2
                   style={{

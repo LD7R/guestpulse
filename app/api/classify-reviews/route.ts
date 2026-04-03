@@ -1,3 +1,7 @@
+/**
+ * Run in Supabase:
+ * alter table public.reviews add column if not exists topic_type text;
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -47,7 +51,7 @@ export async function POST(request: NextRequest) {
       .from("reviews")
       .select("id, review_text, rating, platform")
       .eq("hotel_id", hotel_id)
-      .or("sentiment.is.null,complaint_topic.is.null")
+      .or("sentiment.is.null,complaint_topic.is.null,topic_type.is.null")
       .limit(50);
 
     if (fetchError) {
@@ -101,15 +105,30 @@ export async function POST(request: NextRequest) {
               },
               body: JSON.stringify({
                 model: "claude-haiku-4-5-20251001",
-                max_tokens: 100,
+                max_tokens: 200,
                 messages: [
                   {
                     role: "user",
                     content: `Analyze this hotel review. Respond with ONLY a JSON object, no markdown:
-{"sentiment":"positive"|"neutral"|"negative","topic":"wifi"|"noise"|"cleanliness"|"breakfast"|"staff"|"location"|"value"|"room"|"checkin"|"bathroom"|"food"|"parking"|"pool"|"amenities"|"service"|null}
+{
+  "sentiment": "positive"|"neutral"|"negative",
+  "topic": "wifi"|"noise"|"cleanliness"|"breakfast"|"staff"|"location"|"value"|"room"|"checkin"|"bathroom"|"food"|"parking"|"pool"|"amenities"|"service"|null,
+  "topic_type": "strength"|"improvement"|null
+}
 
-Sentiment: positive=rating 4-5 happy tone, negative=rating 1-2 or strong complaints, neutral=rating 3 or mixed.
-Topic: single most prominent complaint. null if purely positive with no specific issue.
+Sentiment rules:
+- positive: rating 4-5 AND happy tone
+- negative: rating 1-2 OR strong complaints
+- neutral: rating 3 OR mixed feelings
+
+Topic rules:
+- Pick the single most prominent topic mentioned
+- null if no specific topic
+
+Topic type rules:
+- strength: guest is praising this aspect (e.g. "staff was amazing", "breakfast was excellent")
+- improvement: guest is complaining about this aspect (e.g. "wifi was terrible", "room was noisy")
+- null if no specific topic
 
 Rating: ${review.rating}/5
 Review: ${review.review_text || "No text provided"}`,
@@ -135,25 +154,43 @@ Review: ${review.review_text || "No text provided"}`,
             const text = data.content?.[0]?.text?.trim();
             if (!text) return;
 
-            let parsed: { sentiment: string; topic: string | null };
+            let parsed: {
+              sentiment: string;
+              topic: string | null;
+              topic_type?: string | null;
+            };
             try {
-              parsed = JSON.parse(text) as { sentiment: string; topic: string | null };
+              parsed = JSON.parse(text) as {
+                sentiment: string;
+                topic: string | null;
+                topic_type?: string | null;
+              };
             } catch {
               const match = text.match(/\{[\s\S]*\}/);
               if (!match) return;
-              parsed = JSON.parse(match[0]) as { sentiment: string; topic: string | null };
+              parsed = JSON.parse(match[0]) as {
+                sentiment: string;
+                topic: string | null;
+                topic_type?: string | null;
+              };
             }
 
             const sentiment = validSentiments.includes(parsed.sentiment)
               ? parsed.sentiment
               : null;
             const topic = validTopics.includes(parsed.topic) ? parsed.topic : null;
+            const topicType = ["strength", "improvement"].includes(
+              String(parsed.topic_type ?? ""),
+            )
+              ? (parsed.topic_type as "strength" | "improvement")
+              : null;
 
             const { error: updateError } = await supabase
               .from("reviews")
               .update({
                 sentiment,
                 complaint_topic: topic,
+                topic_type: topicType,
               })
               .eq("id", review.id);
 
