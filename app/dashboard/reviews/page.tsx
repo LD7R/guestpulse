@@ -507,16 +507,19 @@ function SyncAllButton({
   syncing,
   onSync,
   label,
+  disabledExternally,
 }: {
   syncing: boolean;
   onSync: () => Promise<void>;
   label: string;
+  disabledExternally?: boolean;
 }) {
+  const disabled = syncing || Boolean(disabledExternally);
   return (
     <button
       type="button"
       onClick={onSync}
-      disabled={syncing}
+      disabled={disabled}
       style={{
         ...glassPrimary,
         padding: "12px 24px",
@@ -525,11 +528,11 @@ function SyncAllButton({
         alignItems: "center",
         justifyContent: "center",
         gap: "8px",
-        opacity: syncing ? 0.65 : 1,
-        cursor: syncing ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.65 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
       }}
       onMouseEnter={(e) => {
-        if (!syncing)
+        if (!disabled)
           e.currentTarget.style.background = "var(--btn-primary-hover)";
       }}
       onMouseLeave={(e) => {
@@ -552,6 +555,60 @@ function SyncAllButton({
         </>
       ) : (
         label
+      )}
+    </button>
+  );
+}
+
+function AutoClassifyButton({
+  classifying,
+  onClassify,
+  disabledExternally,
+}: {
+  classifying: boolean;
+  onClassify: () => Promise<void>;
+  disabledExternally?: boolean;
+}) {
+  const disabled = classifying || Boolean(disabledExternally);
+  return (
+    <button
+      type="button"
+      onClick={onClassify}
+      disabled={disabled}
+      style={{
+        ...glassSecondary,
+        padding: "12px 24px",
+        fontSize: "14px",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "8px",
+        opacity: disabled ? 0.65 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
+      onMouseEnter={(e) => {
+        if (!disabled) e.currentTarget.style.background = "var(--secondary-btn-hover)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "var(--secondary-btn-bg)";
+      }}
+    >
+      {classifying ? (
+        <>
+          <span
+            style={{
+              width: "16px",
+              height: "16px",
+              borderRadius: "50%",
+              border: "2px solid var(--spinner-track)",
+              borderTopColor: "var(--text-primary)",
+              animation: "rvspin 0.8s linear infinite",
+            }}
+          />
+          Classifying…
+        </>
+      ) : (
+        "Auto-classify"
       )}
     </button>
   );
@@ -586,6 +643,7 @@ export default function ReviewsInboxPage() {
   const draftAbortRef = useRef<AbortController | null>(null);
 
   const [syncing, setSyncing] = useState(false);
+  const [classifying, setClassifying] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncBreakdown, setSyncBreakdown] = useState<{
@@ -1013,6 +1071,80 @@ export default function ReviewsInboxPage() {
     }
   }
 
+  async function handleAutoClassify() {
+    setSyncError(null);
+    setSyncMessage(null);
+    setSyncBreakdown(null);
+    try {
+      setClassifying(true);
+
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw new Error(userError.message);
+      }
+
+      if (!user?.id) {
+        throw new Error("You must be signed in to classify reviews.");
+      }
+
+      const { data: hotel, error: hotelError } = await supabase
+        .from("hotels")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (hotelError) {
+        throw new Error(hotelError.message);
+      }
+
+      if (!hotel?.id) {
+        throw new Error("No hotel found. Add one in Settings first.");
+      }
+
+      const res = await fetch("/api/classify-reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hotel_id: hotel.id }),
+      });
+
+      const json = (await res.json()) as {
+        success?: boolean;
+        classified?: number;
+        total?: number;
+        error?: string;
+      };
+
+      if (!res.ok || json.success !== true) {
+        throw new Error(json.error ?? "Classification failed");
+      }
+
+      const total = json.total ?? 0;
+      const n = json.classified ?? 0;
+      setSyncMessage(
+        total === 0
+          ? "No reviews needed classification."
+          : `Classified ${n} of ${total} review${total === 1 ? "" : "s"}.`,
+      );
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      setSyncError(
+        err instanceof Error ? err.message : "Failed to classify reviews.",
+      );
+    } finally {
+      setClassifying(false);
+    }
+  }
+
   useEffect(() => {
     let isCancelled = false;
 
@@ -1209,7 +1341,27 @@ export default function ReviewsInboxPage() {
               Reviews inbox
             </h1>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-              <SyncAllButton syncing={syncing} onSync={handleSyncAllReviews} label="Sync all reviews" />
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  gap: "10px",
+                }}
+              >
+                <SyncAllButton
+                  syncing={syncing}
+                  disabledExternally={classifying}
+                  onSync={handleSyncAllReviews}
+                  label="Sync all reviews"
+                />
+                <AutoClassifyButton
+                  classifying={classifying}
+                  disabledExternally={syncing}
+                  onClassify={handleAutoClassify}
+                />
+              </div>
               {someReviewsMissingUrl ? (
                 <p
                   style={{
@@ -1346,7 +1498,27 @@ export default function ReviewsInboxPage() {
             Reviews inbox
           </h1>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-            <SyncAllButton syncing={syncing} onSync={handleSyncAllReviews} label="Sync all reviews" />
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                gap: "10px",
+              }}
+            >
+              <SyncAllButton
+                syncing={syncing}
+                disabledExternally={classifying}
+                onSync={handleSyncAllReviews}
+                label="Sync all reviews"
+              />
+              <AutoClassifyButton
+                classifying={classifying}
+                disabledExternally={syncing}
+                onClassify={handleAutoClassify}
+              />
+            </div>
             {someReviewsMissingUrl ? (
               <p
                 style={{
