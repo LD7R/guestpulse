@@ -352,12 +352,11 @@ export default function SettingsPage() {
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       );
+
       const {
         data: { user },
-        error: userError,
       } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      if (!user) throw new Error("You must be signed in.");
+      if (!user) throw new Error("Not authenticated");
 
       if (!hotelName.trim()) throw new Error("Hotel name is required.");
 
@@ -365,32 +364,57 @@ export default function SettingsPage() {
       const room_count =
         roomsParsed !== null && !Number.isNaN(roomsParsed) ? roomsParsed : null;
 
-      const payload = {
+      const fields = {
         name: hotelName.trim(),
-        phone: phone.trim() || null,
-        website: website.trim() || null,
-        room_count,
+        tripadvisor_url: tripadvisorUrl.trim() || null,
+        google_url: googleUrl.trim() || null,
+        booking_url: bookingUrl.trim() || null,
         address: address.trim() || null,
         city: city.trim() || null,
         country: country.trim() || null,
         postal_code: postalCode.trim() || null,
-        tripadvisor_url: tripadvisorUrl.trim() || null,
-        google_url: googleUrl.trim() || null,
-        booking_url: bookingUrl.trim() || null,
+        phone: phone.trim() || null,
+        website: website.trim() || null,
         response_signature: responseSignature.trim() || "The Management Team",
+        room_count,
       };
 
-      if (hotelId) {
-        const { error: updateError } = await supabase.from("hotels").update(payload).eq("id", hotelId);
-        if (updateError) throw updateError;
-        setHotel((prev) => (prev ? { ...prev, ...payload, id: hotelId, user_id: user.id } : prev));
+      const { data: existing, error: existingError } = await supabase
+        .from("hotels")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
+
+      if (existingError) {
+        console.error("Full error:", JSON.stringify(existingError, null, 2));
+        if (existingError.code !== "PGRST116") {
+          throw existingError;
+        }
+      }
+
+      if (existing?.id) {
+        const { error } = await supabase.from("hotels").update(fields).eq("user_id", user.id);
+        if (error) {
+          console.error("Full error:", JSON.stringify(error, null, 2));
+          throw error;
+        }
+        setHotel((prev) =>
+          prev ? { ...prev, ...fields, id: existing.id, user_id: user.id } : prev,
+        );
+        setHotelId(existing.id);
       } else {
-        const { data: inserted, error: insertError } = await supabase
+        const { data: inserted, error } = await supabase
           .from("hotels")
-          .insert({ ...payload, user_id: user.id })
+          .insert({
+            ...fields,
+            user_id: user.id,
+          })
           .select("*")
           .single();
-        if (insertError) throw insertError;
+        if (error) {
+          console.error("Full error:", JSON.stringify(error, null, 2));
+          throw error;
+        }
         const insertedHotel = inserted as HotelRow;
         setHotelId(insertedHotel.id);
         setHotel(insertedHotel);
@@ -398,6 +422,7 @@ export default function SettingsPage() {
 
       showToast("success", "✓ Settings saved");
     } catch (err) {
+      console.error("Full error:", JSON.stringify(err, null, 2));
       showToast("error", err instanceof Error ? err.message : "Failed to save hotel.");
     } finally {
       setSavingHotel(false);
