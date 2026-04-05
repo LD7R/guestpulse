@@ -701,7 +701,8 @@ function AutoClassifyButton({
   );
 }
 
-type DraftState = {
+type DraftResponseEntry = {
+  isOpen: boolean;
   status: "idle" | "loading" | "done" | "error";
   text: string;
   copied: boolean;
@@ -709,7 +710,8 @@ type DraftState = {
   markError: string | null;
 };
 
-const defaultDraft = (): DraftState => ({
+const defaultDraftResponse = (): DraftResponseEntry => ({
+  isOpen: false,
   status: "idle",
   text: "",
   copied: false,
@@ -724,9 +726,7 @@ export default function ReviewsInboxPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // reviewId of the currently open draft panel (only one at a time)
-  const [openDraftId, setOpenDraftId] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
+  const [draftResponses, setDraftResponses] = useState<Record<string, DraftResponseEntry>>({});
   const draftAbortRef = useRef<AbortController | null>(null);
 
   const [syncing, setSyncing] = useState(false);
@@ -745,6 +745,7 @@ export default function ReviewsInboxPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [periodDays, setPeriodDays] = useState<7 | 30 | 90 | "all">(30);
+  const [reviewType, setReviewType] = useState<"all" | "with-text" | "star-only">("all");
   const [sortBy, setSortBy] = useState<
     "newest" | "oldest" | "lowRating" | "highRating" | "needsFirst" | "flaggedFirst"
   >("newest");
@@ -791,6 +792,17 @@ export default function ReviewsInboxPage() {
 
       return platformOk && sentimentOk && respondedOk;
     });
+
+    if (reviewType !== "all") {
+      list = list.filter((review) => {
+        const raw = review.review_text ?? review.body ?? review.text ?? null;
+        const s = raw == null ? "" : String(raw).trim();
+        const hasText = s !== "" && s !== "—";
+        if (reviewType === "with-text") return hasText;
+        if (reviewType === "star-only") return !hasText;
+        return true;
+      });
+    }
 
     const q = searchQuery.trim().toLowerCase();
     if (q) {
@@ -859,6 +871,7 @@ export default function ReviewsInboxPage() {
     platformFilter,
     sentimentFilter,
     respondedFilter,
+    reviewType,
     searchQuery,
     periodDays,
     sortBy,
@@ -867,10 +880,10 @@ export default function ReviewsInboxPage() {
   const filteredCount = visibleReviews.length;
   const totalCount = reviews.length;
 
-  function setDraft(reviewId: string, patch: Partial<DraftState>) {
-    setDrafts((prev) => ({
+  function patchDraftResponse(reviewId: string, patch: Partial<DraftResponseEntry>) {
+    setDraftResponses((prev) => ({
       ...prev,
-      [reviewId]: { ...defaultDraft(), ...prev[reviewId], ...patch },
+      [reviewId]: { ...defaultDraftResponse(), ...prev[reviewId], ...patch },
     }));
   }
 
@@ -878,10 +891,17 @@ export default function ReviewsInboxPage() {
     const id = review.id;
     if (!id) return;
 
-    if (openDraftId === id) {
+    const cur = draftResponses[id];
+
+    if (cur?.isOpen) {
       draftAbortRef.current?.abort();
       draftAbortRef.current = null;
-      setOpenDraftId(null);
+      patchDraftResponse(id, { isOpen: false });
+      return;
+    }
+
+    if (cur?.status === "done") {
+      patchDraftResponse(id, { isOpen: true });
       return;
     }
 
@@ -889,14 +909,8 @@ export default function ReviewsInboxPage() {
     const controller = new AbortController();
     draftAbortRef.current = controller;
 
-    setOpenDraftId(id);
-
-    if (drafts[id]?.status === "done") {
-      draftAbortRef.current = null;
-      return;
-    }
-
-    setDraft(id, {
+    patchDraftResponse(id, {
+      isOpen: true,
       status: "loading",
       text: "",
       markError: null,
@@ -928,10 +942,10 @@ export default function ReviewsInboxPage() {
         throw new Error(json.error ?? "Failed to generate draft");
       }
 
-      setDraft(id, { status: "done", text: json.response });
+      patchDraftResponse(id, { status: "done", text: json.response });
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
-      setDraft(id, {
+      patchDraftResponse(id, {
         status: "error",
         text: err instanceof Error ? err.message : "Failed to generate draft",
       });
@@ -943,7 +957,7 @@ export default function ReviewsInboxPage() {
   }
 
   async function handleMarkResponded(reviewId: string) {
-    setDraft(reviewId, { markingResponded: true, markError: null });
+    patchDraftResponse(reviewId, { markingResponded: true, markError: null });
 
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -956,7 +970,7 @@ export default function ReviewsInboxPage() {
       .eq("id", reviewId);
 
     if (updateError) {
-      setDraft(reviewId, {
+      patchDraftResponse(reviewId, {
         markingResponded: false,
         markError: updateError.message,
       });
@@ -966,12 +980,10 @@ export default function ReviewsInboxPage() {
     setReviews((prev) =>
       prev.map((r) => (r.id === reviewId ? { ...r, responded: true } : r)),
     );
-    setOpenDraftId(null);
-    setDraft(reviewId, {
-      markingResponded: false,
-      markError: null,
-      status: "idle",
-      text: "",
+    setDraftResponses((prev) => {
+      const next = { ...prev };
+      delete next[reviewId];
+      return next;
     });
   }
 
@@ -1732,6 +1744,40 @@ export default function ReviewsInboxPage() {
                 })}
               </div>
             </div>
+            <div>
+              <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "8px" }}>Review type</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                {(
+                  [
+                    { v: "all" as const, label: "All" },
+                    { v: "with-text" as const, label: "With text" },
+                    { v: "star-only" as const, label: "Star only" },
+                  ] as const
+                ).map((opt) => {
+                  const active = reviewType === opt.v;
+                  return (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => setReviewType(opt.v)}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "100px",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        border: active ? "1px solid var(--accent-border)" : "1px solid var(--glass-border)",
+                        background: active ? "var(--accent-bg)" : "var(--glass-bg)",
+                        color: active ? "var(--accent)" : "var(--text-secondary)",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div style={{ minWidth: "200px", flex: "1 1 200px" }}>
               <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "8px" }}>Sort</div>
               <select
@@ -1843,8 +1889,8 @@ export default function ReviewsInboxPage() {
             const externalReviewUrl = review.review_url?.trim() || null;
 
             const reviewId = review.id ?? `${idx}-${platform}-${createdAt}`;
-            const draft = drafts[reviewId] ?? defaultDraft();
-            const isPanelOpen = openDraftId === reviewId;
+            const draft = draftResponses[reviewId] ?? defaultDraftResponse();
+            const isPanelOpen = draft.isOpen;
             const hasStableId = Boolean(review.id);
             const dateLabel = formatDate(getReviewDate(review) ?? createdAt);
             const flagAccent = review.flagged
@@ -2127,8 +2173,10 @@ export default function ReviewsInboxPage() {
                 {isPanelOpen && draft.status !== "idle" && hasStableId && (
                   <div
                     style={{
+                      position: "relative",
                       marginTop: "16px",
                       padding: "16px",
+                      paddingTop: "40px",
                       borderRadius: "16px",
                       background: "var(--accent-panel)",
                       border: "1px solid var(--accent-panel-border)",
@@ -2138,6 +2186,25 @@ export default function ReviewsInboxPage() {
                       gap: "12px",
                     }}
                   >
+                    <button
+                      type="button"
+                      aria-label="Close draft panel"
+                      onClick={() => patchDraftResponse(reviewId, { isOpen: false })}
+                      style={{
+                        position: "absolute",
+                        top: "10px",
+                        right: "12px",
+                        border: "none",
+                        background: "transparent",
+                        color: "var(--text-muted)",
+                        fontSize: "18px",
+                        lineHeight: 1,
+                        cursor: "pointer",
+                        padding: "4px",
+                      }}
+                    >
+                      ×
+                    </button>
                     {draft.status === "loading" ? (
                       <div
                         style={{
@@ -2166,7 +2233,7 @@ export default function ReviewsInboxPage() {
                       <>
                         <textarea
                           value={draft.text}
-                          onChange={(e) => setDraft(reviewId, { text: e.target.value })}
+                          onChange={(e) => patchDraftResponse(reviewId, { text: e.target.value })}
                           rows={5}
                           style={{
                             ...glassInput,
@@ -2188,8 +2255,8 @@ export default function ReviewsInboxPage() {
                             type="button"
                             onClick={async () => {
                               await navigator.clipboard.writeText(draft.text);
-                              setDraft(reviewId, { copied: true });
-                              setTimeout(() => setDraft(reviewId, { copied: false }), 2000);
+                              patchDraftResponse(reviewId, { copied: true });
+                              setTimeout(() => patchDraftResponse(reviewId, { copied: false }), 2000);
                             }}
                             style={{
                               ...glassSecondary,
