@@ -49,6 +49,21 @@ function coordsFromUrl(url: string | null | undefined): { latitude: number; long
   return { latitude: parseFloat(match[1]!), longitude: parseFloat(match[2]!) };
 }
 
+/** Decode /place/.../ segment from a Google Maps URL when city/country are missing. */
+function placeNameFromGoogleUrl(url: string | null | undefined): string | null {
+  const u = url?.trim();
+  if (!u) return null;
+  const m = u.match(/\/place\/([^/@?]+)/);
+  if (!m?.[1]) return null;
+  try {
+    const decoded = decodeURIComponent(m[1].replace(/\+/g, " "));
+    const t = decoded.replace(/\/$/, "").trim();
+    return t.length > 1 ? t : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseSuggestionsJson(text: string): Suggestion[] | null {
   const trimmed = text.trim();
   try {
@@ -119,17 +134,42 @@ export async function POST(request: NextRequest) {
     const avgRating =
       ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
 
-    const city = typeof hotel.city === "string" ? hotel.city.trim() : "";
     const country = typeof hotel.country === "string" ? hotel.country.trim() : "";
+    const city = typeof hotel.city === "string" ? hotel.city.trim() : "";
+    const googleUrl = typeof hotel.google_url === "string" ? hotel.google_url.trim() : "";
 
-    if (!city) {
-      return NextResponse.json(
-        { success: false, error: "Add your hotel city in Settings to find nearby competitors." },
-        { status: 400 },
-      );
+    let searchQuery: string;
+    /** Shown in Claude prompt (city/country or fallback description). */
+    let locationLabel: string;
+
+    if (city) {
+      searchQuery = country ? `hotels near ${city} ${country}`.trim() : `hotels near ${city}`.trim();
+      locationLabel = country ? `${city}, ${country}` : city;
+    } else {
+      const coords = coordsFromUrl(googleUrl);
+      if (coords) {
+        searchQuery = country
+          ? `hotels near ${coords.latitude},${coords.longitude} ${country}`.trim()
+          : `hotels near ${coords.latitude},${coords.longitude}`.trim();
+        locationLabel = country
+          ? `${coords.latitude}, ${coords.longitude} (${country}, from Google Maps URL)`
+          : `${coords.latitude}, ${coords.longitude} (from Google Maps URL)`;
+      } else {
+        const place = placeNameFromGoogleUrl(googleUrl);
+        if (!place) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "Add your hotel city and country in Settings, or save a Google Maps URL that includes @coordinates or a /place/ name.",
+            },
+            { status: 400 },
+          );
+        }
+        searchQuery = country ? `hotels near ${place} ${country}`.trim() : `hotels near ${place}`.trim();
+        locationLabel = country ? `${place}, ${country} (from Google Maps URL)` : `${place} (from Google Maps URL)`;
+      }
     }
-
-    const searchQuery = `hotels near ${city} ${country}`.trim();
 
     const startRunRes = await fetch(`${APIFY_BASE}/acts/${encodeURIComponent(APIFY_ACTOR)}/runs`, {
       method: "POST",
@@ -140,7 +180,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         searchStringsArray: [searchQuery],
         maxCrawledPlacesPerSearch: 10,
-        maxReviews: 0,
+        maxReviews: 1,
         language: "en",
       }),
     });
@@ -234,7 +274,7 @@ for this hotel:
 
 MY HOTEL:
 Name: ${hotelName}
-Location: ${city}, ${country}
+Location: ${locationLabel}
 Address: ${hotelAddress}
 Current rating: ${ratingLabel}★
 TripAdvisor: ${hotel.tripadvisor_url ? "yes" : "no"}

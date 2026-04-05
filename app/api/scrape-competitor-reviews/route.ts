@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         startUrls: [{ url: googleUrl }],
-        maxReviews: 3,
+        maxReviews: 1,
         language: "en",
       }),
     });
@@ -244,7 +244,7 @@ export async function POST(request: NextRequest) {
       const row = first as Record<string, unknown>;
       const nested = row.reviews;
       if (Array.isArray(nested) && nested.length > 0) {
-        snippets = nested.slice(0, 3).map((r) => {
+        snippets = nested.slice(0, 1).map((r) => {
           const o = r as Record<string, unknown>;
           const t =
             (typeof o.text === "string" ? o.text : "") ||
@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
       }
     }
     if (snippets.length === 0) {
-      snippets = parseReviewSnippets(list, 3);
+      snippets = parseReviewSnippets(list, 1);
     }
 
     const recentSnippetsJson = JSON.stringify(snippets);
