@@ -89,6 +89,7 @@ type HotelRow = {
   id: string;
   name: string | null;
   address: string | null;
+  city: string | null;
   google_url: string | null;
   tripadvisor_url: string | null;
   booking_url: string | null;
@@ -118,6 +119,17 @@ type InsightPayload = {
   biggest_threat: string;
   quick_win: string;
   rating_gap: string;
+};
+
+type DiscoverySuggestion = {
+  name: string;
+  google_url: string;
+  avg_rating: number;
+  total_reviews: number;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+  reason: string;
 };
 
 type ReviewLite = {
@@ -163,8 +175,14 @@ export default function BenchmarkingPage() {
 
   const [addName, setAddName] = useState("");
   const [addGoogle, setAddGoogle] = useState("");
-  const [addTa, setAddTa] = useState("");
   const [savingAdd, setSavingAdd] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+
+  const [findingCompetitors, setFindingCompetitors] = useState(false);
+  const [discoveryStep, setDiscoveryStep] = useState(0);
+  const [discoverySuggestions, setDiscoverySuggestions] = useState<DiscoverySuggestion[] | null>(null);
+  const [selectedSuggestions, setSelectedSuggestions] = useState<string[]>([]);
+  const [addingSelected, setAddingSelected] = useState(false);
 
   const [insight, setInsight] = useState<InsightPayload | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
@@ -225,7 +243,7 @@ export default function BenchmarkingPage() {
       const { data: h, error: hErr } = await supabase
         .from("hotels")
         .select(
-          "id, name, address, google_url, tripadvisor_url, booking_url, latitude, longitude",
+          "id, name, address, city, google_url, tripadvisor_url, booking_url, latitude, longitude",
         )
         .eq("user_id", user.id)
         .maybeSingle();
@@ -450,6 +468,92 @@ export default function BenchmarkingPage() {
     showToast("Competitor removed");
   }
 
+  async function handleFindCompetitors() {
+    if (!hotel?.id) return;
+    setFindingCompetitors(true);
+    setDiscoveryStep(1);
+    setDiscoverySuggestions(null);
+    setSelectedSuggestions([]);
+    const t2 = window.setTimeout(() => setDiscoveryStep(2), 1000);
+    const t3 = window.setTimeout(() => setDiscoveryStep(3), 2000);
+    try {
+      const res = await fetch("/api/find-competitors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hotel_id: hotel.id }),
+      });
+      const j = (await res.json()) as {
+        success?: boolean;
+        suggestions?: DiscoverySuggestion[];
+        error?: string;
+      };
+      if (!res.ok || j.success !== true) {
+        throw new Error(j.error ?? "Search failed");
+      }
+      setDiscoverySuggestions(j.suggestions ?? []);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Search failed");
+      setDiscoverySuggestions([]);
+    } finally {
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+      setFindingCompetitors(false);
+      setDiscoveryStep(0);
+    }
+  }
+
+  function toggleSuggestionSelect(name: string) {
+    setSelectedSuggestions((prev) => {
+      if (prev.includes(name)) return prev.filter((n) => n !== name);
+      const slotsLeft = MAX_COMPETITORS - competitors.length;
+      if (prev.length >= slotsLeft) return prev;
+      return [...prev, name];
+    });
+  }
+
+  async function handleAddSelected() {
+    if (!hotel?.id || !discoverySuggestions?.length || selectedSuggestions.length === 0) return;
+    const slotsLeft = MAX_COMPETITORS - competitors.length;
+    if (slotsLeft <= 0) {
+      showToast("Maximum 5 competitors reached");
+      return;
+    }
+    setAddingSelected(true);
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+      const picked = discoverySuggestions.filter((s) => selectedSuggestions.includes(s.name)).slice(0, slotsLeft);
+      if (picked.length === 0) return;
+
+      const rows = picked.map((s) => ({
+        hotel_id: hotel.id,
+        name: s.name,
+        google_url: s.google_url?.trim() || null,
+        avg_rating: s.avg_rating,
+        total_reviews: s.total_reviews,
+        latitude: s.latitude,
+        longitude: s.longitude,
+        address: s.address?.trim() || null,
+        tripadvisor_url: null as string | null,
+      }));
+
+      const { error } = await supabase.from("competitors").insert(rows);
+      if (error) throw error;
+
+      setDiscoverySuggestions(null);
+      setSelectedSuggestions([]);
+      await loadData();
+      await fetchInsights();
+      showToast(`${picked.length} competitor${picked.length === 1 ? "" : "s"} added successfully`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Add failed");
+    } finally {
+      setAddingSelected(false);
+    }
+  }
+
   async function onAddCompetitor(e: FormEvent) {
     e.preventDefault();
     if (!hotel?.id) return;
@@ -472,7 +576,7 @@ export default function BenchmarkingPage() {
         hotel_id: hotel.id,
         name: addName.trim(),
         google_url: addGoogle.trim() || null,
-        tripadvisor_url: addTa.trim() || null,
+        tripadvisor_url: null,
         avg_rating: null,
         total_reviews: 0,
       };
@@ -485,7 +589,6 @@ export default function BenchmarkingPage() {
       setCompetitors((prev) => [...prev, data as CompetitorRow]);
       setAddName("");
       setAddGoogle("");
-      setAddTa("");
       showToast("Competitor added");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Save failed");
@@ -568,6 +671,8 @@ export default function BenchmarkingPage() {
       <span style={{ color: "var(--text-muted)" }}>Add ratings to compare</span>
     );
 
+  const discoverySlotsMax = Math.max(0, MAX_COMPETITORS - competitors.length);
+
   const behindLeader =
     marketStats.maxRev > 0 ? Math.max(0, marketStats.maxRev - myTotalReviews) : 0;
   const reviewsVsLeader =
@@ -618,7 +723,7 @@ export default function BenchmarkingPage() {
             {syncing ? "Syncing…" : "Sync competitors"}
           </button>
           <p style={{ fontSize: 11, color: "var(--text-muted)", margin: 0, textAlign: "right" }}>
-            ~$0.001 per competitor · Only fetches summary data
+            ~$0.002 per sync · Summary data only
           </p>
         </div>
       </header>
@@ -1034,11 +1139,226 @@ export default function BenchmarkingPage() {
         </div>
       </div>
 
+      {/* Find competitors (AI discovery) */}
+      <div
+        style={{
+          background: "rgba(99,102,241,0.06)",
+          border: "1px solid rgba(99,102,241,0.15)",
+          borderRadius: 20,
+          padding: 24,
+          marginBottom: 24,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 16,
+            marginBottom: findingCompetitors || discoverySuggestions !== null ? 20 : 0,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 600, color: "var(--text-primary)" }}>
+              Find competitors automatically
+            </div>
+            <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "6px 0 0", maxWidth: 420, lineHeight: 1.5 }}>
+              AI finds hotels in your area with similar rating and service class
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={findingCompetitors || !hotel.city?.trim()}
+            onClick={() => void handleFindCompetitors()}
+            style={{
+              ...primaryBtn,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              opacity: findingCompetitors || !hotel.city?.trim() ? 0.65 : 1,
+              cursor: findingCompetitors || !hotel.city?.trim() ? "not-allowed" : "pointer",
+            }}
+            title={!hotel.city?.trim() ? "Set your hotel city in Settings first" : undefined}
+          >
+            {findingCompetitors ? (
+              <>
+                <span
+                  className="bm-spin"
+                  style={{
+                    width: 16,
+                    height: 16,
+                    border: "2px solid rgba(255,255,255,0.3)",
+                    borderTopColor: "var(--on-primary)",
+                    borderRadius: "50%",
+                    display: "inline-block",
+                  }}
+                />
+                Searching…
+              </>
+            ) : (
+              "Find competitors"
+            )}
+          </button>
+        </div>
+
+        {findingCompetitors ? (
+          <div
+            style={{
+              ...glass,
+              padding: "20px 22px",
+              borderRadius: 16,
+              animation: "bm-pulse-discovery 1.4s ease-in-out infinite",
+            }}
+          >
+            {discoveryStep >= 1 ? (
+              <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: "0 0 8px" }}>
+                AI is searching for hotels in your area…
+              </p>
+            ) : null}
+            {discoveryStep >= 2 ? (
+              <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: "0 0 8px" }}>
+                Analysing ratings, size, and service class…
+              </p>
+            ) : null}
+            {discoveryStep >= 3 ? (
+              <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: 0 }}>
+                Selecting the best matches…
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!findingCompetitors && discoverySuggestions !== null ? (
+          discoverySuggestions.length === 0 ? (
+            <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0 }}>
+              No nearby hotels found. Try again or add a competitor manually.
+            </p>
+          ) : (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                  gap: 12,
+                  marginBottom: 12,
+                }}
+              >
+                {discoverySuggestions.map((s) => {
+                  const selected = selectedSuggestions.includes(s.name);
+                  const r = s.avg_rating;
+                  const dotColor =
+                    r != null && !Number.isNaN(r) ? getRatingColor(Math.min(5, Math.max(1, r))) : "#64748b";
+                  return (
+                    <button
+                      key={s.name + s.google_url}
+                      type="button"
+                      onClick={() => toggleSuggestionSelect(s.name)}
+                      style={{
+                        ...glass,
+                        textAlign: "left",
+                        padding: "16px 20px",
+                        borderRadius: 16,
+                        cursor: "pointer",
+                        border: selected
+                          ? "2px solid rgba(99,102,241,0.5)"
+                          : "1px solid var(--glass-border)",
+                        background: selected ? "rgba(99,102,241,0.08)" : undefined,
+                        position: "relative",
+                        width: "100%",
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      {selected ? (
+                        <span
+                          style={{
+                            position: "absolute",
+                            top: 12,
+                            right: 14,
+                            color: "#6366f1",
+                            fontSize: 16,
+                            fontWeight: 700,
+                          }}
+                        >
+                          ✓
+                        </span>
+                      ) : null}
+                      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", paddingRight: 24 }}>
+                        {s.name}
+                      </div>
+                      <div style={{ fontSize: 14, marginTop: 6, color: dotColor, fontWeight: 600 }}>
+                        ★ {r != null ? r.toFixed(1) : "—"}
+                      </div>
+                      <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
+                        ({(s.total_reviews ?? 0).toLocaleString()} reviews)
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>
+                        {hotel.city ? `Same area · ${hotel.city}` : "Same area"}
+                      </div>
+                      {s.reason ? (
+                        <p
+                          style={{
+                            fontSize: 12,
+                            color: "var(--text-muted)",
+                            fontStyle: "italic",
+                            margin: "10px 0 0",
+                            lineHeight: 1.45,
+                          }}
+                        >
+                          Why this competitor: {s.reason}
+                        </p>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "0 0 8px" }}>
+                {selectedSuggestions.length} / {discoverySlotsMax} selected
+              </p>
+              {selectedSuggestions.length >= discoverySlotsMax && discoverySlotsMax > 0 ? (
+                <p style={{ fontSize: 12, color: "#fbbf24", margin: "0 0 12px" }}>
+                  Maximum 5 competitors reached
+                </p>
+              ) : null}
+              {selectedSuggestions.length > 0 ? (
+                <button
+                  type="button"
+                  disabled={addingSelected}
+                  onClick={() => void handleAddSelected()}
+                  style={{
+                    ...primaryBtn,
+                    width: "100%",
+                    justifyContent: "center",
+                    display: "inline-flex",
+                    opacity: addingSelected ? 0.65 : 1,
+                    cursor: addingSelected ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {addingSelected ? "Adding…" : "Add selected competitors"}
+                </button>
+              ) : null}
+            </>
+          )
+        ) : null}
+      </div>
+
       {/* Competitor table */}
       <div style={{ ...glass, padding: "24px", borderRadius: 16, marginBottom: 20 }}>
-        <h2 style={{ fontSize: 17, fontWeight: 600, margin: "0 0 16px", color: "var(--text-primary)" }}>
-          Tracked competitors
-        </h2>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            gap: 8,
+            marginBottom: 16,
+          }}
+        >
+          <h2 style={{ fontSize: 17, fontWeight: 600, margin: 0, color: "var(--text-primary)" }}>
+            Tracked competitors
+          </h2>
+          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>~$0.002 per sync</span>
+        </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
             <thead>
@@ -1105,65 +1425,72 @@ export default function BenchmarkingPage() {
           </table>
         </div>
 
-        <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--glass-border)" }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "var(--text-primary)" }}>
-            Add competitor
-          </div>
-          <form onSubmit={onAddCompetitor}>
-            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-              <div>
-                <label htmlFor="ac-name" style={labelStyle}>
-                  Name
-                </label>
-                <input
-                  id="ac-name"
-                  value={addName}
-                  onChange={(e) => setAddName(e.target.value)}
-                  style={glassInput}
-                  placeholder="Hotel name"
-                />
-              </div>
-              <div>
-                <label htmlFor="ac-g" style={labelStyle}>
-                  Google Maps URL
-                </label>
-                <input
-                  id="ac-g"
-                  type="url"
-                  value={addGoogle}
-                  onChange={(e) => setAddGoogle(e.target.value)}
-                  style={glassInput}
-                  placeholder="https://maps.google.com/..."
-                />
-              </div>
-              <div>
-                <label htmlFor="ac-ta" style={labelStyle}>
-                  TripAdvisor URL
-                </label>
-                <input
-                  id="ac-ta"
-                  type="url"
-                  value={addTa}
-                  onChange={(e) => setAddTa(e.target.value)}
-                  style={glassInput}
-                  placeholder="https://..."
-                />
-              </div>
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <button
-                type="submit"
-                disabled={savingAdd || competitors.length >= MAX_COMPETITORS}
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--glass-border)" }}>
+          <button
+            type="button"
+            onClick={() => setManualOpen((o) => !o)}
+            style={{
+              background: "none",
+              border: "none",
+              fontSize: 13,
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            Add manually instead {manualOpen ? "↑" : "↓"}
+          </button>
+
+          {manualOpen ? (
+            <form onSubmit={onAddCompetitor} style={{ marginTop: 16 }}>
+              <div
                 style={{
-                  ...primaryBtn,
-                  opacity: savingAdd || competitors.length >= MAX_COMPETITORS ? 0.65 : 1,
-                  cursor: savingAdd || competitors.length >= MAX_COMPETITORS ? "not-allowed" : "pointer",
+                  display: "grid",
+                  gap: 12,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
                 }}
               >
-                {savingAdd ? "Adding…" : "Add"}
-              </button>
-            </div>
-          </form>
+                <div>
+                  <label htmlFor="ac-name" style={labelStyle}>
+                    Name
+                  </label>
+                  <input
+                    id="ac-name"
+                    value={addName}
+                    onChange={(e) => setAddName(e.target.value)}
+                    style={glassInput}
+                    placeholder="Hotel name"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="ac-g" style={labelStyle}>
+                    Google Maps URL
+                  </label>
+                  <input
+                    id="ac-g"
+                    type="url"
+                    value={addGoogle}
+                    onChange={(e) => setAddGoogle(e.target.value)}
+                    style={glassInput}
+                    placeholder="https://maps.google.com/..."
+                  />
+                </div>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <button
+                  type="submit"
+                  disabled={savingAdd || competitors.length >= MAX_COMPETITORS}
+                  style={{
+                    ...primaryBtn,
+                    opacity: savingAdd || competitors.length >= MAX_COMPETITORS ? 0.65 : 1,
+                    cursor: savingAdd || competitors.length >= MAX_COMPETITORS ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {savingAdd ? "Adding…" : "Add competitor"}
+                </button>
+              </div>
+            </form>
+          ) : null}
         </div>
       </div>
 
@@ -1187,6 +1514,16 @@ export default function BenchmarkingPage() {
       <style
         dangerouslySetInnerHTML={{
           __html: `
+            @keyframes bm-spin {
+              to { transform: rotate(360deg); }
+            }
+            .bm-spin {
+              animation: bm-spin 0.7s linear infinite;
+            }
+            @keyframes bm-pulse-discovery {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0.72; }
+            }
             @media (max-width: 768px) {
               .bm-map-loading { height: 320px !important; min-height: 320px !important; }
             }

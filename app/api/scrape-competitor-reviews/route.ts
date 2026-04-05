@@ -234,7 +234,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const snippets = parseReviewSnippets(list, 3);
+    let snippets: string[] = [];
+    const first = list[0];
+    if (first && typeof first === "object") {
+      const row = first as Record<string, unknown>;
+      const nested = row.reviews;
+      if (Array.isArray(nested) && nested.length > 0) {
+        snippets = nested.slice(0, 3).map((r) => {
+          const o = r as Record<string, unknown>;
+          const t =
+            (typeof o.text === "string" ? o.text : "") ||
+            (typeof o.snippet === "string" ? o.snippet : "");
+          return t.trim().slice(0, 150);
+        }).filter((s) => s.length > 0);
+      }
+    }
+    if (snippets.length === 0) {
+      snippets = parseReviewSnippets(list, 3);
+    }
+
     const recentSnippetsJson = JSON.stringify(snippets);
 
     const urlCoords = extractCoordsFromGoogleMapsUrl(googleUrl);
