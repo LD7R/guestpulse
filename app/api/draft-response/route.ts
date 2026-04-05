@@ -14,9 +14,13 @@ export async function POST(req: NextRequest) {
       rating?: number | string | null;
       reviewer_name?: string | null;
       platform?: string | null;
+      signature?: string | null;
     };
 
-    const { review_text, rating, reviewer_name, platform } = body;
+    const { review_text, rating, reviewer_name, platform, signature } = body;
+    const responseSignature = (signature && String(signature).trim() !== "")
+      ? String(signature).trim()
+      : "The Management Team";
 
     if (review_text === undefined || review_text === null || review_text === "") {
       return NextResponse.json(
@@ -53,7 +57,7 @@ export async function POST(req: NextRequest) {
         messages: [
           {
             role: "user",
-            content: `You are a professional hotel manager. Write a warm genuine response under 80 words. Reference specific details the guest mentioned. Do not start with "Dear valued guest". Sign off as "The Management Team".
+            content: `You are a professional hotel manager writing a response to a guest review. Write a warm genuine response under 80 words. Reference specific details they mentioned. Do not start with "Dear valued guest". End with exactly this sign-off on a new line: "Kind regards, ${responseSignature}"
 
 Reviewer: ${reviewerName}
 Rating: ${ratingLabel}/5

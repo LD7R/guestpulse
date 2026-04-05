@@ -918,6 +918,25 @@ export default function ReviewsInboxPage() {
     });
 
     try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user?.id) {
+        throw new Error("You must be signed in.");
+      }
+
+      const { data: hotelData } = await supabase
+        .from("hotels")
+        .select("response_signature")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const signature = hotelData?.response_signature?.trim() || "The Management Team";
+
       const res = await fetch("/api/draft-response", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -926,6 +945,7 @@ export default function ReviewsInboxPage() {
           rating: review.rating ?? review.stars ?? null,
           reviewer_name: review.reviewer_name ?? review.name ?? null,
           platform: review.platform ?? review.source ?? null,
+          signature,
         }),
         signal: controller.signal,
       });

@@ -640,9 +640,24 @@ export default function SettingsPage() {
                   e.target.style.borderColor = "var(--glass-input-border)";
                 }}
               />
-              <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "6px 0 0 0" }}>
-                Appended to every AI-generated response
+              <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "6px 0 0 0", lineHeight: 1.5 }}>
+                This signature appears at the end of every AI-generated response
               </p>
+              <div style={{ marginTop: "8px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>Preview</div>
+                <div
+                  style={{
+                    ...glass,
+                    padding: "10px 14px",
+                    fontSize: "13px",
+                    color: "var(--text-secondary)",
+                    fontStyle: "italic",
+                    borderRadius: "10px",
+                  }}
+                >
+                  Kind regards, {responseSignature.trim() || "The Management Team"}
+                </div>
+              </div>
             </div>
 
             <div
