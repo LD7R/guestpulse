@@ -121,8 +121,9 @@ function parseReviewSnippets(items: unknown[], limit: number): string[] {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as { competitor_id?: string };
+    const body = (await request.json()) as { competitor_id?: string; hotel_id?: string };
     const competitorId = body.competitor_id?.trim();
+    const bodyHotelId = body.hotel_id?.trim();
     if (!competitorId) {
       return NextResponse.json({ success: false, error: "competitor_id is required" }, { status: 400 });
     }
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
 
     const { data: comp, error: fetchErr } = await supabase
       .from("competitors")
-      .select("id, google_url, name")
+      .select("id, google_url, name, hotel_id")
       .eq("id", competitorId)
       .maybeSingle();
 
@@ -154,6 +155,27 @@ export async function POST(request: NextRequest) {
     }
     if (!comp) {
       return NextResponse.json({ success: false, error: "Competitor not found" }, { status: 404 });
+    }
+
+    const { data: ownedHotel, error: ownErr } = await supabase
+      .from("hotels")
+      .select("id")
+      .eq("id", comp.hotel_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (ownErr) {
+      return NextResponse.json({ success: false, error: ownErr.message }, { status: 500 });
+    }
+    if (!ownedHotel) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+
+    if (bodyHotelId && bodyHotelId !== comp.hotel_id) {
+      return NextResponse.json(
+        { success: false, error: "hotel_id does not match this competitor" },
+        { status: 400 },
+      );
     }
 
     const googleUrl = typeof comp.google_url === "string" ? comp.google_url.trim() : "";

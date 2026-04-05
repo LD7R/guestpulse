@@ -13,6 +13,7 @@ export type MapHotel = {
   address: string | null;
   latitude: number | null;
   longitude: number | null;
+  google_url?: string | null;
 };
 
 export type MapCompetitor = {
@@ -23,7 +24,24 @@ export type MapCompetitor = {
   address: string | null;
   latitude: number | null;
   longitude: number | null;
+  google_url?: string | null;
 };
+
+const DEFAULT_CENTER: [number, number] = [-7.7956, 110.3695];
+
+export function getCompetitorCoords(c: MapCompetitor): [number, number] | null {
+  if (
+    c.latitude != null &&
+    c.longitude != null &&
+    !Number.isNaN(c.latitude) &&
+    !Number.isNaN(c.longitude)
+  ) {
+    return [c.latitude, c.longitude];
+  }
+  const match = c.google_url?.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (match) return [parseFloat(match[1]!), parseFloat(match[2]!)];
+  return null;
+}
 
 function MapResize() {
   const map = useMap();
@@ -91,12 +109,20 @@ function competitorIcon(rating: number | null) {
 }
 
 type MapComponentProps = {
+  center?: [number, number];
+  zoom?: number;
   hotel: MapHotel;
   competitors: MapCompetitor[];
   height: number;
 };
 
-export default function MapComponent({ hotel, competitors, height }: MapComponentProps) {
+export default function MapComponent({
+  center = DEFAULT_CENTER,
+  zoom = 14,
+  hotel,
+  competitors,
+  height,
+}: MapComponentProps) {
   useEffect(() => {
     delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: string })._getIconUrl;
     L.Icon.Default.mergeOptions({
@@ -107,16 +133,14 @@ export default function MapComponent({ hotel, competitors, height }: MapComponen
     });
   }, []);
 
+  const mapCenter: [number, number] = center;
+  const mapZoom = zoom;
+
   const hasHotelCoords =
     hotel.latitude != null &&
     hotel.longitude != null &&
     !Number.isNaN(hotel.latitude) &&
     !Number.isNaN(hotel.longitude);
-
-  const center: [number, number] = hasHotelCoords
-    ? [hotel.latitude!, hotel.longitude!]
-    : [0, 0];
-  const zoom = hasHotelCoords ? 14 : 2;
 
   const myRating = hotel.avg_rating;
   const myReviewsLabel = hotel.total_reviews.toLocaleString();
@@ -124,11 +148,11 @@ export default function MapComponent({ hotel, competitors, height }: MapComponen
   return (
     <div style={{ position: "relative", height, width: "100%", borderRadius: 20, overflow: "hidden" }}>
       <MapContainer
-        center={center}
-        zoom={zoom}
+        center={mapCenter}
+        zoom={mapZoom}
         scrollWheelZoom
         style={{ height: "100%", width: "100%" }}
-        key={hasHotelCoords ? `${center[0]}-${center[1]}` : "world"}
+        key={`${mapCenter[0]}-${mapCenter[1]}-${mapZoom}`}
       >
         <MapResize />
         <TileLayer
@@ -161,14 +185,8 @@ export default function MapComponent({ hotel, competitors, height }: MapComponen
           </Marker>
         ) : null}
         {competitors.map((c) => {
-          if (
-            c.latitude == null ||
-            c.longitude == null ||
-            Number.isNaN(c.latitude) ||
-            Number.isNaN(c.longitude)
-          ) {
-            return null;
-          }
+          const pos = getCompetitorCoords(c);
+          if (!pos) return null;
           const cr = c.avg_rating;
           const badgeOk =
             typeof cr === "number" &&
@@ -176,11 +194,7 @@ export default function MapComponent({ hotel, competitors, height }: MapComponen
             typeof myRating === "number" &&
             !Number.isNaN(myRating);
           return (
-            <Marker
-              key={c.id}
-              position={[c.latitude, c.longitude]}
-              icon={competitorIcon(c.avg_rating)}
-            >
+            <Marker key={c.id} position={pos} icon={competitorIcon(c.avg_rating)}>
               <Popup>
                 <div style={{ fontFamily: "sans-serif", minWidth: 160 }}>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div>

@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
     let locationLabel: string;
 
     if (city) {
-      searchQuery = country ? `hotels near ${city} ${country}`.trim() : `hotels near ${city}`.trim();
+      searchQuery = country ? `hotels ${city} ${country}`.trim() : `hotels ${city}`.trim();
       locationLabel = country ? `${city}, ${country}` : city;
     } else {
       const coords = coordsFromUrl(googleUrl);
