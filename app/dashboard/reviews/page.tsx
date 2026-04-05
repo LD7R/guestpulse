@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 
+import { defaultDraftResponse, useDraftResponses } from "@/lib/useDraftResponses";
+
 type Hotel = {
   id: string;
   name?: string | null;
@@ -701,24 +703,6 @@ function AutoClassifyButton({
   );
 }
 
-type DraftResponseEntry = {
-  isOpen: boolean;
-  status: "idle" | "loading" | "done" | "error";
-  text: string;
-  copied: boolean;
-  markingResponded: boolean;
-  markError: string | null;
-};
-
-const defaultDraftResponse = (): DraftResponseEntry => ({
-  isOpen: false,
-  status: "idle",
-  text: "",
-  copied: false,
-  markingResponded: false,
-  markError: null,
-});
-
 export default function ReviewsInboxPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -726,7 +710,7 @@ export default function ReviewsInboxPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const [draftResponses, setDraftResponses] = useState<Record<string, DraftResponseEntry>>({});
+  const { draftResponses, patchDraftResponse, removeDraft } = useDraftResponses();
   const draftAbortRef = useRef<AbortController | null>(null);
 
   const [syncing, setSyncing] = useState(false);
@@ -880,13 +864,6 @@ export default function ReviewsInboxPage() {
   const filteredCount = visibleReviews.length;
   const totalCount = reviews.length;
 
-  function patchDraftResponse(reviewId: string, patch: Partial<DraftResponseEntry>) {
-    setDraftResponses((prev) => ({
-      ...prev,
-      [reviewId]: { ...defaultDraftResponse(), ...prev[reviewId], ...patch },
-    }));
-  }
-
   async function handleDraftResponse(review: Review) {
     const id = review.id;
     if (!id) return;
@@ -900,7 +877,7 @@ export default function ReviewsInboxPage() {
       return;
     }
 
-    if (cur?.status === "done") {
+    if (cur?.status === "done" || cur?.status === "error") {
       patchDraftResponse(id, { isOpen: true });
       return;
     }
@@ -1000,11 +977,7 @@ export default function ReviewsInboxPage() {
     setReviews((prev) =>
       prev.map((r) => (r.id === reviewId ? { ...r, responded: true } : r)),
     );
-    setDraftResponses((prev) => {
-      const next = { ...prev };
-      delete next[reviewId];
-      return next;
-    });
+    removeDraft(reviewId);
   }
 
   async function updateReviewFlag(
@@ -1911,6 +1884,8 @@ export default function ReviewsInboxPage() {
             const reviewId = review.id ?? `${idx}-${platform}-${createdAt}`;
             const draft = draftResponses[reviewId] ?? defaultDraftResponse();
             const isPanelOpen = draft.isOpen;
+            const hasSavedDraft =
+              (draft.status === "done" || draft.status === "error") && Boolean(draft.text?.trim());
             const hasStableId = Boolean(review.id);
             const dateLabel = formatDate(getReviewDate(review) ?? createdAt);
             const flagAccent = review.flagged
@@ -1933,6 +1908,12 @@ export default function ReviewsInboxPage() {
                   padding: "24px",
                   position: "relative",
                   transition: "transform 0.2s ease, border-color 0.2s ease, background 0.2s ease",
+                  ...(hasSavedDraft
+                    ? {
+                        boxShadow:
+                          "inset 3px 0 0 rgba(99,102,241,0.4), var(--glass-shadow), var(--glass-inner)",
+                      }
+                    : {}),
                   ...(flagAccent ? { borderLeft: `3px solid ${flagAccent}` } : {}),
                 }}
                 onMouseEnter={(e) => {
@@ -2182,9 +2163,23 @@ export default function ReviewsInboxPage() {
                           Generating...
                         </>
                       ) : isPanelOpen ? (
-                        "Hide draft"
+                        "Hide response"
+                      ) : hasSavedDraft ? (
+                        <>
+                          <span
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: "50%",
+                              background: "#22c55e",
+                              display: "inline-block",
+                              marginRight: 6,
+                            }}
+                          />
+                          Show drafted response
+                        </>
                       ) : (
-                        "Draft response"
+                        "Draft AI Response"
                       )}
                     </button>
                   </div>
