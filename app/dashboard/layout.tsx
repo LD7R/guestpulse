@@ -9,6 +9,7 @@ import { createBrowserClient } from "@supabase/ssr";
 const navDotColors: Record<string, string> = {
   "/dashboard": "var(--accent)",
   "/dashboard/reviews": "#34d399",
+  "/dashboard/benchmarking": "#a78bfa",
   "/dashboard/settings": "#60a5fa",
 };
 
@@ -27,6 +28,7 @@ export default function DashboardLayout({
     () => [
       { href: "/dashboard", label: "Overview" },
       { href: "/dashboard/reviews", label: "Review Inbox" },
+      { href: "/dashboard/benchmarking", label: "Benchmarking" },
       { href: "/dashboard/settings", label: "Settings" },
     ],
     [],
@@ -36,6 +38,7 @@ export default function DashboardLayout({
     () => [
       { href: "/dashboard", label: "Home", icon: "⌂" },
       { href: "/dashboard/reviews", label: "Inbox", icon: "✉" },
+      { href: "/dashboard/benchmarking", label: "Rank", icon: "◎" },
       { href: "/dashboard/settings", label: "Settings", icon: "⚙" },
     ],
     [],
