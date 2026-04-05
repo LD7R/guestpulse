@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
+import { extractCoordsFromGoogleMapsUrl } from "@/lib/extract-google-maps-coords";
 
 type ProfileRow = {
   id: string;
@@ -29,6 +30,8 @@ type HotelRow = {
   website: string | null;
   response_signature: string | null;
   room_count: number | null;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 const glass: CSSProperties = {
@@ -364,6 +367,7 @@ export default function SettingsPage() {
       const room_count =
         roomsParsed !== null && !Number.isNaN(roomsParsed) ? roomsParsed : null;
 
+      const coords = extractCoordsFromGoogleMapsUrl(googleUrl);
       const fields = {
         name: hotelName.trim(),
         tripadvisor_url: tripadvisorUrl.trim() || null,
@@ -377,6 +381,7 @@ export default function SettingsPage() {
         website: website.trim() || null,
         response_signature: responseSignature.trim() || "The Management Team",
         room_count,
+        ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : {}),
       };
 
       const { data: existing, error: existingError } = await supabase
