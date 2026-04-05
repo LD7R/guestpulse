@@ -1,6 +1,7 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
@@ -1105,7 +1106,7 @@ export default function SettingsPage() {
                     marginBottom: "12px",
                   }}
                 >
-                  Free plan
+                  Free Plan
                 </span>
                 <p style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 16px 0" }}>
                   You&apos;re on the free plan
@@ -1220,10 +1221,15 @@ export default function SettingsPage() {
                 <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "0 0 16px 0" }}>
                   Next billing date: — (Stripe)
                 </p>
-                <button
-                  type="button"
-                  onClick={() => showToast("success", "Open Stripe Customer Portal when billing is connected.")}
-                  style={primaryBtn}
+                <Link
+                  href="/dashboard/pricing"
+                  style={{
+                    ...primaryBtn,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    textDecoration: "none",
+                  }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = "var(--btn-primary-hover)";
                   }}
@@ -1232,7 +1238,7 @@ export default function SettingsPage() {
                   }}
                 >
                   Manage subscription
-                </button>
+                </Link>
               </div>
             )}
             {billingPlan === "past_due" && (
@@ -1279,14 +1285,65 @@ export default function SettingsPage() {
           </div>
 
           <div style={{ ...glass, padding: "28px" }}>
-            <h3 style={{ fontSize: "17px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 12px 0" }}>
-              Billing history
+            <h3 style={{ fontSize: "17px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 16px 0" }}>
+              Payment method
             </h3>
-            <p style={{ fontSize: "14px", color: "var(--text-muted)", margin: 0 }}>
-              {billingPlan === "active" || billingPlan === "trialing"
-                ? "Invoices will appear here once Stripe is connected."
-                : "No billing history yet"}
-            </p>
+            {billingPlan === "free" ? (
+              <>
+                <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
+                  No payment method on file
+                </p>
+                <Link
+                  href="/dashboard/pricing"
+                  style={{
+                    ...primaryBtn,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    textDecoration: "none",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--btn-primary-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "var(--btn-primary-bg)";
+                  }}
+                >
+                  Add payment method
+                </Link>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: "14px", color: "var(--text-primary)", margin: "0 0 6px 0", fontWeight: 500 }}>
+                  Payment method on file
+                </p>
+                <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "0 0 6px 0" }}>
+                  Card ending in{" "}
+                  <span style={{ fontFamily: "ui-monospace, monospace", letterSpacing: "0.06em" }}>••••</span>
+                </p>
+                <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
+                  Last 4 digits will display here once Stripe billing is connected.
+                </p>
+                <Link
+                  href="/dashboard/pricing"
+                  style={{
+                    ...primaryBtn,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    textDecoration: "none",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--btn-primary-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "var(--btn-primary-bg)";
+                  }}
+                >
+                  Update payment method
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

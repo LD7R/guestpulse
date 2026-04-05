@@ -10,7 +10,6 @@ const navDotColors: Record<string, string> = {
   "/dashboard": "var(--accent)",
   "/dashboard/reviews": "#34d399",
   "/dashboard/settings": "#60a5fa",
-  "/dashboard/pricing": "#a78bfa",
 };
 
 export default function DashboardLayout({
@@ -29,7 +28,6 @@ export default function DashboardLayout({
       { href: "/dashboard", label: "Overview" },
       { href: "/dashboard/reviews", label: "Review Inbox" },
       { href: "/dashboard/settings", label: "Settings" },
-      { href: "/dashboard/pricing", label: "Pricing" },
     ],
     [],
   );
@@ -39,7 +37,6 @@ export default function DashboardLayout({
       { href: "/dashboard", label: "Home", icon: "⌂" },
       { href: "/dashboard/reviews", label: "Inbox", icon: "✉" },
       { href: "/dashboard/settings", label: "Settings", icon: "⚙" },
-      { href: "/dashboard/pricing", label: "Pricing", icon: "$" },
     ],
     [],
   );
