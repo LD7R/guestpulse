@@ -109,6 +109,15 @@ type CompetitorRow = {
   latitude: number | null;
   longitude: number | null;
   address: string | null;
+  recent_snippets: string | null;
+};
+
+type InsightPayload = {
+  market_position: string;
+  my_advantage: string;
+  biggest_threat: string;
+  quick_win: string;
+  rating_gap: string;
 };
 
 type ReviewLite = {
@@ -157,9 +166,35 @@ export default function BenchmarkingPage() {
   const [addTa, setAddTa] = useState("");
   const [savingAdd, setSavingAdd] = useState(false);
 
+  const [insight, setInsight] = useState<InsightPayload | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightError, setInsightError] = useState<string | null>(null);
+
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const fetchInsights = useCallback(async () => {
+    setInsightLoading(true);
+    setInsightError(null);
+    try {
+      const res = await fetch("/api/competitor-insight", { method: "POST" });
+      const j = (await res.json()) as {
+        success?: boolean;
+        insight?: InsightPayload;
+        error?: string;
+      };
+      if (!res.ok || j.success !== true || !j.insight) {
+        throw new Error(j.error ?? "Could not load insights");
+      }
+      setInsight(j.insight);
+    } catch (e) {
+      setInsight(null);
+      setInsightError(e instanceof Error ? e.message : "Insights unavailable");
+    } finally {
+      setInsightLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -217,6 +252,12 @@ export default function BenchmarkingPage() {
       setLoading(false);
     }
   }, [showToast]);
+
+  useEffect(() => {
+    if (!loading && hotel?.id) {
+      void fetchInsights();
+    }
+  }, [loading, hotel?.id, fetchInsights]);
 
   useEffect(() => {
     void loadData();
@@ -292,33 +333,6 @@ export default function BenchmarkingPage() {
     return m;
   }, [competitors, myRating]);
 
-  const topicInsights = useMemo(() => {
-    const improvements = new Map<string, number>();
-    const strengths = new Map<string, number>();
-    for (const r of reviews) {
-      const t = r.complaint_topic?.trim();
-      if (!t) continue;
-      if (r.topic_type === "improvement") {
-        improvements.set(t, (improvements.get(t) ?? 0) + 1);
-      }
-      if (r.topic_type === "strength") {
-        strengths.set(t, (strengths.get(t) ?? 0) + 1);
-      }
-    }
-    const sortMap = (mp: Map<string, number>) =>
-      [...mp.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
-    return {
-      improvementTopics: sortMap(improvements),
-      strengthTopics: sortMap(strengths),
-      hasClassified: improvements.size > 0 || strengths.size > 0,
-    };
-  }, [reviews]);
-
-  const anyCompetitorSynced = useMemo(
-    () => competitors.some((c) => (c.total_reviews ?? 0) > 0),
-    [competitors],
-  );
-
   async function syncPlatform(
     platform: "tripadvisor" | "google" | "booking",
     url: string,
@@ -379,7 +393,7 @@ export default function BenchmarkingPage() {
       await Promise.all(tasks);
 
       for (const c of competitors) {
-        const res = await fetch("/api/refresh-competitor-stats", {
+        const res = await fetch("/api/scrape-competitor-reviews", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ competitor_id: c.id }),
@@ -391,6 +405,7 @@ export default function BenchmarkingPage() {
       }
 
       await loadData();
+      await fetchInsights();
       showToast("Sync finished");
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Sync failed");
@@ -402,7 +417,7 @@ export default function BenchmarkingPage() {
   async function handleSyncOne(competitorId: string) {
     setSyncingId(competitorId);
     try {
-      const res = await fetch("/api/refresh-competitor-stats", {
+      const res = await fetch("/api/scrape-competitor-reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ competitor_id: competitorId }),
@@ -412,6 +427,7 @@ export default function BenchmarkingPage() {
         throw new Error(j.error ?? "Sync failed");
       }
       await loadData();
+      await fetchInsights();
       showToast("Competitor updated");
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Sync failed");
@@ -588,18 +604,23 @@ export default function BenchmarkingPage() {
             Your market position at a glance
           </p>
         </div>
-        <button
-          type="button"
-          disabled={syncing}
-          onClick={() => void handleSyncAll()}
-          style={{
-            ...primaryBtn,
-            opacity: syncing ? 0.65 : 1,
-            cursor: syncing ? "not-allowed" : "pointer",
-          }}
-        >
-          {syncing ? "Syncing…" : "Sync all"}
-        </button>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+          <button
+            type="button"
+            disabled={syncing}
+            onClick={() => void handleSyncAll()}
+            style={{
+              ...primaryBtn,
+              opacity: syncing ? 0.65 : 1,
+              cursor: syncing ? "not-allowed" : "pointer",
+            }}
+          >
+            {syncing ? "Syncing…" : "Sync competitors"}
+          </button>
+          <p style={{ fontSize: 11, color: "var(--text-muted)", margin: 0, textAlign: "right" }}>
+            ~$0.001 per competitor · Only fetches summary data
+          </p>
+        </div>
       </header>
 
       {/* Ranking strip */}
@@ -766,6 +787,114 @@ export default function BenchmarkingPage() {
         />
       </div>
 
+      {/* AI insights */}
+      <div style={{ marginBottom: 24 }}>
+        <h2
+          style={{
+            fontSize: 17,
+            fontWeight: 600,
+            margin: "0 0 14px",
+            color: "var(--text-primary)",
+          }}
+        >
+          AI insights
+        </h2>
+        {insightLoading ? (
+          <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0 }}>Generating insights…</p>
+        ) : insightError ? (
+          <p style={{ fontSize: 14, color: "#f87171", margin: 0 }}>{insightError}</p>
+        ) : insight ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 14,
+            }}
+          >
+            {(
+              [
+                {
+                  key: "market_position",
+                  label: "Market position",
+                  icon: "◎",
+                  text: insight.market_position,
+                  accent: "#6366f1",
+                  border: "rgba(99,102,241,0.35)",
+                },
+                {
+                  key: "my_advantage",
+                  label: "Your advantage",
+                  icon: "✓",
+                  text: insight.my_advantage,
+                  accent: "#22c55e",
+                  border: "rgba(34,197,94,0.35)",
+                },
+                {
+                  key: "biggest_threat",
+                  label: "Biggest threat",
+                  icon: "⚠",
+                  text: insight.biggest_threat,
+                  accent: "#f87171",
+                  border: "rgba(248,113,113,0.4)",
+                },
+                {
+                  key: "quick_win",
+                  label: "Quick win",
+                  icon: "→",
+                  text: insight.quick_win,
+                  accent: "#6366f1",
+                  border: "rgba(99,102,241,0.35)",
+                },
+                {
+                  key: "rating_gap",
+                  label: "Rating gap",
+                  icon: "△",
+                  text: insight.rating_gap,
+                  accent: "#fbbf24",
+                  border: "rgba(251,191,36,0.35)",
+                },
+              ] as const
+            ).map((card) => (
+              <div
+                key={card.key}
+                style={{
+                  ...glass,
+                  padding: "16px 18px",
+                  borderRadius: 16,
+                  borderColor: card.border,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    marginBottom: 10,
+                  }}
+                >
+                  <span style={{ fontSize: 18, color: card.accent, lineHeight: 1 }}>{card.icon}</span>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "var(--text-primary)",
+                      letterSpacing: "0.02em",
+                    }}
+                  >
+                    {card.label}
+                  </span>
+                </div>
+                <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: 0, lineHeight: 1.55 }}>
+                  {card.text || "—"}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0 }}>No insights yet.</p>
+        )}
+      </div>
+
       {/* Analysis grid */}
       <div
         style={{
@@ -877,59 +1006,6 @@ export default function BenchmarkingPage() {
               </div>
             ))}
           </div>
-        </div>
-
-        <div style={{ ...glass, padding: "20px", borderRadius: 16 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "var(--text-primary)" }}>
-            Your advantages
-          </div>
-          {!anyCompetitorSynced ? (
-            <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>
-              Sync competitors to see analysis
-            </p>
-          ) : !topicInsights.hasClassified ? (
-            <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>
-              Run classification on your reviews to see themed strengths and focus areas.
-            </p>
-          ) : (
-            <>
-              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 10px" }}>
-                Based on your classified reviews (peer topic data coming soon).
-              </p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {topicInsights.strengthTopics.slice(0, 6).map((t) => (
-                  <span
-                    key={`s-${t}`}
-                    style={{
-                      fontSize: 12,
-                      padding: "6px 10px",
-                      borderRadius: 100,
-                      background: "rgba(34,197,94,0.15)",
-                      color: "var(--success)",
-                      border: "1px solid rgba(34,197,94,0.35)",
-                    }}
-                  >
-                    ✓ Better {t}
-                  </span>
-                ))}
-                {topicInsights.improvementTopics.slice(0, 6).map((t) => (
-                  <span
-                    key={`i-${t}`}
-                    style={{
-                      fontSize: 12,
-                      padding: "6px 10px",
-                      borderRadius: 100,
-                      background: "rgba(248,113,113,0.12)",
-                      color: "#fca5a5",
-                      border: "1px solid rgba(248,113,113,0.35)",
-                    }}
-                  >
-                    ↑ More {t} mentions
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
         </div>
 
         <div style={{ ...glass, padding: "20px", borderRadius: 16 }}>
