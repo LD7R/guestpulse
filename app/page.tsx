@@ -1,6 +1,7 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
@@ -37,36 +38,36 @@ const miniGlass: CSSProperties = {
 
 const faqItems: { q: string; a: string }[] = [
   {
-    q: "How does GuestPulse get my reviews?",
-    a: "We connect to TripAdvisor, Google Maps, and Booking.com using our scraping technology. Just paste your hotel URLs and we handle the rest — no API keys or integrations needed.",
+    q: "How long does setup take?",
+    a: "Under 5 minutes. Create an account, paste your hotel URLs from TripAdvisor, Google, and Booking.com, and your reviews start syncing immediately. No technical knowledge needed.",
   },
   {
-    q: "Do I need technical knowledge to set it up?",
-    a: "Not at all. Setup takes under 5 minutes — create an account, paste your hotel URLs, and your reviews start syncing immediately.",
+    q: "Do I need to give you access to my review accounts?",
+    a: "No. We never need your login credentials. We pull reviews directly from public listing pages — completely safe and secure.",
   },
   {
     q: "How does the AI response work?",
-    a: "When you click 'Draft response' on any review, our AI reads the review and generates a warm, professional response in seconds. You can edit it before copying and posting.",
+    a: "Click 'Draft Response' on any review. Our AI reads the review, your hotel name, and generates a warm professional response in 2-3 seconds. You edit it, copy it, and paste it directly on the platform.",
   },
   {
-    q: "Which review platforms do you support?",
-    a: "Currently TripAdvisor, Google Maps, and Booking.com. We're adding Expedia and Hotels.com soon.",
+    q: "Will the AI responses sound robotic or generic?",
+    a: "No. Each response references specific details the guest mentioned. You can also set your hotel's custom sign-off and response tone in Settings.",
   },
   {
-    q: "Can I manage multiple hotels?",
-    a: "Yes — the Pro plan supports up to 3 hotel properties. Enterprise plans for larger portfolios are available on request.",
+    q: "What if I want to cancel?",
+    a: "Cancel anytime with one click. No contracts, no cancellation fees. You keep access until the end of your billing period.",
   },
   {
-    q: "Is there a free trial?",
-    a: "Yes — 7 days completely free, no credit card required. You get full access to all Pro features during the trial.",
+    q: "Do you support languages other than English?",
+    a: "Yes. Our AI can draft responses and translate reviews in 19 languages including Dutch, German, French, Spanish, Indonesian, and more.",
   },
   {
-    q: "What happens if I cancel?",
-    a: "You can cancel anytime from your billing settings. You'll keep access until the end of your billing period.",
+    q: "Is my hotel data private?",
+    a: "Completely. Your data is encrypted, never shared with third parties, and never used to train AI models. We only store what's necessary to run the service.",
   },
   {
-    q: "Is my hotel data secure?",
-    a: "Yes. All data is encrypted, stored securely, and never shared with third parties. We take privacy seriously.",
+    q: "What platforms do you support?",
+    a: "Currently TripAdvisor, Google Maps, and Booking.com. Expedia and Hotels.com are coming soon.",
   },
 ];
 
@@ -123,12 +124,29 @@ export default function LandingPage() {
       <style
         dangerouslySetInnerHTML={{
           __html: `
-            .landing-nav {
+            .landing-nav-stack {
               position: fixed;
               top: 0;
               left: 0;
               right: 0;
               z-index: 100;
+            }
+            .landing-announce {
+              background: rgba(99,102,241,0.15);
+              border-bottom: 1px solid rgba(99,102,241,0.2);
+              padding: 10px 48px;
+              text-align: center;
+              font-size: 13px;
+              color: rgba(255,255,255,0.8);
+            }
+            @media (prefers-color-scheme: light) {
+              .landing-announce {
+                background: rgba(99,102,241,0.1);
+                color: rgba(30,30,50,0.85);
+              }
+            }
+            .landing-nav {
+              position: relative;
               background: rgba(10, 10, 26, 0.7);
               backdrop-filter: blur(20px);
               -webkit-backdrop-filter: blur(20px);
@@ -162,7 +180,9 @@ export default function LandingPage() {
               display: none;
             }
             .landing-hero-h1 {
-              font-size: clamp(40px, 6vw, 72px);
+              font-size: clamp(44px, 6vw, 76px);
+              letter-spacing: -2.5px;
+              line-height: 1.05;
             }
             .landing-features-grid {
               display: grid;
@@ -170,25 +190,39 @@ export default function LandingPage() {
               gap: 20px;
             }
             .landing-how-wrap {
-              background: var(--glass-bg);
-              margin: 0 -48px;
+              background: transparent;
+              margin: 0;
               padding-left: 48px;
               padding-right: 48px;
             }
+            .landing-problem-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 20px;
+            }
             @media (max-width: 768px) {
+              .landing-announce { padding: 10px 24px; font-size: 12px; }
               .landing-nav { padding: 0 24px; }
               .landing-nav-right { display: none !important; }
               .landing-nav-mobile-cta { display: inline-flex !important; align-items: center; justify-content: center; margin-left: auto; }
               .landing-hero-h1 { font-size: 36px !important; letter-spacing: -1px !important; }
               .landing-features-grid { grid-template-columns: 1fr !important; }
               .landing-section-pad { padding-left: 24px !important; padding-right: 24px !important; }
-              .landing-how-wrap { margin: 0 -24px; padding-left: 24px; padding-right: 24px; }
+              .landing-how-wrap { margin: 0; padding-left: 24px; padding-right: 24px; }
+              .landing-problem-grid { grid-template-columns: 1fr !important; }
             }
           `,
         }}
       />
 
-      <nav className="landing-nav">
+      <div className="landing-nav-stack">
+        <div className="landing-announce">
+          ✦ Now available — AI-powered review responses for independent hotels ·{" "}
+          <Link href="/login" style={{ color: "#a5b4fc", textDecoration: "none", fontWeight: 600 }}>
+            Start free →
+          </Link>
+        </div>
+        <nav className="landing-nav">
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <span
             style={{
@@ -327,7 +361,8 @@ export default function LandingPage() {
         >
           Get started
         </button>
-      </nav>
+        </nav>
+      </div>
 
       {/* HERO */}
       <section
@@ -337,7 +372,7 @@ export default function LandingPage() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: "120px 48px 80px",
+          padding: "160px 48px 100px",
           textAlign: "center",
           position: "relative",
           overflow: "hidden",
@@ -392,26 +427,24 @@ export default function LandingPage() {
             className="landing-hero-h1"
             style={{
               fontWeight: 800,
-              lineHeight: 1.1,
-              letterSpacing: "-2px",
               color: "var(--text-primary)",
               marginBottom: "24px",
-              maxWidth: "800px",
+              maxWidth: "900px",
               marginLeft: "auto",
               marginRight: "auto",
             }}
           >
-            Stop losing bookings to
+            Every unanswered review
             <br />
             <span
               style={{
-                background: "linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa)",
+                background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
               }}
             >
-              unanswered reviews.
+              costs you a booking.
             </span>
           </h1>
 
@@ -419,15 +452,16 @@ export default function LandingPage() {
             style={{
               fontSize: "18px",
               color: "var(--text-secondary)",
-              maxWidth: "560px",
-              lineHeight: 1.7,
+              maxWidth: "580px",
+              lineHeight: 1.75,
               marginBottom: "40px",
               marginLeft: "auto",
               marginRight: "auto",
             }}
           >
-            GuestPulse automatically collects reviews from TripAdvisor, Google, and Booking.com — then drafts
-            AI-powered responses so you never miss a reply again.
+            Independent hotels lose bookings every day to negative reviews that go unanswered. GuestPulse monitors
+            your reviews across TripAdvisor, Google, and Booking.com — and drafts professional AI responses in
+            seconds.
           </p>
 
           <div
@@ -436,7 +470,7 @@ export default function LandingPage() {
               flexWrap: "wrap",
               gap: "16px",
               justifyContent: "center",
-              marginBottom: "8px",
+              marginBottom: "0",
             }}
           >
             <button
@@ -479,129 +513,105 @@ export default function LandingPage() {
             </button>
           </div>
 
-          <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "20px" }}>
-            Join 500+ hotels already using GuestPulse
-          </p>
-
-          <div
+          <p
             style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "48px",
-              justifyContent: "center",
-              marginTop: "48px",
+              fontSize: "14px",
+              color: "var(--text-muted)",
+              textAlign: "center",
+              marginTop: "24px",
+              marginBottom: 0,
             }}
           >
-            {[
-              { n: "10x", l: "Faster review responses" },
-              { n: "4.8★", l: "Average rating improvement" },
-              { n: "2hrs", l: "Saved per week per hotel" },
-            ].map((s) => (
-              <div key={s.l} style={{ textAlign: "center" }}>
-                <div style={{ fontSize: "32px", fontWeight: 700, color: "var(--accent)" }}>{s.n}</div>
-                <div style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>{s.l}</div>
-              </div>
-            ))}
-          </div>
+            Built for independent boutique hotels
+          </p>
 
-          {/* Mock dashboard */}
+          {/* Product mockup — review inbox */}
           <div
             style={{
-              ...miniGlass,
-              padding: "20px",
-              maxWidth: "900px",
-              margin: "48px auto 0",
-              boxShadow: "0 40px 80px rgba(0,0,0,0.4)",
-              borderRadius: "20px",
+              maxWidth: "960px",
+              margin: "60px auto 0",
+              width: "100%",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "24px",
+              padding: 0,
+              overflow: "hidden",
+              boxShadow: "0 60px 120px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)",
               textAlign: "left",
             }}
           >
-            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Live preview</div>
-            {[
-              {
-                plat: "TripAdvisor",
-                platStyle: { bg: "var(--platform-ta-bg)", c: "var(--platform-ta)", b: "var(--platform-ta-border)" },
-                stars: 5,
-                name: "Sarah M.",
-                sent: "Positive",
-                sentStyle: { bg: "var(--success-bg)", c: "var(--success)", bd: "var(--success-border)" },
-                extra: null as string | null,
-              },
-              {
-                plat: "Google",
-                platStyle: { bg: "var(--platform-google-bg)", c: "var(--platform-google)", b: "var(--platform-google-border)" },
-                stars: 2,
-                name: "James K.",
-                sent: "Negative",
-                sentStyle: { bg: "var(--error-bg)", c: "var(--error)", bd: "var(--error-border)" },
-                extra: "Noise",
-              },
-              {
-                plat: "Booking",
-                platStyle: { bg: "var(--platform-booking-bg)", c: "var(--platform-booking)", b: "var(--platform-booking-border)" },
-                stars: 4,
-                name: "Maria L.",
-                sent: "Neutral",
-                sentStyle: { bg: "var(--neutral-sentiment-bg)", c: "var(--text-secondary)", bd: "var(--neutral-sentiment-border)" },
-                extra: "WiFi",
-              },
-            ].map((row) => (
+            <div
+              style={{
+                background: "rgba(255,255,255,0.03)",
+                borderBottom: "1px solid rgba(255,255,255,0.06)",
+                padding: "12px 20px",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#ff5f57", flexShrink: 0 }} />
+              <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#ffbd2e", flexShrink: 0 }} />
+              <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#28c840", flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginLeft: 16 }}>
+                guestpulse.app/dashboard/reviews
+              </span>
+            </div>
+            <div style={{ padding: "20px 20px 24px" }}>
+              {/* Card 1 */}
               <div
-                key={row.name}
                 style={{
-                  ...miniGlass,
-                  padding: "12px 16px",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "14px",
+                  padding: "14px 16px",
                   marginBottom: "10px",
                   display: "flex",
                   flexWrap: "wrap",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   gap: "10px",
                   justifyContent: "space-between",
                 }}
               >
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      padding: "2px 8px",
-                      borderRadius: "100px",
-                      border: `1px solid ${row.platStyle.b}`,
-                      background: row.platStyle.bg,
-                      color: row.platStyle.c,
-                    }}
-                  >
-                    {row.plat}
-                  </span>
-                  <span style={{ color: "var(--star)", fontSize: "14px" }}>{"★".repeat(row.stars)}</span>
-                  <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--text-primary)" }}>{row.name}</span>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      padding: "2px 8px",
-                      borderRadius: "100px",
-                      border: `1px solid ${row.sentStyle.bd}`,
-                      background: row.sentStyle.bg,
-                      color: row.sentStyle.c,
-                    }}
-                  >
-                    {row.sent}
-                  </span>
-                  {row.extra ? (
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
                     <span
                       style={{
-                        fontSize: "11px",
-                        padding: "2px 8px",
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        letterSpacing: "0.04em",
+                        padding: "3px 8px",
                         borderRadius: "100px",
-                        background: "var(--complaint-pill-bg)",
-                        border: "1px solid var(--complaint-pill-border)",
-                        color: "var(--text-label)",
+                        background: "rgba(52,211,153,0.15)",
+                        border: "1px solid rgba(52,211,153,0.35)",
+                        color: "#34d399",
                       }}
                     >
-                      {row.extra}
+                      TRIPADVISOR
                     </span>
-                  ) : null}
+                    <span style={{ color: "#fbbf24", fontSize: "13px" }}>★★★★★</span>
+                  </div>
+                  <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "6px" }}>
+                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>Sarah M.</span>
+                    <span style={{ color: "var(--text-muted)" }}> · 2 days ago</span>
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        padding: "2px 8px",
+                        borderRadius: "100px",
+                        background: "var(--success-bg)",
+                        border: "1px solid var(--success-border)",
+                        color: "var(--success)",
+                      }}
+                    >
+                      Positive
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.55, margin: 0 }}>
+                    Absolutely stunning hotel. The staff were incredibly welcoming and the room was spotless...
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -610,28 +620,335 @@ export default function LandingPage() {
                     padding: "6px 12px",
                     fontSize: "12px",
                     borderRadius: "10px",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-bg)";
+                    flexShrink: 0,
                   }}
                 >
-                  Draft AI Response
+                  ✦ Draft AI Response
                 </button>
               </div>
-            ))}
+
+              {/* Card 2 + AI panel */}
+              <div
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "14px",
+                  padding: "14px 16px",
+                  marginBottom: 0,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                    <span
+                      style={{
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        letterSpacing: "0.04em",
+                        padding: "3px 8px",
+                        borderRadius: "100px",
+                        background: "rgba(96,165,250,0.15)",
+                        border: "1px solid rgba(96,165,250,0.35)",
+                        color: "#60a5fa",
+                      }}
+                    >
+                      GOOGLE
+                    </span>
+                    <span style={{ color: "#fbbf24", fontSize: "13px" }}>★★</span>
+                  </div>
+                  <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "6px" }}>
+                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>James K.</span>
+                    <span style={{ color: "var(--text-muted)" }}> · 5 days ago</span>
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        padding: "2px 8px",
+                        borderRadius: "100px",
+                        background: "var(--error-bg)",
+                        border: "1px solid var(--error-border)",
+                        color: "var(--error)",
+                      }}
+                    >
+                      Negative
+                    </span>
+                    <span
+                      style={{
+                        marginLeft: 6,
+                        fontSize: "11px",
+                        padding: "2px 8px",
+                        borderRadius: "100px",
+                        background: "rgba(251,146,60,0.12)",
+                        border: "1px solid rgba(251,146,60,0.35)",
+                        color: "#fb923c",
+                      }}
+                    >
+                      noise
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.55, margin: 0 }}>
+                    Very disappointed with our stay. The room was noisy all night due to construction...
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  style={{
+                    ...glassPrimary,
+                    padding: "6px 12px",
+                    fontSize: "12px",
+                    borderRadius: "10px",
+                    flexShrink: 0,
+                  }}
+                >
+                  ✦ Draft AI Response
+                </button>
+              </div>
+              <div
+                style={{
+                  background: "rgba(99,102,241,0.06)",
+                  border: "1px solid rgba(99,102,241,0.2)",
+                  borderRadius: "12px",
+                  padding: "16px",
+                  marginTop: "-4px",
+                  marginBottom: "10px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "rgba(99,102,241,0.8)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    marginBottom: "8px",
+                  }}
+                >
+                  AI Generated Response
+                </div>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    color: "var(--text-secondary)",
+                    lineHeight: 1.6,
+                    padding: "12px 14px",
+                    borderRadius: "10px",
+                    background: "rgba(0,0,0,0.15)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                  }}
+                >
+                  Dear James, thank you for taking the time to share your experience. We sincerely apologize for the
+                  noise disruption during your stay. This is not the standard we hold ourselves to, and we have
+                  addressed this with our team immediately...
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+                  <button
+                    type="button"
+                    style={{
+                      ...glassSecondary,
+                      padding: "6px 14px",
+                      fontSize: "12px",
+                      borderRadius: "10px",
+                    }}
+                  >
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      ...glassSecondary,
+                      padding: "6px 14px",
+                      fontSize: "12px",
+                      borderRadius: "10px",
+                    }}
+                  >
+                    Mark as responded
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 3 */}
+              <div
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "14px",
+                  padding: "14px 16px",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                    <span
+                      style={{
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        letterSpacing: "0.04em",
+                        padding: "3px 8px",
+                        borderRadius: "100px",
+                        background: "rgba(167,139,250,0.15)",
+                        border: "1px solid rgba(167,139,250,0.35)",
+                        color: "#a78bfa",
+                      }}
+                    >
+                      BOOKING
+                    </span>
+                    <span style={{ color: "#fbbf24", fontSize: "13px" }}>★★★★</span>
+                  </div>
+                  <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "6px" }}>
+                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>Maria L.</span>
+                    <span style={{ color: "var(--text-muted)" }}> · 1 week ago</span>
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        padding: "2px 8px",
+                        borderRadius: "100px",
+                        background: "var(--neutral-sentiment-bg)",
+                        border: "1px solid var(--neutral-sentiment-border)",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      Neutral
+                    </span>
+                    <span
+                      style={{
+                        marginLeft: 6,
+                        fontSize: "11px",
+                        padding: "2px 8px",
+                        borderRadius: "100px",
+                        background: "rgba(96,165,250,0.12)",
+                        border: "1px solid rgba(96,165,250,0.35)",
+                        color: "#60a5fa",
+                      }}
+                    >
+                      wifi
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.55, margin: 0 }}>
+                    Great location and lovely decor. Only complaint is the WiFi kept dropping...
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  style={{
+                    ...glassPrimary,
+                    padding: "6px 12px",
+                    fontSize: "12px",
+                    borderRadius: "10px",
+                    flexShrink: 0,
+                  }}
+                >
+                  ✦ Draft AI Response
+                </button>
+              </div>
+            </div>
           </div>
+        </div>
+      </section>
+
+      {/* THE PROBLEM */}
+      <section
+        id="problem"
+        className="landing-section-pad"
+        style={{
+          padding: "140px 48px",
+          maxWidth: "1100px",
+          margin: "0 auto",
+          textAlign: "center",
+        }}
+      >
+        <h2
+          style={{
+            fontSize: "clamp(28px, 4vw, 40px)",
+            fontWeight: 800,
+            color: "var(--text-primary)",
+            margin: "0 0 12px",
+            lineHeight: 1.2,
+            letterSpacing: "-0.5px",
+          }}
+        >
+          The reviews problem no one talks about
+        </h2>
+        <p
+          style={{
+            fontSize: "16px",
+            color: "var(--text-secondary)",
+            maxWidth: "560px",
+            margin: "0 auto 48px",
+            lineHeight: 1.65,
+          }}
+        >
+          Most hotel owners find out about bad reviews days after they&apos;re posted — when the damage is done.
+        </p>
+        <div
+          className="landing-problem-grid"
+          style={{
+            maxWidth: "960px",
+            margin: "0 auto",
+          }}
+        >
+          {[
+            {
+              n: "78%",
+              c: "#ef4444",
+              l: "of travellers read reviews before booking",
+              s: "— TripAdvisor Research",
+            },
+            {
+              n: "53%",
+              c: "#f59e0b",
+              l: "of guests expect a response within 3 days",
+              s: "— Booking.com Survey",
+            },
+            {
+              n: "1 star",
+              c: "#ef4444",
+              l: "drop in rating = 9% fewer bookings",
+              s: "— Harvard Business Review",
+            },
+          ].map((card) => (
+            <div
+              key={card.l}
+              style={{
+                ...miniGlass,
+                padding: "28px 20px",
+                borderRadius: "20px",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ fontSize: "40px", fontWeight: 800, color: card.c, lineHeight: 1.1 }}>{card.n}</div>
+              <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "12px 0 8px", lineHeight: 1.5 }}>
+                {card.l}
+              </p>
+              <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: 0 }}>{card.s}</p>
+            </div>
+          ))}
         </div>
       </section>
 
       {/* FEATURES */}
       <section
         id="features"
-        className="landing-section-pad"
-        style={{ padding: "120px 48px", maxWidth: "1200px", margin: "0 auto" }}
+        style={{
+          width: "100%",
+          background: "rgba(255,255,255,0.015)",
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+        }}
       >
+        <div
+          className="landing-section-pad"
+          style={{ padding: "140px 48px", maxWidth: "1200px", margin: "0 auto" }}
+        >
         <div style={{ textAlign: "center" }}>
           <span style={{ ...badgePill }}>FEATURES</span>
           <h2
@@ -727,10 +1044,11 @@ export default function LandingPage() {
             </div>
           ))}
         </div>
+        </div>
       </section>
 
       {/* HOW IT WORKS */}
-      <div className="landing-how-wrap" style={{ padding: "80px 48px" }}>
+      <div className="landing-how-wrap" style={{ padding: "140px 48px", maxWidth: "1100px", margin: "0 auto" }}>
         <h2
           style={{
             fontSize: "32px",
@@ -814,9 +1132,17 @@ export default function LandingPage() {
       {/* PRICING */}
       <section
         id="pricing"
-        className="landing-section-pad"
-        style={{ padding: "120px 48px", maxWidth: "500px", margin: "0 auto", textAlign: "center" }}
+        style={{
+          width: "100%",
+          background: "rgba(255,255,255,0.015)",
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+        }}
       >
+        <div
+          className="landing-section-pad"
+          style={{ padding: "140px 48px", maxWidth: "500px", margin: "0 auto", textAlign: "center" }}
+        >
         <span style={{ ...badgePill }}>PRICING</span>
         <h2
           style={{
@@ -844,16 +1170,26 @@ export default function LandingPage() {
         >
           <div
             style={{
-              ...badgePill,
+              display: "inline-block",
               marginBottom: "20px",
+              padding: "6px 14px",
+              borderRadius: "100px",
+              fontSize: "13px",
+              fontWeight: 600,
+              background: "rgba(245,158,11,0.15)",
+              color: "#f59e0b",
+              border: "1px solid rgba(245,158,11,0.25)",
             }}
           >
-            Most Popular
+            Founding Member Price
           </div>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: "6px" }}>
             <span style={{ fontSize: "64px", fontWeight: 800, color: "var(--text-primary)" }}>$99</span>
             <span style={{ fontSize: "18px", color: "var(--text-muted)" }}>/month</span>
           </div>
+          <p style={{ fontSize: "12px", color: "rgba(245,158,11,0.7)", marginTop: "4px" }}>
+            Lock in $99/mo before we raise prices
+          </p>
           <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "8px" }}>
             Billed monthly · Cancel anytime
           </p>
@@ -889,10 +1225,9 @@ export default function LandingPage() {
               "TripAdvisor, Google & Booking.com",
               "AI response drafting",
               "Sentiment dashboard & analytics",
-              "Competitor benchmarking (up to 5)",
-              "Weekly email digest",
-              "Urgent 1-2 star alerts",
-              "Up to 3 hotel properties",
+              "Smart sentiment analysis & trends",
+              "Urgent review alerts (1-2 star)",
+              "Priority customer support",
             ].map((line) => (
               <li key={line} style={{ display: "flex", alignItems: "flex-start", gap: "12px", fontSize: "14px", color: "var(--text-secondary)" }}>
                 <span
@@ -939,10 +1274,15 @@ export default function LandingPage() {
           </button>
           <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "12px" }}>No credit card required</p>
         </div>
+        </div>
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="landing-section-pad" style={{ padding: "120px 48px", maxWidth: "720px", margin: "0 auto" }}>
+      <section
+        id="faq"
+        className="landing-section-pad"
+        style={{ padding: "140px 48px", maxWidth: "720px", margin: "0 auto" }}
+      >
         <h2
           style={{
             fontSize: "36px",
@@ -978,7 +1318,7 @@ export default function LandingPage() {
               </div>
               <div
                 style={{
-                  maxHeight: open ? "200px" : "0",
+                  maxHeight: open ? "480px" : "0",
                   opacity: open ? 1 : 0,
                   overflow: "hidden",
                   transition: "max-height 0.35s ease, opacity 0.25s ease",
@@ -993,7 +1333,7 @@ export default function LandingPage() {
       </section>
 
       {/* FINAL CTA */}
-      <section className="landing-section-pad" style={{ padding: "120px 48px", textAlign: "center" }}>
+      <section className="landing-section-pad" style={{ padding: "140px 48px", textAlign: "center" }}>
         <div
           style={{
             maxWidth: "800px",
@@ -1016,7 +1356,7 @@ export default function LandingPage() {
             Ready to protect your hotel&apos;s reputation?
           </h2>
           <p style={{ fontSize: "18px", color: "var(--text-secondary)", margin: "16px 0 40px", lineHeight: 1.6 }}>
-            Join hundreds of hotels using GuestPulse to respond faster, rank higher, and win more bookings.
+            Start responding faster with AI drafts tailored to each guest — across TripAdvisor, Google, and Booking.com.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", justifyContent: "center" }}>
             <button
