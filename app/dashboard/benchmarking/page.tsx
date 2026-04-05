@@ -5,7 +5,6 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { extractCoordsFromGoogleMapsUrl } from "@/lib/extract-google-maps-coords";
 import { getRatingColor } from "@/lib/rating-colors";
 
 const MapComponent = dynamic(() => import("./MapComponent"), {
@@ -133,12 +132,6 @@ type DiscoverySuggestion = {
   reason: string;
 };
 
-type ReviewLite = {
-  rating: number | null;
-  complaint_topic: string | null;
-  topic_type: string | null;
-};
-
 function truncate(s: string, n: number) {
   const t = s.trim();
   if (t.length <= n) return t;
@@ -159,32 +152,28 @@ function formatRelative(iso: string | null): string {
   return `${d} day${d === 1 ? "" : "s"} ago`;
 }
 
-function avg(nums: number[]): number | null {
-  if (nums.length === 0) return null;
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
+const FALLBACK_COORDS = { lat: -7.7900488, lng: 110.3620332 };
+
+function extractCoords(url: string | null): { lat: number; lng: number } | null {
+  if (!url) return null;
+  const match = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (match) return { lat: parseFloat(match[1]!), lng: parseFloat(match[2]!) };
+  return null;
 }
 
-const DEFAULT_MAP_CENTER: [number, number] = [-7.7956, 110.3695];
-
-/** Resolve map center: DB coords → @lat,lng in google_url → Yogyakarta default. */
-function resolveHotelCenter(h: HotelRow): [number, number] {
-  if (
-    h.latitude != null &&
-    h.longitude != null &&
-    !Number.isNaN(h.latitude + h.longitude)
-  ) {
-    return [h.latitude, h.longitude];
-  }
-  const fromUrl = extractCoordsFromGoogleMapsUrl(h.google_url);
-  if (fromUrl) return [fromUrl.latitude, fromUrl.longitude];
-  const city = h.city?.trim().toLowerCase() ?? "";
-  if (city.includes("yogyakarta")) return DEFAULT_MAP_CENTER;
-  return DEFAULT_MAP_CENTER;
+/** Bar color for rating overview (competitors): tiered greens/orange/red. */
+function ratingOverviewBarColor(rating: number | null, mine: boolean): string {
+  if (mine) return "#6366f1";
+  if (rating == null) return "#94a3b8";
+  if (rating >= 4.5) return "#22c55e";
+  if (rating >= 4.0) return "#84cc16";
+  if (rating >= 3.5) return "#f59e0b";
+  return "#ef4444";
 }
 
 function canRunDiscovery(h: HotelRow): boolean {
   if (h.city?.trim()) return true;
-  if (extractCoordsFromGoogleMapsUrl(h.google_url)) return true;
+  if (extractCoords(h.google_url)) return true;
   const u = h.google_url?.trim();
   return Boolean(u && u.includes("/place/"));
 }
@@ -193,8 +182,10 @@ export default function BenchmarkingPage() {
   const [loading, setLoading] = useState(true);
   const [hotel, setHotel] = useState<HotelRow | null>(null);
   const [competitors, setCompetitors] = useState<CompetitorRow[]>([]);
-  const [reviews, setReviews] = useState<ReviewLite[]>([]);
+  const [myAvgRating, setMyAvgRating] = useState<number | null>(null);
+  const [myTotalReviews, setMyTotalReviews] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
@@ -221,10 +212,35 @@ export default function BenchmarkingPage() {
   }, []);
 
   const fetchInsights = useCallback(async () => {
+    if (!hotel?.id) return;
+    const syncedCompetitors = competitors.filter((c) => c.avg_rating !== null);
+    if (syncedCompetitors.length === 0) {
+      setInsight(null);
+      setInsightError(null);
+      setInsightLoading(false);
+      return;
+    }
     setInsightLoading(true);
     setInsightError(null);
     try {
-      const res = await fetch("/api/competitor-insight", { method: "POST" });
+      const res = await fetch("/api/competitor-insight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hotel_id: hotel.id,
+          my_hotel: {
+            name: hotel.name,
+            avg_rating: myAvgRating,
+            total_reviews: myTotalReviews,
+          },
+          competitors: syncedCompetitors.map((c) => ({
+            name: c.name,
+            avg_rating: Number(c.avg_rating),
+            total_reviews: c.total_reviews ?? 0,
+            recent_snippets: c.recent_snippets,
+          })),
+        }),
+      });
       const j = (await res.json()) as {
         success?: boolean;
         insight?: InsightPayload;
@@ -240,7 +256,7 @@ export default function BenchmarkingPage() {
     } finally {
       setInsightLoading(false);
     }
-  }, []);
+  }, [hotel, competitors, myAvgRating, myTotalReviews]);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 768px)");
@@ -263,7 +279,8 @@ export default function BenchmarkingPage() {
       if (!user?.id) {
         setHotel(null);
         setCompetitors([]);
-        setReviews([]);
+        setMyAvgRating(null);
+        setMyTotalReviews(0);
         return;
       }
 
@@ -279,7 +296,7 @@ export default function BenchmarkingPage() {
       setHotel(h as HotelRow | null);
 
       if (h?.id) {
-        const [{ data: rows, error: cErr }, { data: revs, error: rErr }] = await Promise.all([
+        const [{ data: rows, error: cErr }, { data: reviewStats, error: rErr }] = await Promise.all([
           supabase
             .from("competitors")
             .select(
@@ -287,15 +304,24 @@ export default function BenchmarkingPage() {
             )
             .eq("hotel_id", h.id)
             .order("created_at", { ascending: true }),
-          supabase.from("reviews").select("rating, complaint_topic, topic_type").eq("hotel_id", h.id),
+          supabase.from("reviews").select("rating").eq("hotel_id", h.id).not("rating", "is", null),
         ]);
         if (cErr) throw cErr;
         if (rErr) throw rErr;
         setCompetitors((rows ?? []) as CompetitorRow[]);
-        setReviews((revs ?? []) as ReviewLite[]);
+        const myRatings = (reviewStats ?? [])
+          .map((r: { rating: number | null }) => r.rating)
+          .filter((x): x is number => typeof x === "number" && !Number.isNaN(x));
+        const avg =
+          myRatings.length > 0
+            ? Math.round((myRatings.reduce((a, b) => a + b, 0) / myRatings.length) * 10) / 10
+            : null;
+        setMyAvgRating(avg);
+        setMyTotalReviews(myRatings.length);
       } else {
         setCompetitors([]);
-        setReviews([]);
+        setMyAvgRating(null);
+        setMyTotalReviews(0);
       }
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Failed to load");
@@ -305,97 +331,81 @@ export default function BenchmarkingPage() {
   }, [showToast]);
 
   useEffect(() => {
-    if (!loading && hotel?.id) {
-      void fetchInsights();
+    if (loading || !hotel?.id) return;
+    const hasSynced = competitors.some((c) => c.avg_rating !== null);
+    if (hasSynced) void fetchInsights();
+    else {
+      setInsight(null);
+      setInsightError(null);
+      setInsightLoading(false);
     }
-  }, [loading, hotel?.id, fetchInsights]);
+  }, [loading, hotel?.id, competitors, fetchInsights]);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
 
-  const myRating = useMemo(() => {
-    const nums = reviews.map((r) => r.rating).filter((x): x is number => typeof x === "number" && !Number.isNaN(x));
-    return avg(nums);
-  }, [reviews]);
+  const hotelCoords = useMemo(() => {
+    if (!hotel) return FALLBACK_COORDS;
+    if (hotel.latitude != null && hotel.longitude != null) {
+      return { lat: Number(hotel.latitude), lng: Number(hotel.longitude) };
+    }
+    return extractCoords(hotel.google_url) ?? FALLBACK_COORDS;
+  }, [hotel]);
 
-  const myTotalReviews = reviews.length;
+  const mapCenter = useMemo((): [number, number] => [hotelCoords.lat, hotelCoords.lng], [hotelCoords]);
 
-  const marketStats = useMemo(() => {
-    const comps = competitors.map((c) => ({
-      id: c.id,
-      name: c.name,
-      rating: c.avg_rating,
-      total: c.total_reviews ?? 0,
-      kind: "competitor" as const,
-    }));
-    const mine = {
-      id: "yours",
-      name: hotel?.name ?? "Your hotel",
-      rating: myRating,
-      total: myTotalReviews,
-      kind: "yours" as const,
-    };
-    const allRated = [mine, ...comps].filter((x) => x.rating != null && !Number.isNaN(x.rating as number));
-    const marketAvg =
-      allRated.length > 0
-        ? allRated.reduce((s, x) => s + (x.rating as number), 0) / allRated.length
-        : null;
-
-    const sortedByRating = [...[mine, ...comps]].sort((a, b) => {
-      const ar = a.rating ?? 0;
-      const br = b.rating ?? 0;
-      return br - ar;
-    });
-    const rank =
-      sortedByRating.findIndex((x) => x.kind === "yours") >= 0
-        ? sortedByRating.findIndex((x) => x.kind === "yours") + 1
-        : null;
-
-    const totals = [mine.total, ...comps.map((c) => c.total)];
-    const maxRev = Math.max(0, ...totals);
-
-    const pctVsMarket =
-      marketAvg != null && myRating != null && marketAvg !== 0
-        ? ((myRating - marketAvg) / marketAvg) * 100
-        : null;
-
-    return {
-      marketAvg,
-      rank,
-      totalHotels: 1 + competitors.length,
-      maxRev,
-      pctVsMarket,
-    };
-  }, [competitors, hotel?.name, myRating, myTotalReviews]);
-
-  const hotelCenter = useMemo(
-    () => (hotel ? resolveHotelCenter(hotel) : DEFAULT_MAP_CENTER),
-    [hotel],
+  const competitorsWithCoords = useMemo(
+    () =>
+      competitors.map((c) => {
+        const fromUrl = extractCoords(c.google_url);
+        return {
+          id: c.id,
+          name: c.name,
+          avg_rating: c.avg_rating != null ? Number(c.avg_rating) : null,
+          total_reviews: c.total_reviews ?? 0,
+          address: c.address,
+          latitude: c.latitude != null ? Number(c.latitude) : fromUrl?.lat ?? null,
+          longitude: c.longitude != null ? Number(c.longitude) : fromUrl?.lng ?? null,
+          google_url: c.google_url,
+        };
+      }),
+    [competitors],
   );
 
-  const rankingStripHotels = useMemo(() => {
+  const allHotels = useMemo(() => {
+    if (!hotel) return [];
     const mine = {
-      key: "yours" as const,
-      name: hotel?.name ?? "Your hotel",
-      avg_rating: myRating,
+      id: hotel.id,
+      name: hotel.name ?? "Your hotel",
+      avg_rating: myAvgRating,
       total_reviews: myTotalReviews,
-      isMe: true,
+      isMe: true as const,
     };
     const rows = [
       mine,
       ...competitors.map((c) => ({
-        key: c.id as string,
+        id: c.id,
         name: c.name,
-        avg_rating: c.avg_rating,
-        total_reviews: c.total_reviews ?? 0,
+        avg_rating: c.avg_rating != null ? Number(c.avg_rating) : null,
+        total_reviews: c.total_reviews || 0,
         isMe: false as const,
+        last_synced_at: c.last_synced_at,
       })),
     ];
     return [...rows]
-      .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
-      .map((row, i) => ({ ...row, rank: i + 1 }));
-  }, [hotel?.name, competitors, myRating, myTotalReviews]);
+      .sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0))
+      .map((r, i) => ({ ...r, rank: i + 1 }));
+  }, [hotel, competitors, myAvgRating, myTotalReviews]);
+
+  const marketPositionStats = useMemo(() => {
+    const synced = allHotels.filter((h) => h.avg_rating !== null);
+    if (synced.length === 0 || !hotel) return null;
+    const myRank = synced.findIndex((h) => h.isMe) + 1;
+    const marketAvg = synced.reduce((s, h) => s + (h.avg_rating || 0), 0) / synced.length;
+    const diffNum = (myAvgRating ?? 0) - marketAvg;
+    return { myRank, y: synced.length, marketAvg, diffNum };
+  }, [allHotels, hotel, myAvgRating]);
 
   async function syncPlatform(
     platform: "tripadvisor" | "google" | "booking",
@@ -483,7 +493,7 @@ export default function BenchmarkingPage() {
     }
   }
 
-  async function handleSyncOne(competitorId: string) {
+  async function handleSyncCompetitor(competitorId: string) {
     const row = competitors.find((c) => c.id === competitorId);
     if (!row?.google_url?.trim()) {
       showToast("Add a Google Maps URL for this competitor to sync.");
@@ -497,12 +507,27 @@ export default function BenchmarkingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ competitor_id: competitorId, hotel_id: hotel.id }),
       });
-      const j = (await res.json()) as { success?: boolean; error?: string };
-      if (!res.ok || !j.success) {
-        throw new Error(j.error ?? "Sync failed");
+      const data = (await res.json()) as {
+        success?: boolean;
+        error?: string;
+        avg_rating?: number | null;
+        total_reviews?: number;
+      };
+      if (!res.ok || !data.success) {
+        throw new Error(data.error ?? "Sync failed");
       }
-      await loadData();
-      await fetchInsights();
+      setCompetitors((prev) =>
+        prev.map((c) =>
+          c.id === competitorId
+            ? {
+                ...c,
+                avg_rating: data.avg_rating ?? c.avg_rating,
+                total_reviews: data.total_reviews ?? c.total_reviews,
+                last_synced_at: new Date().toISOString(),
+              }
+            : c,
+        ),
+      );
       showToast("Competitor updated");
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Sync failed");
@@ -596,23 +621,36 @@ export default function BenchmarkingPage() {
         tripadvisor_url: null as string | null,
       }));
 
-      const { data: inserted, error } = await supabase.from("competitors").insert(rows).select("id, google_url");
+      const { data: inserted, error } = await supabase
+        .from("competitors")
+        .insert(rows)
+        .select("id, google_url, name");
       if (error) throw error;
 
       setDiscoverySuggestions(null);
       setSelectedSuggestions([]);
 
-      showToast("Adding competitors and syncing data…");
+      setLoadingMessage("Syncing competitor data…");
       const newRows = inserted ?? [];
       for (const row of newRows) {
         const url = typeof row.google_url === "string" ? row.google_url.trim() : "";
         if (!url) continue;
-        await fetch("/api/scrape-competitor-reviews", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ competitor_id: row.id, hotel_id: hotel.id }),
-        });
+        const label = typeof row.name === "string" ? row.name : "competitor";
+        setLoadingMessage(`Syncing ${label}…`);
+        try {
+          await fetch("/api/scrape-competitor-reviews", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ competitor_id: row.id, hotel_id: hotel.id }),
+          });
+        } catch (e) {
+          console.error("Auto-sync failed for", label, e);
+        }
       }
+
+      const { data: refreshed } = await supabase.from("competitors").select("*").eq("hotel_id", hotel.id);
+      setCompetitors((refreshed ?? []) as CompetitorRow[]);
+      setLoadingMessage(null);
 
       await loadData();
       await fetchInsights();
@@ -641,7 +679,7 @@ export default function BenchmarkingPage() {
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       );
-      const coords = extractCoordsFromGoogleMapsUrl(addGoogle);
+      const coords = extractCoords(addGoogle);
       const row: Record<string, unknown> = {
         hotel_id: hotel.id,
         name: addName.trim(),
@@ -651,8 +689,8 @@ export default function BenchmarkingPage() {
         total_reviews: 0,
       };
       if (coords) {
-        row.latitude = coords.latitude;
-        row.longitude = coords.longitude;
+        row.latitude = coords.lat;
+        row.longitude = coords.lng;
       }
       const { data, error } = await supabase.from("competitors").insert(row).select("*").single();
       if (error) throw error;
@@ -690,31 +728,28 @@ export default function BenchmarkingPage() {
     const rows: { key: string; label: string; rating: number | null; mine: boolean; needsSync: boolean }[] = [
       {
         key: "yours",
-        label: hotel?.name ? truncate(hotel.name, 24) : "Your hotel",
-        rating: myRating,
+        label: hotel?.name ? truncate(hotel.name, 22) : "Your hotel",
+        rating: myAvgRating,
         mine: true,
         needsSync: false,
       },
       ...competitorsSorted.map((c) => ({
         key: c.id,
-        label: truncate(c.name, 24),
+        label: truncate(c.name, 22),
         rating: c.avg_rating,
         mine: false,
         needsSync: c.avg_rating == null,
       })),
     ];
     return rows;
-  }, [competitorsSorted, hotel?.name, myRating]);
+  }, [competitorsSorted, hotel?.name, myAvgRating]);
 
   const volumeBars = useMemo(() => {
-    const syncedTotals = competitors
-      .filter((c) => c.last_synced_at)
-      .map((c) => c.total_reviews ?? 0);
-    const maxN = Math.max(1, myTotalReviews, ...syncedTotals);
+    const maxN = Math.max(1, myTotalReviews, ...competitors.map((c) => c.total_reviews ?? 0));
     const rows = [
       {
         key: "yours",
-        label: hotel?.name ? truncate(hotel.name, 24) : "Your hotel",
+        label: hotel?.name ? truncate(hotel.name, 22) : "Your hotel",
         n: myTotalReviews,
         mine: true,
         needsSync: false,
@@ -725,7 +760,7 @@ export default function BenchmarkingPage() {
         const n = c.total_reviews ?? 0;
         return {
           key: c.id,
-          label: truncate(c.name, 24),
+          label: truncate(c.name, 22),
           n,
           mine: false,
           needsSync,
@@ -761,32 +796,31 @@ export default function BenchmarkingPage() {
     );
   }
 
-  const diffLabel =
-    marketStats.pctVsMarket != null ? (
-      <span
-        style={{
-          color: marketStats.pctVsMarket >= 0 ? "var(--success)" : "#f87171",
-          fontWeight: 600,
-        }}
-      >
-        {marketStats.pctVsMarket >= 0 ? "+" : ""}
-        {marketStats.pctVsMarket.toFixed(1)}% {marketStats.pctVsMarket >= 0 ? "above" : "below"}{" "}
-        market average
-      </span>
-    ) : (
-      <span style={{ color: "var(--text-muted)" }}>Add ratings to compare</span>
-    );
-
   const discoverySlotsMax = Math.max(0, MAX_COMPETITORS - competitors.length);
 
-  const behindLeader =
-    marketStats.maxRev > 0 ? Math.max(0, marketStats.maxRev - myTotalReviews) : 0;
+  const maxRevAll = allHotels.length > 0 ? Math.max(...allHotels.map((h) => h.total_reviews)) : 0;
+  const behindLeader = maxRevAll > 0 ? Math.max(0, maxRevAll - myTotalReviews) : 0;
   const reviewsVsLeader =
-    marketStats.maxRev === 0
+    maxRevAll === 0
       ? "Sync platforms to populate review counts"
       : behindLeader === 0
         ? "You match the highest review volume in this set"
         : `${behindLeader.toLocaleString()} reviews behind the leader`;
+
+  const marketDiffCopy =
+    marketPositionStats == null ? (
+      <span style={{ color: "var(--text-muted)" }}>Sync competitor ratings to compare to the market</span>
+    ) : marketPositionStats.diffNum > 0 ? (
+      <span style={{ color: "var(--success)", fontWeight: 600 }}>
+        +{marketPositionStats.diffNum.toFixed(2)} above market average
+      </span>
+    ) : marketPositionStats.diffNum < 0 ? (
+      <span style={{ color: "#f87171", fontWeight: 600 }}>
+        {marketPositionStats.diffNum.toFixed(2)} below market average
+      </span>
+    ) : (
+      <span style={{ color: "var(--text-muted)" }}>At market average</span>
+    );
 
   return (
     <div style={{ maxWidth: 1100 }}>
@@ -905,6 +939,12 @@ export default function BenchmarkingPage() {
             )}
           </button>
         </div>
+
+        {loadingMessage ? (
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 12, marginBottom: 0 }}>
+            {loadingMessage}
+          </p>
+        ) : null}
 
         {findingCompetitors ? (
           <div
@@ -1065,7 +1105,7 @@ export default function BenchmarkingPage() {
             WebkitOverflowScrolling: "touch",
           }}
         >
-          {rankingStripHotels.map((row) => {
+          {allHotels.map((row) => {
             const r = row.avg_rating;
             const dot =
               r != null && !Number.isNaN(r) ? getRatingColor(r) : row.isMe ? "#6366f1" : "#64748b";
@@ -1073,7 +1113,7 @@ export default function BenchmarkingPage() {
             const needsCompetitorSync = !row.isMe && row.avg_rating == null;
             return (
               <div
-                key={row.key}
+                key={row.id}
                 style={{
                   ...(row.isMe
                     ? {
@@ -1096,7 +1136,7 @@ export default function BenchmarkingPage() {
                     marginBottom: 8,
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <span
                       style={{
                         fontSize: 12,
@@ -1115,6 +1155,22 @@ export default function BenchmarkingPage() {
                         flexShrink: 0,
                       }}
                     />
+                    {row.isMe ? (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          color: "#6366f1",
+                          background: "rgba(99,102,241,0.25)",
+                          border: "1px solid rgba(99,102,241,0.45)",
+                          padding: "2px 8px",
+                          borderRadius: 8,
+                          letterSpacing: "0.06em",
+                        }}
+                      >
+                        YOU
+                      </span>
+                    ) : null}
                   </div>
                   {needsCompetitorSync ? (
                     <span
@@ -1137,7 +1193,7 @@ export default function BenchmarkingPage() {
                 <div
                   style={{
                     fontSize: 14,
-                    fontWeight: 600,
+                    fontWeight: row.isMe ? 700 : 600,
                     color: "var(--text-primary)",
                     marginBottom: 4,
                   }}
@@ -1149,7 +1205,7 @@ export default function BenchmarkingPage() {
                     <>
                       {r != null ? `${r.toFixed(1)} ★` : "— ★"}{" "}
                       <span style={{ color: "var(--text-muted)" }}>
-                        ({row.total_reviews.toLocaleString()})
+                        ({row.total_reviews.toLocaleString()} reviews)
                       </span>
                     </>
                   ) : needsCompetitorSync ? (
@@ -1158,7 +1214,7 @@ export default function BenchmarkingPage() {
                     <>
                       {r != null ? `${r.toFixed(1)} ★` : "— ★"}{" "}
                       <span style={{ color: "var(--text-muted)" }}>
-                        ({(row.total_reviews ?? 0).toLocaleString()})
+                        ({row.total_reviews.toLocaleString()} reviews)
                       </span>
                     </>
                   )}
@@ -1180,27 +1236,17 @@ export default function BenchmarkingPage() {
         }}
       >
         <MapComponent
-          center={hotelCenter}
+          center={mapCenter}
           zoom={14}
-          hotel={{
+          myHotel={{
             name: hotel.name ?? "Your hotel",
-            avg_rating: myRating,
+            avg_rating: myAvgRating,
             total_reviews: myTotalReviews,
             address: hotel.address,
-            latitude: hotel.latitude ?? hotelCenter[0],
-            longitude: hotel.longitude ?? hotelCenter[1],
-            google_url: hotel.google_url,
+            latitude: hotelCoords.lat,
+            longitude: hotelCoords.lng,
           }}
-          competitors={competitors.map((c) => ({
-            id: c.id,
-            name: c.name,
-            avg_rating: c.avg_rating,
-            total_reviews: c.total_reviews ?? 0,
-            address: c.address,
-            latitude: c.latitude,
-            longitude: c.longitude,
-            google_url: c.google_url,
-          }))}
+          competitors={competitorsWithCoords}
           height={mapHeight}
         />
       </div>
@@ -1219,6 +1265,20 @@ export default function BenchmarkingPage() {
         </h2>
         {insightLoading ? (
           <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0 }}>Generating insights…</p>
+        ) : !competitors.some((c) => c.avg_rating != null) ? (
+          <div
+            style={{
+              ...glass,
+              padding: "16px 18px",
+              borderRadius: 16,
+              background: "rgba(251,191,36,0.08)",
+              borderColor: "rgba(251,191,36,0.35)",
+            }}
+          >
+            <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: 0, lineHeight: 1.55 }}>
+              Sync competitors to generate AI insights
+            </p>
+          </div>
         ) : insightError ? (
           <p style={{ fontSize: 14, color: "#f87171", margin: 0 }}>{insightError}</p>
         ) : insight ? (
@@ -1327,103 +1387,101 @@ export default function BenchmarkingPage() {
             Rating overview
           </div>
           <div style={{ fontSize: 36, fontWeight: 700, color: "#6366f1", lineHeight: 1.1 }}>
-            {myRating != null ? myRating.toFixed(1) : "—"}
+            {myAvgRating != null ? myAvgRating.toFixed(1) : "—"}
           </div>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "8px 0 16px" }}>Your hotel</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {ratingBars.map((row) => {
               const pct = row.rating != null ? (row.rating / 5) * 100 : 0;
-              const bg = row.mine
-                ? "#6366f1"
-                : row.rating != null
-                  ? getRatingColor(row.rating)
-                  : "var(--glass-border)";
+              const fill = ratingOverviewBarColor(row.rating, row.mine);
               return (
-                <div key={row.key}>
+                <div
+                  key={row.key}
+                  style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 32 }}
+                >
                   <div
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
+                      width: 140,
+                      flexShrink: 0,
                       fontSize: 12,
                       color: "var(--text-secondary)",
-                      marginBottom: 4,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    <span>{row.mine ? "You" : row.label}</span>
-                    <span>
-                      {row.needsSync ? (
-                        <span style={{ color: "#fbbf24", fontWeight: 600 }}>Sync needed</span>
-                      ) : row.rating != null ? (
-                        row.rating.toFixed(1)
-                      ) : (
-                        "—"
-                      )}
-                    </span>
+                    {row.mine ? "You" : row.label}
                   </div>
-                  {row.needsSync ? (
-                    <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>—</p>
-                  ) : (
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
                     <div
                       style={{
+                        flex: 1,
                         height: 8,
                         borderRadius: 100,
                         background: "var(--glass-muted)",
                         overflow: "hidden",
                       }}
                     >
-                      <div style={{ width: `${pct}%`, height: "100%", background: bg, borderRadius: 100 }} />
+                      {!row.needsSync ? (
+                        <div
+                          style={{
+                            width: `${pct}%`,
+                            height: "100%",
+                            background: fill,
+                            borderRadius: 100,
+                          }}
+                        />
+                      ) : null}
                     </div>
-                  )}
+                    {row.needsSync ? (
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>Not synced</span>
+                    ) : null}
+                  </div>
+                  <div
+                    style={{
+                      width: 40,
+                      flexShrink: 0,
+                      textAlign: "right",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    {row.needsSync ? "—" : row.rating != null ? row.rating.toFixed(1) : "—"}
+                  </div>
                 </div>
               );
             })}
           </div>
-          <p style={{ fontSize: 13, marginTop: 16, marginBottom: 0 }}>
-            {marketStats.marketAvg != null && myRating != null ? (
-              <>
-                {myRating >= marketStats.marketAvg ? (
-                  <span style={{ color: "var(--success)", fontWeight: 600 }}>
-                    +{(myRating - marketStats.marketAvg).toFixed(1)} above average
-                  </span>
-                ) : (
-                  <span style={{ color: "#f87171", fontWeight: 600 }}>
-                    {(myRating - marketStats.marketAvg).toFixed(1)} below average
-                  </span>
-                )}
-              </>
-            ) : (
-              <span style={{ color: "var(--text-muted)" }}>Sync data to compare to the market average</span>
-            )}
-          </p>
         </div>
 
         <div style={{ ...glass, padding: "20px", borderRadius: 16 }}>
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "var(--text-primary)" }}>
             Review volume
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {volumeBars.map((row) => (
-              <div key={row.key}>
+              <div
+                key={row.key}
+                style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 32 }}
+              >
                 <div
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
+                    width: 140,
+                    flexShrink: 0,
                     fontSize: 12,
                     color: "var(--text-secondary)",
-                    marginBottom: 4,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  <span>{row.mine ? "You" : row.label}</span>
-                  <span>
-                    {row.needsSync ? (
-                      <span style={{ color: "#fbbf24", fontWeight: 600 }}>Sync needed</span>
-                    ) : (
-                      row.n.toLocaleString()
-                    )}
-                  </span>
+                  {row.mine ? "You" : row.label}
                 </div>
                 <div
                   style={{
+                    flex: 1,
+                    minWidth: 0,
                     height: 10,
                     borderRadius: 100,
                     background: "var(--glass-muted)",
@@ -1438,6 +1496,18 @@ export default function BenchmarkingPage() {
                       borderRadius: 100,
                     }}
                   />
+                </div>
+                <div
+                  style={{
+                    width: 56,
+                    flexShrink: 0,
+                    textAlign: "right",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: row.needsSync ? "#fbbf24" : "var(--text-primary)",
+                  }}
+                >
+                  {row.needsSync ? "Not synced" : row.n.toLocaleString()}
                 </div>
               </div>
             ))}
@@ -1458,13 +1528,15 @@ export default function BenchmarkingPage() {
             }}
           >
             <li>
-              Ranked #
-              {marketStats.rank != null && marketStats.totalHotels > 0
-                ? `${marketStats.rank} of ${marketStats.totalHotels}`
-                : "—"}{" "}
-              hotels in your area
+              {marketPositionStats != null ? (
+                <>
+                  Ranked #{marketPositionStats.myRank} of {marketPositionStats.y} hotels
+                </>
+              ) : (
+                <>Ranked — of — hotels</>
+              )}
             </li>
-            <li>{diffLabel}</li>
+            <li>{marketDiffCopy}</li>
             <li style={{ color: "var(--text-primary)" }}>{reviewsVsLeader}</li>
           </ul>
         </div>
@@ -1534,7 +1606,7 @@ export default function BenchmarkingPage() {
                           type="button"
                           disabled={syncingId === c.id || !c.google_url?.trim()}
                           title={!c.google_url?.trim() ? "Add a Google Maps URL for this competitor" : undefined}
-                          onClick={() => void handleSyncOne(c.id)}
+                          onClick={() => void handleSyncCompetitor(c.id)}
                           style={{
                             ...secondaryBtn,
                             padding: "6px 12px",
@@ -1542,7 +1614,22 @@ export default function BenchmarkingPage() {
                             opacity: syncingId === c.id || !c.google_url?.trim() ? 0.6 : 1,
                           }}
                         >
-                          {syncingId === c.id ? "…" : "Sync"}
+                          {syncingId === c.id ? (
+                            <span
+                              className="bm-spin"
+                              style={{
+                                width: 14,
+                                height: 14,
+                                border: "2px solid rgba(255,255,255,0.25)",
+                                borderTopColor: "var(--text-primary)",
+                                borderRadius: "50%",
+                                display: "inline-block",
+                                verticalAlign: "middle",
+                              }}
+                            />
+                          ) : (
+                            "Sync"
+                          )}
                         </button>
                         <button
                           type="button"

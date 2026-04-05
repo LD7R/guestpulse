@@ -27,7 +27,7 @@ export type MapCompetitor = {
   google_url?: string | null;
 };
 
-const DEFAULT_CENTER: [number, number] = [-7.7956, 110.3695];
+const DEFAULT_CENTER: [number, number] = [-7.7900488, 110.3620332];
 
 export function getCompetitorCoords(c: MapCompetitor): [number, number] | null {
   if (
@@ -50,6 +50,34 @@ function MapResize() {
     const t = window.setTimeout(() => map.invalidateSize(), 250);
     return () => window.clearTimeout(t);
   }, [map]);
+  return null;
+}
+
+function FitBounds({
+  myHotel,
+  competitors,
+}: {
+  myHotel: MapHotel;
+  competitors: MapCompetitor[];
+}) {
+  const map = useMap();
+  useEffect(() => {
+    const markers: [number, number][] = [];
+    if (
+      myHotel.latitude != null &&
+      myHotel.longitude != null &&
+      !Number.isNaN(myHotel.latitude + myHotel.longitude)
+    ) {
+      markers.push([myHotel.latitude, myHotel.longitude]);
+    }
+    for (const c of competitors) {
+      const p = getCompetitorCoords(c);
+      if (p) markers.push(p);
+    }
+    if (markers.length > 1) {
+      map.fitBounds(L.latLngBounds(markers), { padding: [60, 60] });
+    }
+  }, [map, myHotel, competitors]);
   return null;
 }
 
@@ -111,7 +139,7 @@ function competitorIcon(rating: number | null) {
 type MapComponentProps = {
   center?: [number, number];
   zoom?: number;
-  hotel: MapHotel;
+  myHotel: MapHotel;
   competitors: MapCompetitor[];
   height: number;
 };
@@ -119,7 +147,7 @@ type MapComponentProps = {
 export default function MapComponent({
   center = DEFAULT_CENTER,
   zoom = 14,
-  hotel,
+  myHotel,
   competitors,
   height,
 }: MapComponentProps) {
@@ -137,30 +165,31 @@ export default function MapComponent({
   const mapZoom = zoom;
 
   const hasHotelCoords =
-    hotel.latitude != null &&
-    hotel.longitude != null &&
-    !Number.isNaN(hotel.latitude) &&
-    !Number.isNaN(hotel.longitude);
+    myHotel.latitude != null &&
+    myHotel.longitude != null &&
+    !Number.isNaN(myHotel.latitude) &&
+    !Number.isNaN(myHotel.longitude);
 
-  const myRating = hotel.avg_rating;
-  const myReviewsLabel = hotel.total_reviews.toLocaleString();
+  const myRating = myHotel.avg_rating;
+  const myReviewsLabel = myHotel.total_reviews.toLocaleString();
 
   return (
     <div style={{ position: "relative", height, width: "100%", borderRadius: 20, overflow: "hidden" }}>
       <MapContainer
+        key={`${mapCenter[0]}-${mapCenter[1]}-${mapZoom}`}
         center={mapCenter}
         zoom={mapZoom}
         scrollWheelZoom
         style={{ height: "100%", width: "100%" }}
-        key={`${mapCenter[0]}-${mapCenter[1]}-${mapZoom}`}
       >
         <MapResize />
+        <FitBounds myHotel={myHotel} competitors={competitors} />
         <TileLayer
           attribution="© OpenStreetMap © CARTO"
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
         {hasHotelCoords ? (
-          <Marker position={[hotel.latitude!, hotel.longitude!]} icon={myHotelIcon(hotel)}>
+          <Marker position={[myHotel.latitude!, myHotel.longitude!]} icon={myHotelIcon(myHotel)}>
             <Popup>
               <div style={{ fontFamily: "sans-serif", minWidth: 160 }}>
                 <div
@@ -173,12 +202,12 @@ export default function MapComponent({
                 >
                   ★ YOUR HOTEL
                 </div>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{hotel.name}</div>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{myHotel.name}</div>
                 <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>
                   ⭐ {myRating ?? "—"} · {myReviewsLabel} reviews
                 </div>
-                {hotel.address ? (
-                  <div style={{ color: "#888", fontSize: 11, marginTop: 2 }}>{hotel.address}</div>
+                {myHotel.address ? (
+                  <div style={{ color: "#888", fontSize: 11, marginTop: 2 }}>{myHotel.address}</div>
                 ) : null}
               </div>
             </Popup>

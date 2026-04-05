@@ -45,7 +45,22 @@ function topTopics(
     .map(([k]) => k);
 }
 
-export async function POST(_request: NextRequest) {
+type BodyPayload = {
+  hotel_id?: string;
+  my_hotel?: {
+    name?: string | null;
+    avg_rating?: number | null;
+    total_reviews?: number | null;
+  };
+  competitors?: Array<{
+    name: string;
+    avg_rating: number;
+    total_reviews: number;
+    recent_snippets?: string | null;
+  }>;
+};
+
+export async function POST(request: NextRequest) {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -63,6 +78,8 @@ export async function POST(_request: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    const json = (await request.json().catch(() => ({}))) as BodyPayload;
+
     const { data: hotel, error: hErr } = await supabase
       .from("hotels")
       .select("id, name")
@@ -76,19 +93,17 @@ export async function POST(_request: NextRequest) {
       return NextResponse.json({ success: false, error: "No hotel found" }, { status: 400 });
     }
 
-    const [{ data: reviewRows, error: rErr }, { data: competitors, error: cErr }] = await Promise.all([
-      supabase
-        .from("reviews")
-        .select("rating, complaint_topic, topic_type")
-        .eq("hotel_id", hotel.id),
-      supabase.from("competitors").select("name, avg_rating, total_reviews, recent_snippets").eq("hotel_id", hotel.id),
-    ]);
+    if (json.hotel_id && json.hotel_id !== hotel.id) {
+      return NextResponse.json({ success: false, error: "hotel_id does not match your account" }, { status: 400 });
+    }
+
+    const { data: reviewRows, error: rErr } = await supabase
+      .from("reviews")
+      .select("rating, complaint_topic, topic_type")
+      .eq("hotel_id", hotel.id);
 
     if (rErr) {
       return NextResponse.json({ success: false, error: rErr.message }, { status: 500 });
-    }
-    if (cErr) {
-      return NextResponse.json({ success: false, error: cErr.message }, { status: 500 });
     }
 
     const reviews = (reviewRows ?? []) as {
@@ -98,35 +113,74 @@ export async function POST(_request: NextRequest) {
     }[];
 
     const ratings = reviews.map((x) => x.rating).filter((x): x is number => typeof x === "number" && !Number.isNaN(x));
-    const avgRating =
+    const avgFromDb =
       ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
 
+    const usePayload =
+      json.my_hotel &&
+      Array.isArray(json.competitors) &&
+      json.competitors.length > 0 &&
+      json.competitors.every((c) => c.avg_rating != null && !Number.isNaN(Number(c.avg_rating)));
+
     const my_hotel = {
-      name: typeof hotel.name === "string" && hotel.name.trim() ? hotel.name.trim() : "Your hotel",
-      avg_rating: avgRating,
-      total_reviews: reviews.length,
+      name:
+        usePayload && json.my_hotel?.name?.trim()
+          ? json.my_hotel.name.trim()
+          : typeof hotel.name === "string" && hotel.name.trim()
+            ? hotel.name.trim()
+            : "Your hotel",
+      avg_rating: usePayload ? (json.my_hotel?.avg_rating ?? null) : avgFromDb,
+      total_reviews: usePayload ? (json.my_hotel?.total_reviews ?? 0) : reviews.length,
       top_complaints: topTopics(reviews, "improvement", 5),
       top_strengths: topTopics(reviews, "strength", 5),
     };
 
-    const compList = (competitors ?? []) as {
+    let compList: {
       name: string;
       avg_rating: number | null;
       total_reviews: number | null;
-      recent_snippets: string | null;
+      recent_snippets?: string | null;
     }[];
 
-    const competitorsBlock = compList
+    if (usePayload) {
+      compList = json.competitors!.map((c) => ({
+        name: c.name,
+        avg_rating: c.avg_rating,
+        total_reviews: c.total_reviews,
+        recent_snippets: c.recent_snippets ?? null,
+      }));
+    } else {
+      const { data: compRows } = await supabase
+        .from("competitors")
+        .select("name, avg_rating, total_reviews, recent_snippets")
+        .eq("hotel_id", hotel.id);
+      compList = (compRows ?? []) as typeof compList;
+    }
+
+    const syncedFromDb = compList.filter((c) => c.avg_rating != null && !Number.isNaN(c.avg_rating as number));
+    const compListForPrompt = usePayload ? compList : syncedFromDb;
+
+    if (compListForPrompt.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "At least one competitor with a synced rating is required" },
+        { status: 400 },
+      );
+    }
+
+    const competitorsBlock = compListForPrompt
       .map((c) => {
         let recent = "not available";
-        if (c.recent_snippets) {
+        const snip = c.recent_snippets;
+        if (typeof snip === "string" && snip.trim()) {
           try {
-            const parsed = JSON.parse(c.recent_snippets) as unknown;
+            const parsed = JSON.parse(snip) as unknown;
             if (Array.isArray(parsed) && parsed.length > 0) {
               recent = parsed.map((s) => String(s)).join(" | ");
+            } else {
+              recent = snip.slice(0, 500);
             }
           } catch {
-            recent = c.recent_snippets.slice(0, 500);
+            recent = snip.slice(0, 500);
           }
         }
         const ar = c.avg_rating;
@@ -145,7 +199,7 @@ Top complaints: ${my_hotel.top_complaints.length ? my_hotel.top_complaints.join(
 Top strengths: ${my_hotel.top_strengths.length ? my_hotel.top_strengths.join(", ") : "none identified"}
 
 COMPETITORS:
-${compList.length ? competitorsBlock : "(none tracked)"}
+${compListForPrompt.length ? competitorsBlock : "(none tracked)"}
 
 Provide a structured analysis with these sections:
 1. MARKET POSITION (1 sentence): Where I stand vs competition

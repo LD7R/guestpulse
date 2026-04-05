@@ -1,14 +1,6 @@
 /**
- * Run in Supabase:
- * alter table public.competitors
- *   add column if not exists recent_snippets text;
- *
- * Cheap competitor sync: Google Maps place summary + up to 3 review snippets only.
- * TripAdvisor / Booking skipped for competitors.
- *
- * Timestamp fields:
- * - competitors.last_synced_at — set to now() on every successful sync (canonical “last synced”).
- * - competitors.updated_at — set alongside last_synced_at for row updates.
+ * Cheap competitor sync: Google Maps place summary + review snippets.
+ * competitors.last_synced_at — canonical “last synced”.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase";
@@ -25,98 +17,6 @@ type ApifyRun = { id?: string; status?: string; defaultDatasetId?: string };
 
 async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function readLocation(item: Record<string, unknown>): { lat: number; lng: number } | null {
-  const loc = item.location;
-  if (loc && typeof loc === "object") {
-    const o = loc as Record<string, unknown>;
-    const lat = o.lat ?? o.latitude;
-    const lng = o.lng ?? o.longitude;
-    if (typeof lat === "number" && typeof lng === "number" && !Number.isNaN(lat + lng)) {
-      return { lat, lng };
-    }
-  }
-  const gps = item.gpsCoordinates;
-  if (gps && typeof gps === "object") {
-    const o = gps as Record<string, unknown>;
-    const lat = o.latitude ?? o.lat;
-    const lng = o.longitude ?? o.lng;
-    if (typeof lat === "number" && typeof lng === "number" && !Number.isNaN(lat + lng)) {
-      return { lat, lng };
-    }
-  }
-  return null;
-}
-
-function parsePlaceSummary(items: unknown[]): {
-  totalScore: number | null;
-  reviewsCount: number;
-  address: string | null;
-  lat: number | null;
-  lng: number | null;
-} | null {
-  for (const raw of items) {
-    if (!raw || typeof raw !== "object") continue;
-    const item = raw as Record<string, unknown>;
-    const totalScore = typeof item.totalScore === "number" ? item.totalScore : null;
-    let reviewsCount = 0;
-    if (typeof item.reviewsCount === "number") reviewsCount = item.reviewsCount;
-    else if (typeof item.reviewsCount === "string") {
-      const n = parseInt(item.reviewsCount, 10);
-      reviewsCount = Number.isNaN(n) ? 0 : n;
-    }
-
-    if (totalScore == null && reviewsCount === 0) continue;
-
-    const address = typeof item.address === "string" ? item.address : null;
-    const loc = readLocation(item);
-    return {
-      totalScore,
-      reviewsCount,
-      address,
-      lat: loc?.lat ?? null,
-      lng: loc?.lng ?? null,
-    };
-  }
-  return null;
-}
-
-function parseReviewSnippets(items: unknown[], limit: number): string[] {
-  const snippets: string[] = [];
-  const seen = new Set<string>();
-
-  for (const raw of items) {
-    if (!raw || typeof raw !== "object") continue;
-    const item = raw as Record<string, unknown>;
-
-    const isReviewLike =
-      item.stars != null ||
-      item.rating != null ||
-      item.publishedAtDate != null ||
-      item.publishedAtDateTime != null ||
-      item.date != null;
-
-    const rawText =
-      (typeof item.text === "string" && item.text.trim()
-        ? item.text
-        : typeof item.snippet === "string"
-          ? item.snippet
-          : "") || "";
-
-    if (!rawText.trim()) continue;
-    if (!isReviewLike && typeof item.totalScore === "number" && rawText.length < 50) continue;
-
-    const slice = rawText.trim().slice(0, 200);
-    if (slice.length < 12) continue;
-    const key = slice.slice(0, 80);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    snippets.push(slice);
-    if (snippets.length >= limit) break;
-  }
-
-  return snippets;
 }
 
 export async function POST(request: NextRequest) {
@@ -249,59 +149,76 @@ export async function POST(request: NextRequest) {
     const items = (await itemsRes.json()) as unknown[];
     const list = Array.isArray(items) ? items : [];
 
-    const place = parsePlaceSummary(list);
-    if (!place) {
+    const raw = list[0];
+    if (!raw || typeof raw !== "object") {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Could not read place summary from Google Maps. Check the URL and try again.",
-        },
+        { success: false, error: "Could not read place data from Google Maps. Check the URL and try again." },
         { status: 502 },
       );
     }
 
-    let snippets: string[] = [];
-    const first = list[0];
-    if (first && typeof first === "object") {
-      const row = first as Record<string, unknown>;
-      const nested = row.reviews;
-      if (Array.isArray(nested) && nested.length > 0) {
-        snippets = nested.slice(0, 1).map((r) => {
-          const o = r as Record<string, unknown>;
-          const t =
-            (typeof o.text === "string" ? o.text : "") ||
-            (typeof o.snippet === "string" ? o.snippet : "");
-          return t.trim().slice(0, 150);
-        }).filter((s) => s.length > 0);
+    const place = raw as Record<string, unknown>;
+
+    const avg_rating =
+      place.totalScore != null && place.totalScore !== ""
+        ? Math.round(Number(place.totalScore) * 10) / 10
+        : null;
+
+    let total_reviews = 0;
+    if (typeof place.reviewsCount === "number") total_reviews = place.reviewsCount;
+    else if (typeof place.reviewsCount === "string") {
+      const n = parseInt(place.reviewsCount, 10);
+      total_reviews = Number.isNaN(n) ? 0 : n;
+    }
+
+    const loc = place.location;
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+    if (loc && typeof loc === "object") {
+      const o = loc as Record<string, unknown>;
+      const lat = o.lat ?? o.latitude;
+      const lng = o.lng ?? o.longitude;
+      if (typeof lat === "number" && typeof lng === "number") {
+        latitude = lat;
+        longitude = lng;
       }
     }
-    if (snippets.length === 0) {
-      snippets = parseReviewSnippets(list, 1);
+
+    const address = typeof place.address === "string" ? place.address : null;
+
+    const reviewsArr = place.reviews;
+    let recent_snippets: string | null = null;
+    if (Array.isArray(reviewsArr)) {
+      const parts = reviewsArr
+        .slice(0, 3)
+        .map((r) => {
+          if (!r || typeof r !== "object") return "";
+          const o = r as Record<string, unknown>;
+          const t = typeof o.text === "string" ? o.text : "";
+          return t.trim().slice(0, 150);
+        })
+        .filter(Boolean);
+      recent_snippets = parts.length ? parts.join(" | ") : null;
     }
 
-    const recentSnippetsJson = JSON.stringify(snippets);
-
     const urlCoords = extractCoordsFromGoogleMapsUrl(googleUrl);
-    const lat = place.lat ?? urlCoords?.latitude ?? null;
-    const lng = place.lng ?? urlCoords?.longitude ?? null;
+    if (latitude == null && urlCoords) latitude = urlCoords.latitude;
+    if (longitude == null && urlCoords) longitude = urlCoords.longitude;
 
     const nowIso = new Date().toISOString();
 
     const updatePayload: Record<string, unknown> = {
-      avg_rating: place.totalScore,
-      total_reviews: place.reviewsCount,
-      address: place.address,
-      latitude: lat,
-      longitude: lng,
+      avg_rating,
+      total_reviews,
+      latitude,
+      longitude,
+      address,
+      recent_snippets,
       last_synced_at: nowIso,
       updated_at: nowIso,
-      recent_snippets: recentSnippetsJson,
     };
 
-    const { error: upErr } = await supabase
-      .from("competitors")
-      .update(updatePayload)
-      .eq("id", competitorId);
+    const { error: upErr } = await supabase.from("competitors").update(updatePayload).eq("id", competitorId);
 
     if (upErr) {
       return NextResponse.json({ success: false, error: upErr.message }, { status: 500 });
@@ -309,10 +226,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      avg_rating: place.totalScore,
-      total_reviews: place.reviewsCount,
-      snippets_count: snippets.length,
-      last_synced_at: nowIso,
+      avg_rating,
+      total_reviews,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
