@@ -253,7 +253,13 @@ export default function BenchmarkingPage() {
 
       if (h?.id) {
         const [{ data: rows, error: cErr }, { data: revs, error: rErr }] = await Promise.all([
-          supabase.from("competitors").select("*").eq("hotel_id", h.id).order("created_at", { ascending: true }),
+          supabase
+            .from("competitors")
+            .select(
+              "id, hotel_id, name, google_url, tripadvisor_url, avg_rating, total_reviews, updated_at, last_synced_at, latitude, longitude, address, recent_snippets, created_at",
+            )
+            .eq("hotel_id", h.id)
+            .order("created_at", { ascending: true }),
           supabase.from("reviews").select("rating, complaint_topic, topic_type").eq("hotel_id", h.id),
         ]);
         if (cErr) throw cErr;
@@ -728,6 +734,209 @@ export default function BenchmarkingPage() {
         </div>
       </header>
 
+      {/* Find competitors (AI discovery) — above tracked table; high on page for visibility */}
+      <div
+        style={{
+          background: "rgba(99,102,241,0.06)",
+          border: "1px solid rgba(99,102,241,0.15)",
+          borderRadius: 20,
+          padding: 24,
+          marginBottom: 24,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 16,
+            marginBottom: findingCompetitors || discoverySuggestions !== null ? 20 : 0,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 600, color: "var(--text-primary)" }}>
+              Find competitors automatically
+            </div>
+            <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "6px 0 0", maxWidth: 420, lineHeight: 1.5 }}>
+              AI finds hotels in your area with similar rating and service class
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={findingCompetitors || !hotel.city?.trim()}
+            onClick={() => void handleFindCompetitors()}
+            style={{
+              ...primaryBtn,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              opacity: findingCompetitors || !hotel.city?.trim() ? 0.65 : 1,
+              cursor: findingCompetitors || !hotel.city?.trim() ? "not-allowed" : "pointer",
+            }}
+            title={!hotel.city?.trim() ? "Set your hotel city in Settings first" : undefined}
+          >
+            {findingCompetitors ? (
+              <>
+                <span
+                  className="bm-spin"
+                  style={{
+                    width: 16,
+                    height: 16,
+                    border: "2px solid rgba(255,255,255,0.3)",
+                    borderTopColor: "var(--on-primary)",
+                    borderRadius: "50%",
+                    display: "inline-block",
+                  }}
+                />
+                Searching…
+              </>
+            ) : (
+              "Find competitors"
+            )}
+          </button>
+        </div>
+
+        {findingCompetitors ? (
+          <div
+            style={{
+              ...glass,
+              padding: "20px 22px",
+              borderRadius: 16,
+              animation: "bm-pulse-discovery 1.4s ease-in-out infinite",
+            }}
+          >
+            {discoveryStep >= 1 ? (
+              <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: "0 0 8px" }}>
+                AI is searching for hotels in your area…
+              </p>
+            ) : null}
+            {discoveryStep >= 2 ? (
+              <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: "0 0 8px" }}>
+                Analysing ratings, size, and service class…
+              </p>
+            ) : null}
+            {discoveryStep >= 3 ? (
+              <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: 0 }}>
+                Selecting the best matches…
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!findingCompetitors && discoverySuggestions !== null ? (
+          discoverySuggestions.length === 0 ? (
+            <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0 }}>
+              No nearby hotels found. Try again or add a competitor manually.
+            </p>
+          ) : (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                  gap: 12,
+                  marginBottom: 12,
+                }}
+              >
+                {discoverySuggestions.map((s) => {
+                  const selected = selectedSuggestions.includes(s.name);
+                  const r = s.avg_rating;
+                  const dotColor =
+                    r != null && !Number.isNaN(r) ? getRatingColor(Math.min(5, Math.max(1, r))) : "#64748b";
+                  return (
+                    <button
+                      key={s.name + s.google_url}
+                      type="button"
+                      onClick={() => toggleSuggestionSelect(s.name)}
+                      style={{
+                        ...glass,
+                        textAlign: "left",
+                        padding: "16px 20px",
+                        borderRadius: 16,
+                        cursor: "pointer",
+                        border: selected
+                          ? "2px solid rgba(99,102,241,0.5)"
+                          : "1px solid var(--glass-border)",
+                        background: selected ? "rgba(99,102,241,0.08)" : undefined,
+                        position: "relative",
+                        width: "100%",
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      {selected ? (
+                        <span
+                          style={{
+                            position: "absolute",
+                            top: 12,
+                            right: 14,
+                            color: "#6366f1",
+                            fontSize: 16,
+                            fontWeight: 700,
+                          }}
+                        >
+                          ✓
+                        </span>
+                      ) : null}
+                      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", paddingRight: 24 }}>
+                        {s.name}
+                      </div>
+                      <div style={{ fontSize: 14, marginTop: 6, color: dotColor, fontWeight: 600 }}>
+                        ★ {r != null ? r.toFixed(1) : "—"}
+                      </div>
+                      <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
+                        ({(s.total_reviews ?? 0).toLocaleString()} reviews)
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>
+                        {hotel.city ? `Same area · ${hotel.city}` : "Same area"}
+                      </div>
+                      {s.reason ? (
+                        <p
+                          style={{
+                            fontSize: 12,
+                            color: "var(--text-muted)",
+                            fontStyle: "italic",
+                            margin: "10px 0 0",
+                            lineHeight: 1.45,
+                          }}
+                        >
+                          Why this competitor: {s.reason}
+                        </p>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "0 0 8px" }}>
+                {selectedSuggestions.length} / {discoverySlotsMax} selected
+              </p>
+              {selectedSuggestions.length >= discoverySlotsMax && discoverySlotsMax > 0 ? (
+                <p style={{ fontSize: 12, color: "#fbbf24", margin: "0 0 12px" }}>
+                  Maximum 5 competitors reached
+                </p>
+              ) : null}
+              {selectedSuggestions.length > 0 ? (
+                <button
+                  type="button"
+                  disabled={addingSelected}
+                  onClick={() => void handleAddSelected()}
+                  style={{
+                    ...primaryBtn,
+                    width: "100%",
+                    justifyContent: "center",
+                    display: "inline-flex",
+                    opacity: addingSelected ? 0.65 : 1,
+                    cursor: addingSelected ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {addingSelected ? "Adding…" : "Add selected competitors"}
+                </button>
+              ) : null}
+            </>
+          )
+        ) : null}
+      </div>
+
       {/* Ranking strip */}
       <div
         style={{
@@ -1139,209 +1348,6 @@ export default function BenchmarkingPage() {
         </div>
       </div>
 
-      {/* Find competitors (AI discovery) */}
-      <div
-        style={{
-          background: "rgba(99,102,241,0.06)",
-          border: "1px solid rgba(99,102,241,0.15)",
-          borderRadius: 20,
-          padding: 24,
-          marginBottom: 24,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 16,
-            marginBottom: findingCompetitors || discoverySuggestions !== null ? 20 : 0,
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 17, fontWeight: 600, color: "var(--text-primary)" }}>
-              Find competitors automatically
-            </div>
-            <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "6px 0 0", maxWidth: 420, lineHeight: 1.5 }}>
-              AI finds hotels in your area with similar rating and service class
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={findingCompetitors || !hotel.city?.trim()}
-            onClick={() => void handleFindCompetitors()}
-            style={{
-              ...primaryBtn,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              opacity: findingCompetitors || !hotel.city?.trim() ? 0.65 : 1,
-              cursor: findingCompetitors || !hotel.city?.trim() ? "not-allowed" : "pointer",
-            }}
-            title={!hotel.city?.trim() ? "Set your hotel city in Settings first" : undefined}
-          >
-            {findingCompetitors ? (
-              <>
-                <span
-                  className="bm-spin"
-                  style={{
-                    width: 16,
-                    height: 16,
-                    border: "2px solid rgba(255,255,255,0.3)",
-                    borderTopColor: "var(--on-primary)",
-                    borderRadius: "50%",
-                    display: "inline-block",
-                  }}
-                />
-                Searching…
-              </>
-            ) : (
-              "Find competitors"
-            )}
-          </button>
-        </div>
-
-        {findingCompetitors ? (
-          <div
-            style={{
-              ...glass,
-              padding: "20px 22px",
-              borderRadius: 16,
-              animation: "bm-pulse-discovery 1.4s ease-in-out infinite",
-            }}
-          >
-            {discoveryStep >= 1 ? (
-              <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: "0 0 8px" }}>
-                AI is searching for hotels in your area…
-              </p>
-            ) : null}
-            {discoveryStep >= 2 ? (
-              <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: "0 0 8px" }}>
-                Analysing ratings, size, and service class…
-              </p>
-            ) : null}
-            {discoveryStep >= 3 ? (
-              <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: 0 }}>
-                Selecting the best matches…
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-
-        {!findingCompetitors && discoverySuggestions !== null ? (
-          discoverySuggestions.length === 0 ? (
-            <p style={{ fontSize: 14, color: "var(--text-muted)", margin: 0 }}>
-              No nearby hotels found. Try again or add a competitor manually.
-            </p>
-          ) : (
-            <>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-                  gap: 12,
-                  marginBottom: 12,
-                }}
-              >
-                {discoverySuggestions.map((s) => {
-                  const selected = selectedSuggestions.includes(s.name);
-                  const r = s.avg_rating;
-                  const dotColor =
-                    r != null && !Number.isNaN(r) ? getRatingColor(Math.min(5, Math.max(1, r))) : "#64748b";
-                  return (
-                    <button
-                      key={s.name + s.google_url}
-                      type="button"
-                      onClick={() => toggleSuggestionSelect(s.name)}
-                      style={{
-                        ...glass,
-                        textAlign: "left",
-                        padding: "16px 20px",
-                        borderRadius: 16,
-                        cursor: "pointer",
-                        border: selected
-                          ? "2px solid rgba(99,102,241,0.5)"
-                          : "1px solid var(--glass-border)",
-                        background: selected ? "rgba(99,102,241,0.08)" : undefined,
-                        position: "relative",
-                        width: "100%",
-                        boxSizing: "border-box",
-                      }}
-                    >
-                      {selected ? (
-                        <span
-                          style={{
-                            position: "absolute",
-                            top: 12,
-                            right: 14,
-                            color: "#6366f1",
-                            fontSize: 16,
-                            fontWeight: 700,
-                          }}
-                        >
-                          ✓
-                        </span>
-                      ) : null}
-                      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", paddingRight: 24 }}>
-                        {s.name}
-                      </div>
-                      <div style={{ fontSize: 14, marginTop: 6, color: dotColor, fontWeight: 600 }}>
-                        ★ {r != null ? r.toFixed(1) : "—"}
-                      </div>
-                      <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
-                        ({(s.total_reviews ?? 0).toLocaleString()} reviews)
-                      </div>
-                      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>
-                        {hotel.city ? `Same area · ${hotel.city}` : "Same area"}
-                      </div>
-                      {s.reason ? (
-                        <p
-                          style={{
-                            fontSize: 12,
-                            color: "var(--text-muted)",
-                            fontStyle: "italic",
-                            margin: "10px 0 0",
-                            lineHeight: 1.45,
-                          }}
-                        >
-                          Why this competitor: {s.reason}
-                        </p>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-              <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "0 0 8px" }}>
-                {selectedSuggestions.length} / {discoverySlotsMax} selected
-              </p>
-              {selectedSuggestions.length >= discoverySlotsMax && discoverySlotsMax > 0 ? (
-                <p style={{ fontSize: 12, color: "#fbbf24", margin: "0 0 12px" }}>
-                  Maximum 5 competitors reached
-                </p>
-              ) : null}
-              {selectedSuggestions.length > 0 ? (
-                <button
-                  type="button"
-                  disabled={addingSelected}
-                  onClick={() => void handleAddSelected()}
-                  style={{
-                    ...primaryBtn,
-                    width: "100%",
-                    justifyContent: "center",
-                    display: "inline-flex",
-                    opacity: addingSelected ? 0.65 : 1,
-                    cursor: addingSelected ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {addingSelected ? "Adding…" : "Add selected competitors"}
-                </button>
-              ) : null}
-            </>
-          )
-        ) : null}
-      </div>
-
       {/* Competitor table */}
       <div style={{ ...glass, padding: "24px", borderRadius: 16, marginBottom: 20 }}>
         <div
@@ -1374,7 +1380,7 @@ export default function BenchmarkingPage() {
               {competitors.length === 0 ? (
                 <tr>
                   <td colSpan={5} style={{ padding: "16px 0", color: "var(--text-muted)" }}>
-                    No competitors yet. Add one below.
+                    No competitors yet. Use Find competitors at the top, or add manually below.
                   </td>
                 </tr>
               ) : (
@@ -1386,7 +1392,7 @@ export default function BenchmarkingPage() {
                     <td style={{ padding: 12 }}>{c.avg_rating != null ? c.avg_rating.toFixed(1) : "—"}</td>
                     <td style={{ padding: 12 }}>{(c.total_reviews ?? 0).toLocaleString()}</td>
                     <td style={{ padding: 12, color: "var(--text-muted)", fontSize: 13 }}>
-                      {formatRelative(c.last_synced_at ?? c.updated_at)}
+                      {formatRelative(c.last_synced_at)}
                     </td>
                     <td style={{ padding: "12px 0 12px 12px" }}>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

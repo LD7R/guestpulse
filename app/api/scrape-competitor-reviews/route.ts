@@ -5,6 +5,10 @@
  *
  * Cheap competitor sync: Google Maps place summary + up to 3 review snippets only.
  * TripAdvisor / Booking skipped for competitors.
+ *
+ * Timestamp fields:
+ * - competitors.last_synced_at — set to now() on every successful sync (canonical “last synced”).
+ * - competitors.updated_at — set alongside last_synced_at for row updates.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase";
@@ -267,8 +271,8 @@ export async function POST(request: NextRequest) {
       address: place.address,
       latitude: lat,
       longitude: lng,
-      updated_at: nowIso,
       last_synced_at: nowIso,
+      updated_at: nowIso,
       recent_snippets: recentSnippetsJson,
     };
 
@@ -286,6 +290,7 @@ export async function POST(request: NextRequest) {
       avg_rating: place.totalScore,
       total_reviews: place.reviewsCount,
       snippets_count: snippets.length,
+      last_synced_at: nowIso,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";

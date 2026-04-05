@@ -1,3 +1,7 @@
+/**
+ * POST { hotel_id } — Apify Google Maps search + Claude Haiku to suggest up to 5 competitors.
+ * Requires APIFY_API_TOKEN, ANTHROPIC_API_KEY. Hotel must belong to the authenticated user.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase";
 
