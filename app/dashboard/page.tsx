@@ -110,8 +110,14 @@ function truncName(s: string, max = 20): string {
   return `${t.slice(0, max)}...`;
 }
 
+function hasReviewText(r: ReviewRow): boolean {
+  const t = (r.review_text ?? "").trim();
+  return t !== "" && t !== "—";
+}
+
 function isUrgentReview(r: ReviewRow): boolean {
   if (r.responded) return false;
+  if (!hasReviewText(r)) return false;
   const n = normalizeRating(r.rating);
   const sent = normSentiment(r.sentiment);
   const ref = new Date(r.review_date || r.created_at || 0);
@@ -541,7 +547,10 @@ export default function DashboardOverviewPage() {
       .from("reviews")
       .select("*")
       .in("hotel_id", hotelIds)
-      .eq("responded", false);
+      .eq("responded", false)
+      .not("review_text", "is", null)
+      .neq("review_text", "")
+      .neq("review_text", "—");
 
     if (unrespErr) throw unrespErr;
 
