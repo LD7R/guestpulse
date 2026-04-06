@@ -115,6 +115,19 @@ function hasReviewText(r: ReviewRow): boolean {
   return t !== "" && t !== "—";
 }
 
+/** Client-side safety net: reject placeholder or too-short review bodies. */
+function passesUrgentReviewTextFilter(review: ReviewRow): boolean {
+  const text = review.review_text;
+  if (!text) return false;
+  const cleaned = text.trim();
+  if (cleaned === "") return false;
+  if (cleaned === "—") return false;
+  if (cleaned === "-") return false;
+  if (cleaned === "null") return false;
+  if (cleaned.length < 10) return false;
+  return true;
+}
+
 function isUrgentReview(r: ReviewRow): boolean {
   if (r.responded) return false;
   if (!hasReviewText(r)) return false;
@@ -555,8 +568,11 @@ export default function DashboardOverviewPage() {
     if (unrespErr) throw unrespErr;
 
     const urgentFiltered = (unrespondedRows ?? []).filter((r) => isUrgentReview(r as ReviewRow));
-    setUrgentCount(urgentFiltered.length);
-    const sortedUrgent = [...urgentFiltered].sort((a, b) =>
+    const filteredUrgent = (urgentFiltered || []).filter((review) =>
+      passesUrgentReviewTextFilter(review as ReviewRow),
+    );
+    setUrgentCount(filteredUrgent.length);
+    const sortedUrgent = [...filteredUrgent].sort((a, b) =>
       sortUrgentReviews(a as ReviewRow, b as ReviewRow),
     );
     setUrgentReviewsList(sortedUrgent.slice(0, 5) as ReviewRow[]);
@@ -962,6 +978,11 @@ export default function DashboardOverviewPage() {
     sentiment: pathname?.startsWith("/dashboard/analytics"),
     competitors: pathname?.startsWith("/dashboard/benchmarking"),
   };
+
+  const urgentReviewsForDisplay = useMemo(
+    () => (urgentReviewsList || []).filter((review) => passesUrgentReviewTextFilter(review)),
+    [urgentReviewsList],
+  );
 
   if (loading) {
     return (
@@ -1548,7 +1569,7 @@ export default function DashboardOverviewPage() {
               </button>
             </div>
 
-            {urgentReviewsList.length === 0 ? (
+            {urgentReviewsForDisplay.length === 0 ? (
               <div
                 style={{
                   background: "#0a1a0a",
@@ -1573,7 +1594,7 @@ export default function DashboardOverviewPage() {
                 `,
                   }}
                 />
-                {urgentReviewsList.map((review) => {
+                {urgentReviewsForDisplay.map((review) => {
                   const sb = sentimentBucket(review.sentiment);
                   const borderLeft =
                     sb === "negative" ? "#ef4444" : sb === "neutral" ? "#fbbf24" : "#4ade80";
