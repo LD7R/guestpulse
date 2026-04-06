@@ -1,7 +1,7 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bar,
@@ -20,6 +20,7 @@ type Hotel = {
   tripadvisor_url?: string | null;
   google_url?: string | null;
   booking_url?: string | null;
+  response_signature?: string | null;
 };
 
 type ReviewRow = {
@@ -28,9 +29,19 @@ type ReviewRow = {
   rating?: number | string | null;
   reviewer_name?: string | null;
   created_at?: string | null;
+  review_date?: string | null;
   review_text?: string | null;
   sentiment?: string | null;
   responded?: boolean | null;
+  complaint_topic?: string | null;
+  topic?: string | null;
+};
+
+type CompetitorReviewTrendRow = {
+  competitor_id: string;
+  rating: unknown;
+  review_date: string | null;
+  created_at: string | null;
 };
 
 type AnalyticsRow = {
@@ -97,6 +108,99 @@ function truncName(s: string, max = 20): string {
   const t = (s ?? "").trim();
   if (t.length <= max) return t || "Hotel";
   return `${t.slice(0, max)}...`;
+}
+
+function isUrgentReview(r: ReviewRow): boolean {
+  if (r.responded) return false;
+  const n = normalizeRating(r.rating);
+  const sent = normSentiment(r.sentiment);
+  const ref = new Date(r.review_date || r.created_at || 0);
+  const t = ref.getTime();
+  const ageOk = !Number.isNaN(t);
+  const olderThan3Days = ageOk && Date.now() - t > 3 * 24 * 60 * 60 * 1000;
+  if (n !== null && n <= 2) return true;
+  if (sent === "negative") return true;
+  if (olderThan3Days) return true;
+  return false;
+}
+
+function sortUrgentReviews(a: ReviewRow, b: ReviewRow): number {
+  const ra = normalizeRating(a.rating) ?? 99;
+  const rb = normalizeRating(b.rating) ?? 99;
+  if (ra !== rb) return ra - rb;
+  const ta = new Date(a.review_date || a.created_at || 0).getTime();
+  const tb = new Date(b.review_date || b.created_at || 0).getTime();
+  return ta - tb;
+}
+
+function formatTimeAgo(iso: string | null | undefined): string {
+  const t = new Date(iso || 0).getTime();
+  if (Number.isNaN(t)) return "—";
+  const sec = Math.floor((Date.now() - t) / 1000);
+  if (sec < 60) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} hour${h === 1 ? "" : "s"} ago`;
+  const d = Math.floor(h / 24);
+  if (d < 14) return `${d} day${d === 1 ? "" : "s"} ago`;
+  const w = Math.floor(d / 7);
+  return `${w} week${w === 1 ? "" : "s"} ago`;
+}
+
+function compute30DayRatingTrend(
+  rows: Array<{ rating: unknown; created_at?: string | null; review_date?: string | null }>,
+): { text: string; color: string } | null {
+  const now = Date.now();
+  const d30 = 30 * 24 * 60 * 60 * 1000;
+  const last30: number[] = [];
+  const prev30: number[] = [];
+  for (const r of rows) {
+    const ts = new Date(r.review_date || r.created_at || 0).getTime();
+    if (Number.isNaN(ts)) continue;
+    const n = normalizeRating(r.rating);
+    if (n === null) continue;
+    if (ts >= now - d30 && ts <= now) last30.push(n);
+    else if (ts >= now - 2 * d30 && ts < now - d30) prev30.push(n);
+  }
+  if (last30.length === 0 || prev30.length === 0) return null;
+  const a = last30.reduce((x, y) => x + y, 0) / last30.length;
+  const b = prev30.reduce((x, y) => x + y, 0) / prev30.length;
+  const diff = a - b;
+  if (Math.abs(diff) < 0.05) return { text: "no change", color: "#555555" };
+  if (diff > 0) return { text: `+${diff.toFixed(1)} this month`, color: "#4ade80" };
+  return { text: `${diff.toFixed(1)} this month`, color: "#f87171" };
+}
+
+function StarRow({ rating }: { rating: number | null }) {
+  const n =
+    rating == null ? 0 : Math.round(Math.max(1, Math.min(5, Number(rating))));
+  return (
+    <span style={{ fontSize: 13, letterSpacing: 2 }}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <span key={i} style={{ color: i <= n ? "#fbbf24" : "#2a2a2a" }}>★</span>
+      ))}
+    </span>
+  );
+}
+
+function urgentPlatformBadge(p: string | null | undefined) {
+  const raw = (p ?? "").toLowerCase();
+  const base: CSSProperties = {
+    borderRadius: 3,
+    padding: "2px 7px",
+    fontSize: 11,
+    fontWeight: 600,
+  };
+  if (raw === "tripadvisor")
+    return <span style={{ ...base, background: "#052e16", color: "#4ade80" }}>TripAdvisor</span>;
+  if (raw === "google")
+    return <span style={{ ...base, background: "#172554", color: "#60a5fa" }}>Google</span>;
+  if (raw === "booking")
+    return <span style={{ ...base, background: "#1e1b4b", color: "#a78bfa" }}>Booking</span>;
+  return (
+    <span style={{ ...base, background: "#1e1e1e", color: "#888888" }}>{p || "Platform"}</span>
+  );
 }
 
 const CustomTooltip = ({
@@ -169,6 +273,15 @@ export default function DashboardOverviewPage() {
     booking: number;
   } | null>(null);
 
+  const [urgentReviewsList, setUrgentReviewsList] = useState<ReviewRow[]>([]);
+  const [competitorReviewsForTrend, setCompetitorReviewsForTrend] = useState<
+    CompetitorReviewTrendRow[]
+  >([]);
+  const [drafts, setDrafts] = useState<
+    Record<string, { text: string; loading: boolean; error?: string }>
+  >({});
+  const [copiedReviewId, setCopiedReviewId] = useState<string | null>(null);
+
   const loadDashboard = useCallback(async () => {
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -185,7 +298,7 @@ export default function DashboardOverviewPage() {
 
     const { data: hotels, error: hotelsError } = await supabase
       .from("hotels")
-      .select("id, name, tripadvisor_url, google_url, booking_url")
+      .select("id, name, tripadvisor_url, google_url, booking_url, response_signature")
       .eq("user_id", user.id);
 
     if (hotelsError) throw hotelsError;
@@ -203,6 +316,8 @@ export default function DashboardOverviewPage() {
       setPlatformHealth([]);
       setCompetitors([]);
       setReviewsTimeSeries([]);
+      setUrgentReviewsList([]);
+      setCompetitorReviewsForTrend([]);
       const neutral = { text: "— same as last week", color: "#555555" };
       setTrendTotal(neutral);
       setTrendAvg(neutral);
@@ -223,6 +338,15 @@ export default function DashboardOverviewPage() {
 
     if (compErr) throw compErr;
     setCompetitors((compRows ?? []) as CompetitorSnapshotRow[]);
+
+    const { data: crTrendData, error: crTrendErr } = await supabase
+      .from("competitor_reviews")
+      .select("competitor_id, rating, review_date, created_at");
+    if (!crTrendErr && crTrendData) {
+      setCompetitorReviewsForTrend(crTrendData as CompetitorReviewTrendRow[]);
+    } else {
+      setCompetitorReviewsForTrend([]);
+    }
 
     const now = new Date();
     const cut7 = new Date(now);
@@ -413,19 +537,20 @@ export default function DashboardOverviewPage() {
     setTrendNeeding(formatTrendLine(dNeed, true, "int"));
     setTrendWeek(formatTrendLine(dWeek, false, "int"));
 
-    const { data: urgentRows, error: ue } = await supabase
+    const { data: unrespondedRows, error: unrespErr } = await supabase
       .from("reviews")
-      .select("id, platform, rating, reviewer_name, review_text, created_at, responded")
+      .select("*")
       .in("hotel_id", hotelIds)
       .eq("responded", false);
 
-    if (ue) throw ue;
+    if (unrespErr) throw unrespErr;
 
-    const urgentFiltered = (urgentRows ?? []).filter((r: ReviewRow) => {
-      const n = normalizeRating(r.rating);
-      return n !== null && n <= 2;
-    });
+    const urgentFiltered = (unrespondedRows ?? []).filter((r) => isUrgentReview(r as ReviewRow));
     setUrgentCount(urgentFiltered.length);
+    const sortedUrgent = [...urgentFiltered].sort((a, b) =>
+      sortUrgentReviews(a as ReviewRow, b as ReviewRow),
+    );
+    setUrgentReviewsList(sortedUrgent.slice(0, 5) as ReviewRow[]);
 
     const { data: platRows } = await supabase
       .from("reviews")
@@ -569,6 +694,77 @@ export default function DashboardOverviewPage() {
     }
   }
 
+  async function handleMarkResponded(reviewId: string) {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+    const { error } = await supabase
+      .from("reviews")
+      .update({ responded: true })
+      .eq("id", reviewId);
+    if (error) {
+      console.error(error);
+      return;
+    }
+    setUrgentReviewsList((prev) => prev.filter((r) => r.id !== reviewId));
+    setNeedingResponse((prev) => Math.max(0, prev - 1));
+    setDrafts((prev) => {
+      const next = { ...prev };
+      delete next[reviewId];
+      return next;
+    });
+    await loadDashboard();
+    router.refresh();
+  }
+
+  async function handleDraftAI(review: ReviewRow) {
+    const id = review.id;
+    const sig =
+      (primaryHotel?.response_signature && String(primaryHotel.response_signature).trim()) ||
+      "The Management Team";
+    setDrafts((prev) => ({ ...prev, [id]: { text: "", loading: true } }));
+    try {
+      const res = await fetch("/api/draft-response", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          review_text: review.review_text ?? "",
+          rating: normalizeRating(review.rating),
+          reviewer_name: review.reviewer_name,
+          platform: review.platform,
+          signature: sig,
+        }),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        response?: string;
+        error?: string;
+      };
+      if (!res.ok || !json.success) {
+        const err = json.error ?? "Failed to generate draft";
+        setDrafts((prev) => ({
+          ...prev,
+          [id]: { text: "", loading: false, error: err },
+        }));
+        return;
+      }
+      setDrafts((prev) => ({
+        ...prev,
+        [id]: { text: json.response ?? "", loading: false },
+      }));
+    } catch (e) {
+      setDrafts((prev) => ({
+        ...prev,
+        [id]: {
+          text: "",
+          loading: false,
+          error: e instanceof Error ? e.message : "Request failed",
+        },
+      }));
+    }
+  }
+
   const topImprovementTopics = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of analyticsRows) {
@@ -706,6 +902,20 @@ export default function DashboardOverviewPage() {
     return nums.reduce((a, b) => a + b, 0) / nums.length;
   }, [competitors]);
 
+  const myHotel30Trend = useMemo(
+    () => compute30DayRatingTrend(reviewsTimeSeries),
+    [reviewsTimeSeries],
+  );
+
+  const competitorTrendById = useMemo(() => {
+    const map: Record<string, { text: string; color: string } | null> = {};
+    for (const c of competitors) {
+      const rows = competitorReviewsForTrend.filter((r) => r.competitor_id === c.id);
+      map[c.id] = compute30DayRatingTrend(rows);
+    }
+    return map;
+  }, [competitors, competitorReviewsForTrend]);
+
   const competitorCards = useMemo(() => {
     const hotelName = primaryHotel?.name?.trim() || "Your hotel";
     const mine = {
@@ -713,6 +923,7 @@ export default function DashboardOverviewPage() {
       name: hotelName,
       rating: avgRating,
       isYou: true,
+      trend: myHotel30Trend,
     };
     const rest = [...competitors]
       .filter((c) => c.avg_rating != null && !Number.isNaN(c.avg_rating))
@@ -722,6 +933,7 @@ export default function DashboardOverviewPage() {
         name: c.name,
         rating: c.avg_rating as number,
         isYou: false,
+        trend: competitorTrendById[c.id] ?? null,
       }));
     const unrated = [...competitors]
       .filter((c) => c.avg_rating == null || Number.isNaN(c.avg_rating as number))
@@ -730,9 +942,10 @@ export default function DashboardOverviewPage() {
         name: c.name,
         rating: null as number | null,
         isYou: false,
+        trend: competitorTrendById[c.id] ?? null,
       }));
     return [mine, ...rest, ...unrated];
-  }, [primaryHotel?.name, avgRating, competitors]);
+  }, [primaryHotel?.name, avgRating, competitors, myHotel30Trend, competitorTrendById]);
 
   const tabActive = {
     overview: pathname === "/dashboard" || pathname === "/dashboard/",
@@ -1239,6 +1452,7 @@ export default function DashboardOverviewPage() {
                     !Number.isNaN(c.rating) &&
                     Math.abs(c.rating - marketAvg) >= 0.05;
                   const up = c.rating != null && marketAvg != null && c.rating >= marketAvg;
+                  const tr = c.trend;
                   return (
                     <div
                       key={c.id}
@@ -1275,10 +1489,340 @@ export default function DashboardOverviewPage() {
                           </span>
                         ) : null}
                       </div>
+                      {tr ? (
+                        <div style={{ fontSize: 11, fontWeight: 500, color: tr.color, marginTop: 6 }}>
+                          {tr.text}
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
               </div>
+            )}
+          </section>
+
+          <section style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  color: "#ef4444",
+                }}
+              >
+                URGENT REVIEWS — NEEDS RESPONSE
+              </div>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/reviews")}
+                style={{
+                  background: "#141414",
+                  border: "1px solid #1e1e1e",
+                  borderRadius: 4,
+                  padding: "4px 10px",
+                  fontSize: 11,
+                  color: "#888888",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                View all {needingResponse}
+              </button>
+            </div>
+
+            {urgentReviewsList.length === 0 ? (
+              <div
+                style={{
+                  background: "#0a1a0a",
+                  border: "1px solid #1a2e1a",
+                  borderRadius: 8,
+                  padding: "16px 18px",
+                  fontSize: 13,
+                  color: "#4ade80",
+                }}
+              >
+                ✓ All caught up — no urgent reviews need response
+              </div>
+            ) : (
+              <>
+                <style
+                  dangerouslySetInnerHTML={{
+                    __html: `
+                  @keyframes dash-draft-pulse {
+                    0%, 100% { opacity: 0.45; }
+                    50% { opacity: 1; }
+                  }
+                `,
+                  }}
+                />
+                {urgentReviewsList.map((review) => {
+                  const sb = sentimentBucket(review.sentiment);
+                  const borderLeft =
+                    sb === "negative" ? "#ef4444" : sb === "neutral" ? "#fbbf24" : "#4ade80";
+                  const draft = drafts[review.id];
+                  const topicRaw = (review.complaint_topic ?? review.topic ?? "").trim();
+                  const topicParts = topicRaw
+                    ? topicRaw.split(",").map((s) => s.trim()).filter(Boolean)
+                    : [];
+                  const nr = normalizeRating(review.rating);
+                  return (
+                    <div key={review.id}>
+                      <div
+                        style={{
+                          background: "#141414",
+                          border: "1px solid #1e1e1e",
+                          borderRadius: 8,
+                          padding: "16px 20px",
+                          marginBottom: 8,
+                          borderLeft: `3px solid ${borderLeft}`,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 12,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                            {urgentPlatformBadge(review.platform)}
+                            <StarRow rating={nr} />
+                          </div>
+                          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                            <span style={{ fontSize: 13, color: "#888888", fontWeight: 500 }}>
+                              {review.reviewer_name?.trim() || "Guest"}
+                            </span>
+                            <span style={{ fontSize: 11, color: "#444444" }}>
+                              {formatTimeAgo(review.review_date || review.created_at)}
+                            </span>
+                          </div>
+                        </div>
+                        <p
+                          style={{
+                            marginTop: 10,
+                            marginBottom: 0,
+                            fontSize: 13,
+                            color: "#cccccc",
+                            lineHeight: 1.6,
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {(review.review_text ?? "").trim() || "—"}
+                        </p>
+                        <div
+                          style={{
+                            marginTop: 10,
+                            display: "flex",
+                            gap: 6,
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <span
+                            style={{
+                              background:
+                                sb === "negative"
+                                  ? "#2d0a0a"
+                                  : sb === "neutral"
+                                    ? "#1a1a0a"
+                                    : "#0a1a0a",
+                              color:
+                                sb === "negative"
+                                  ? "#f87171"
+                                  : sb === "neutral"
+                                    ? "#fbbf24"
+                                    : "#4ade80",
+                              borderRadius: 3,
+                              padding: "2px 8px",
+                              fontSize: 11,
+                              fontWeight: 500,
+                            }}
+                          >
+                            {sb.charAt(0).toUpperCase() + sb.slice(1)}
+                          </span>
+                          {topicParts.map((tp) => (
+                            <span
+                              key={tp}
+                              style={{
+                                background: "#1e1e1e",
+                                color: "#888888",
+                                borderRadius: 3,
+                                padding: "2px 8px",
+                                fontSize: 11,
+                              }}
+                            >
+                              {tp.charAt(0).toUpperCase() + tp.slice(1)}
+                            </span>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => void handleDraftAI(review)}
+                            style={{
+                              marginLeft: "auto",
+                              background: "#f0f0f0",
+                              color: "#0d0d0d",
+                              border: "none",
+                              borderRadius: 5,
+                              padding: "6px 14px",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              fontFamily: "inherit",
+                            }}
+                          >
+                            Draft AI response
+                          </button>
+                        </div>
+                      </div>
+
+                      {draft?.loading ? (
+                        <div
+                          style={{
+                            background: "#1a1a1a",
+                            border: "1px solid #2a2a2a",
+                            borderTop: "2px solid #4ade80",
+                            borderRadius: "0 0 8px 8px",
+                            padding: "14px 16px",
+                            marginTop: -8,
+                            marginBottom: 8,
+                          }}
+                        >
+                          <div
+                            style={{
+                              color: "#555555",
+                              fontSize: 13,
+                              animation: "dash-draft-pulse 1.2s ease-in-out infinite",
+                            }}
+                          >
+                            Generating response...
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {draft && !draft.loading && draft.error ? (
+                        <div
+                          style={{
+                            background: "#1a1a1a",
+                            border: "1px solid #2a2a2a",
+                            borderTop: "2px solid #4ade80",
+                            borderRadius: "0 0 8px 8px",
+                            padding: "14px 16px",
+                            marginTop: -8,
+                            marginBottom: 8,
+                          }}
+                        >
+                          {draft.error.includes("ANTHROPIC") ? (
+                            <p style={{ margin: 0, fontSize: 13, color: "#fbbf24" }}>
+                              Add ANTHROPIC_API_KEY to enable AI responses
+                            </p>
+                          ) : (
+                            <p style={{ margin: 0, fontSize: 13, color: "#f87171" }}>{draft.error}</p>
+                          )}
+                        </div>
+                      ) : null}
+
+                      {draft && !draft.loading && draft.text ? (
+                        <div
+                          style={{
+                            background: "#1a1a1a",
+                            border: "1px solid #2a2a2a",
+                            borderTop: "2px solid #4ade80",
+                            borderRadius: "0 0 8px 8px",
+                            padding: "14px 16px",
+                            marginTop: -8,
+                            marginBottom: 8,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 600,
+                              letterSpacing: "0.1em",
+                              color: "#4ade80",
+                              marginBottom: 8,
+                            }}
+                          >
+                            AI DRAFT READY
+                          </div>
+                          <div style={{ fontSize: 13, color: "#cccccc", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+                            {draft.text}
+                          </div>
+                          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await navigator.clipboard.writeText(draft.text);
+                                  setCopiedReviewId(review.id);
+                                  window.setTimeout(() => setCopiedReviewId(null), 2000);
+                                } catch {
+                                  /* ignore */
+                                }
+                              }}
+                              style={{
+                                background: "#1e1e1e",
+                                border: "1px solid #2a2a2a",
+                                borderRadius: 5,
+                                padding: "6px 14px",
+                                fontSize: 12,
+                                color: "#f0f0f0",
+                                cursor: "pointer",
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              {copiedReviewId === review.id ? "Copied!" : "Copy response"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleMarkResponded(review.id)}
+                              style={{
+                                background: "#f0f0f0",
+                                color: "#0d0d0d",
+                                border: "none",
+                                borderRadius: 5,
+                                padding: "6px 14px",
+                                fontSize: 12,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              Mark responded
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => router.push("/dashboard/reviews")}
+                              style={{
+                                background: "transparent",
+                                border: "1px solid #2a2a2a",
+                                borderRadius: 5,
+                                padding: "6px 14px",
+                                fontSize: 12,
+                                color: "#888888",
+                                cursor: "pointer",
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </>
             )}
           </section>
         </>
