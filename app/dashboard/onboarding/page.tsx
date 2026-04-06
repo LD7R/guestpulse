@@ -6,13 +6,9 @@ import { FormEvent, useState, useTransition } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 
 const glassCard: CSSProperties = {
-  background: "rgba(255, 255, 255, 0.05)",
-  backdropFilter: "blur(24px) saturate(180%)",
-  WebkitBackdropFilter: "blur(24px) saturate(180%)",
-  border: "1px solid rgba(255, 255, 255, 0.09)",
-  borderRadius: "20px",
-  boxShadow:
-    "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+  background: "var(--bg-card)",
+  border: "1px solid var(--border)",
+  borderRadius: "8px",
   width: "100%",
   maxWidth: "640px",
   padding: "40px 40px",
@@ -21,12 +17,12 @@ const glassCard: CSSProperties = {
 
 const glassInput: CSSProperties = {
   width: "100%",
-  background: "rgba(255, 255, 255, 0.06)",
-  border: "1px solid rgba(255, 255, 255, 0.1)",
-  borderRadius: "12px",
-  padding: "12px 16px",
-  color: "#ffffff",
-  fontSize: "14px",
+  background: "var(--bg-secondary)",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  padding: "10px 14px",
+  color: "var(--text-primary)",
+  fontSize: "13px",
   outline: "none",
   boxSizing: "border-box",
 };
@@ -34,16 +30,14 @@ const glassInput: CSSProperties = {
 const primaryBtn: CSSProperties = {
   width: "100%",
   height: "48px",
-  background: "rgba(99, 102, 241, 0.8)",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid rgba(99, 102, 241, 0.4)",
-  borderRadius: "12px",
-  color: "#ffffff",
-  fontWeight: 500,
-  fontSize: "14px",
+  background: "var(--text-primary)",
+  border: "none",
+  borderRadius: "6px",
+  color: "var(--bg-primary)",
+  fontWeight: 600,
+  fontSize: "13px",
   cursor: "pointer",
-  transition: "all 0.2s ease",
+  transition: "background 0.15s ease",
 };
 
 const labelStyle: CSSProperties = {
@@ -109,10 +103,10 @@ export default function HotelOnboardingPage() {
   const isSubmitting = isPending;
 
   const inputFocus = (el: React.FocusEvent<HTMLInputElement>) => {
-    el.target.style.borderColor = "rgba(99, 102, 241, 0.6)";
+    el.target.style.borderColor = "#4a4a4a";
   };
   const inputBlur = (el: React.FocusEvent<HTMLInputElement>) => {
-    el.target.style.borderColor = "rgba(255, 255, 255, 0.1)";
+    el.target.style.borderColor = "var(--border)";
   };
 
   return (
@@ -142,35 +136,6 @@ export default function HotelOnboardingPage() {
           `,
         }}
       />
-      <div
-        style={{
-          position: "absolute",
-          width: "400px",
-          height: "400px",
-          borderRadius: "50%",
-          background: "radial-gradient(circle, #6366f1 0%, transparent 70%)",
-          opacity: 0.15,
-          top: "-100px",
-          left: "-80px",
-          filter: "blur(60px)",
-          pointerEvents: "none",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          width: "300px",
-          height: "300px",
-          borderRadius: "50%",
-          background: "radial-gradient(circle, #8b5cf6 0%, transparent 70%)",
-          opacity: 0.1,
-          bottom: "-80px",
-          right: "-60px",
-          filter: "blur(60px)",
-          pointerEvents: "none",
-        }}
-      />
-
       <div style={glassCard}>
         <div
           style={{

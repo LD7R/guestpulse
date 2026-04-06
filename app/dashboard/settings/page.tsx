@@ -35,12 +35,9 @@ type HotelRow = {
 };
 
 const glass: CSSProperties = {
-  background: "var(--glass-bg)",
-  backdropFilter: "blur(24px) saturate(180%)",
-  WebkitBackdropFilter: "blur(24px) saturate(180%)",
-  border: "1px solid var(--glass-border)",
-  borderRadius: "var(--card-radius)",
-  boxShadow: "var(--glass-shadow), var(--glass-inner)",
+  background: "var(--bg-card)",
+  border: "1px solid var(--border)",
+  borderRadius: "8px",
 };
 
 const glassInput: CSSProperties = {
@@ -56,17 +53,15 @@ const glassInput: CSSProperties = {
 };
 
 const primaryBtn: CSSProperties = {
-  background: "var(--btn-primary-bg)",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid var(--btn-primary-border)",
-  borderRadius: "var(--btn-radius)",
-  padding: "12px 24px",
-  color: "var(--on-primary)",
-  fontWeight: 500,
-  fontSize: "14px",
+  background: "var(--text-primary)",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  padding: "8px 16px",
+  color: "var(--bg-primary)",
+  fontWeight: 600,
+  fontSize: "13px",
   cursor: "pointer",
-  transition: "all 0.2s ease",
+  transition: "background 0.15s ease",
 };
 
 const labelStyle: CSSProperties = {
@@ -79,9 +74,9 @@ const labelStyle: CSSProperties = {
 const tabBar: CSSProperties = {
   display: "flex",
   gap: "4px",
-  background: "var(--glass-bg)",
-  border: "1px solid var(--glass-border)",
-  borderRadius: "14px",
+  background: "var(--bg-card)",
+  border: "1px solid var(--border)",
+  borderRadius: "8px",
   padding: "4px",
   marginBottom: "32px",
   flexWrap: "wrap",

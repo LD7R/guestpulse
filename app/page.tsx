@@ -7,33 +7,31 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
 const glassPrimary: CSSProperties = {
-  background: "var(--btn-primary-bg)",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid var(--btn-primary-border)",
-  color: "var(--on-primary)",
+  background: "var(--text-primary)",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  color: "var(--bg-primary)",
   fontWeight: 600,
+  fontSize: "13px",
   cursor: "pointer",
-  transition: "all 0.2s ease",
+  transition: "background 0.15s ease",
 };
 
 const glassSecondary: CSSProperties = {
-  background: "var(--secondary-btn-bg)",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid var(--secondary-btn-border)",
-  color: "var(--text-primary)",
+  background: "transparent",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  color: "var(--text-secondary)",
   fontWeight: 500,
+  fontSize: "13px",
   cursor: "pointer",
-  transition: "all 0.2s ease",
+  transition: "border-color 0.15s ease, color 0.15s ease",
 };
 
 const miniGlass: CSSProperties = {
-  background: "var(--glass-bg)",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid var(--glass-border)",
-  borderRadius: "12px",
+  background: "var(--bg-card)",
+  border: "1px solid var(--border)",
+  borderRadius: "8px",
 };
 
 const faqItems: { q: string; a: string }[] = [
@@ -116,8 +114,7 @@ export default function LandingPage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "var(--bg-gradient)",
-        backgroundAttachment: "fixed",
+        background: "var(--bg-primary)",
         color: "var(--text-primary)",
       }}
     >
@@ -132,33 +129,22 @@ export default function LandingPage() {
               z-index: 100;
             }
             .landing-announce {
-              background: rgba(99,102,241,0.15);
-              border-bottom: 1px solid rgba(99,102,241,0.2);
+              background: var(--bg-secondary);
+              border-bottom: 1px solid var(--border);
               padding: 10px 48px;
               text-align: center;
               font-size: 13px;
-              color: rgba(255,255,255,0.8);
-            }
-            @media (prefers-color-scheme: light) {
-              .landing-announce {
-                background: rgba(99,102,241,0.1);
-                color: rgba(30,30,50,0.85);
-              }
+              color: var(--text-secondary);
             }
             .landing-nav {
               position: relative;
-              background: rgba(10, 10, 26, 0.7);
-              backdrop-filter: blur(20px);
-              -webkit-backdrop-filter: blur(20px);
-              border-bottom: 1px solid var(--divider);
+              background: var(--bg-secondary);
+              border-bottom: 1px solid var(--border);
               padding: 0 48px;
               height: 64px;
               display: flex;
               align-items: center;
               justify-content: space-between;
-            }
-            @media (prefers-color-scheme: light) {
-              .landing-nav { background: rgba(240, 240, 255, 0.7); }
             }
             .landing-nav-right {
               display: flex;
@@ -379,47 +365,6 @@ export default function LandingPage() {
         }}
         className="landing-section-pad"
       >
-        <div
-          style={{
-            position: "absolute",
-            width: "600px",
-            height: "600px",
-            borderRadius: "50%",
-            top: "-200px",
-            left: "-200px",
-            background: "radial-gradient(circle, rgba(99,102,241,0.15), transparent 70%)",
-            filter: "blur(80px)",
-            pointerEvents: "none",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            width: "500px",
-            height: "500px",
-            borderRadius: "50%",
-            bottom: "-150px",
-            right: "-150px",
-            background: "radial-gradient(circle, rgba(139,92,246,0.12), transparent 70%)",
-            filter: "blur(80px)",
-            pointerEvents: "none",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            width: "300px",
-            height: "300px",
-            borderRadius: "50%",
-            top: "40%",
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "radial-gradient(circle, rgba(99,102,241,0.08), transparent 70%)",
-            filter: "blur(60px)",
-            pointerEvents: "none",
-          }}
-        />
-
         <div style={{ position: "relative", zIndex: 1, maxWidth: "900px" }}>
           <div style={{ ...badgePill, marginBottom: "24px" }}>✦ Trusted by independent hotels worldwide</div>
 

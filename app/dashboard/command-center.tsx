@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { createBrowserClient } from "@supabase/ssr";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
 import {
   Bar,
@@ -20,6 +20,7 @@ import {
 
 type Hotel = {
   id: string;
+  name?: string | null;
   tripadvisor_url?: string | null;
   google_url?: string | null;
   booking_url?: string | null;
@@ -95,22 +96,6 @@ function normTopicType(v: string | null | undefined): string {
 
 const RATING_BAR_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"];
 
-function displayNameFromEmail(email: string | null): string {
-  if (!email) return "there";
-  const local = email.split("@")[0] ?? "";
-  const first = local.split(/[._-]/)[0] ?? local;
-  if (!first) return "there";
-  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
-}
-
-function formatHeaderDate(d: Date): string {
-  const weekday = d.toLocaleDateString("en-US", { weekday: "long" });
-  const month = d.toLocaleDateString("en-US", { month: "long" });
-  const day = d.getDate();
-  const year = d.getFullYear();
-  return `${weekday}, ${month} ${day} ${year}`;
-}
-
 function normalizeRating(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   const n = typeof value === "number" ? value : Number(value);
@@ -123,26 +108,21 @@ function normSentiment(s: string | null | undefined): string {
 }
 
 const glass: CSSProperties = {
-  background: "var(--glass-bg)",
-  backdropFilter: "blur(24px) saturate(180%)",
-  WebkitBackdropFilter: "blur(24px) saturate(180%)",
-  border: "1px solid var(--glass-border)",
-  borderRadius: "20px",
-  boxShadow: "var(--glass-shadow), var(--glass-inner)",
+  background: "var(--bg-card)",
+  border: "1px solid var(--border)",
+  borderRadius: "8px",
 };
 
 const glassPrimary: CSSProperties = {
-  background: "var(--btn-primary-bg)",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid var(--btn-primary-border)",
-  borderRadius: "var(--btn-radius)",
-  padding: "8px 14px",
-  color: "var(--on-primary)",
-  fontWeight: 500,
+  background: "var(--text-primary)",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  padding: "8px 16px",
+  color: "var(--bg-primary)",
+  fontWeight: 600,
   fontSize: "13px",
   cursor: "pointer",
-  transition: "all 0.2s ease",
+  transition: "background 0.15s ease",
 };
 
 
@@ -208,13 +188,12 @@ function ResponseRateGauge({ pct, stroke }: { pct: number; stroke: string }) {
 
 export default function CommandCenterPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [hasHotel, setHasHotel] = useState(false);
   const [primaryHotel, setPrimaryHotel] = useState<Hotel | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-
   const [totalReviews, setTotalReviews] = useState(0);
   const [avgRating, setAvgRating] = useState<number | null>(null);
   const [needingResponse, setNeedingResponse] = useState(0);
@@ -248,16 +227,6 @@ export default function CommandCenterPage() {
     booking: number;
   } | null>(null);
 
-  const [isDark, setIsDark] = useState(true);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    setIsDark(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsDark(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-
   const loadDashboard = useCallback(async () => {
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -272,11 +241,9 @@ export default function CommandCenterPage() {
     if (userError) throw userError;
     if (!user) throw new Error("You must be signed in.");
 
-    setUserEmail(user.email ?? null);
-
     const { data: hotels, error: hotelsError } = await supabase
       .from("hotels")
-      .select("id, tripadvisor_url, google_url, booking_url")
+      .select("id, name, tripadvisor_url, google_url, booking_url")
       .eq("user_id", user.id);
 
     if (hotelsError) throw hotelsError;
@@ -650,12 +617,6 @@ export default function CommandCenterPage() {
     }
   }
 
-  const greeting = useMemo(() => {
-    const h = new Date().getHours();
-    const g = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-    return `${g}, ${displayNameFromEmail(userEmail)}`;
-  }, [userEmail]);
-
   const excerpt = (text: string | null | undefined, max: number) => {
     const t = (text ?? "").trim();
     if (t.length <= max) return t || "—";
@@ -700,7 +661,7 @@ export default function CommandCenterPage() {
           fontSize: "11px",
           fontWeight: 600,
           padding: "2px 8px",
-          borderRadius: "100px",
+          borderRadius: "4px",
           ...st,
         }}
       >
@@ -718,20 +679,20 @@ export default function CommandCenterPage() {
 
   const chartColors = useMemo(
     () => ({
-      axisMuted: isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.35)",
-      grid: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+      axisMuted: "var(--chart-axis)",
+      grid: "var(--chart-grid)",
     }),
-    [isDark],
+    [],
   );
 
   const tooltipContentStyle: CSSProperties = useMemo(
     () => ({
-      background: isDark ? "rgba(15,15,30,0.95)" : "rgba(255,255,255,0.98)",
-      border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.08)",
-      borderRadius: "12px",
-      color: isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.85)",
+      background: "var(--chart-tooltip-bg)",
+      border: "1px solid var(--chart-tooltip-border)",
+      borderRadius: "8px",
+      color: "var(--chart-tooltip-text)",
     }),
-    [isDark],
+    [],
   );
 
   const ratingDistribution = useMemo(
@@ -765,9 +726,9 @@ export default function CommandCenterPage() {
       neg,
       total,
       data: [
-        { name: "Positive", value: pos, fill: "#22c55e" },
-        { name: "Neutral", value: neu, fill: "#6b7280" },
-        { name: "Negative", value: neg, fill: "#ef4444" },
+        { name: "Positive", value: pos, fill: "var(--chart-donut-positive)" },
+        { name: "Neutral", value: neu, fill: "var(--chart-donut-neutral)" },
+        { name: "Negative", value: neg, fill: "var(--chart-donut-negative)" },
       ],
     };
   }, [analyticsRows]);
@@ -965,24 +926,84 @@ export default function CommandCenterPage() {
       />
 
       <div className="cc-header-row">
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <h1
             style={{
-              fontSize: "26px",
+              fontSize: "20px",
               fontWeight: 700,
-              letterSpacing: "-0.5px",
               color: "var(--text-primary)",
-              margin: "0 0 6px 0",
+              margin: "0 0 4px 0",
             }}
           >
-            {greeting}
+            Overview
           </h1>
-          <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: 0 }}>
-            Here&apos;s your reputation summary for today
+          <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>
+            Last 30 days — {primaryHotel?.name?.trim() || "Your hotel"}
           </p>
         </div>
-        <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>{formatHeaderDate(new Date())}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => window.print()}
+            style={{ borderRadius: 6, padding: "8px 16px", fontSize: 13, fontWeight: 500 }}
+          >
+            Export PDF
+          </button>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={syncing || !primaryHotel?.id}
+            onClick={() => void handleSyncAllReviews()}
+            style={{
+              borderRadius: 6,
+              padding: "8px 16px",
+              fontSize: 13,
+              opacity: syncing || !primaryHotel?.id ? 0.5 : 1,
+              cursor: syncing || !primaryHotel?.id ? "not-allowed" : "pointer",
+            }}
+          >
+            {syncing ? "Syncing…" : "Sync reviews"}
+          </button>
+        </div>
       </div>
+
+      <nav
+        style={{
+          display: "flex",
+          gap: 24,
+          borderBottom: "1px solid var(--border)",
+          marginBottom: 24,
+          flexWrap: "wrap",
+        }}
+      >
+        {[
+          { href: "/dashboard", label: "Overview" },
+          { href: "/dashboard/reviews", label: "Review inbox" },
+          { href: "/dashboard/analytics", label: "Sentiment" },
+          { href: "/dashboard/benchmarking", label: "Competitors" },
+        ].map((t) => {
+          const active = pathname === t.href || (t.href !== "/dashboard" && pathname?.startsWith(t.href));
+          return (
+            <Link
+              key={t.href}
+              href={t.href}
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                padding: "8px 0",
+                marginRight: 0,
+                borderBottom: active ? "2px solid var(--text-primary)" : "2px solid transparent",
+                color: active ? "var(--text-primary)" : "var(--text-secondary)",
+                textDecoration: "none",
+                marginBottom: -1,
+              }}
+            >
+              {t.label}
+            </Link>
+          );
+        })}
+      </nav>
 
       {!hasHotel ? (
         <div
@@ -1035,8 +1056,9 @@ export default function CommandCenterPage() {
                 </div>
                 <div
                   style={{
-                    fontSize: "36px",
+                    fontSize: "32px",
                     fontWeight: 700,
+                    letterSpacing: "-1px",
                     color: "var(--text-primary)",
                     marginTop: "8px",
                   }}
@@ -1085,8 +1107,9 @@ export default function CommandCenterPage() {
               >
                 <div
                   style={{
-                    fontSize: "36px",
+                    fontSize: "32px",
                     fontWeight: 700,
+                    letterSpacing: "-1px",
                     color: totalReviews === 0 ? "var(--text-muted)" : rrColor,
                   }}
                 >
@@ -1144,15 +1167,8 @@ export default function CommandCenterPage() {
           <section style={{ marginBottom: "24px" }}>
             <div className="cc-analytics-row1">
               <div style={{ ...glass, padding: "24px", minHeight: "280px", display: "flex", flexDirection: "column" }}>
-                <h2
-                  style={{
-                    fontSize: "17px",
-                    fontWeight: 600,
-                    color: "var(--text-primary)",
-                    margin: "0 0 16px 0",
-                  }}
-                >
-                  Rating distribution
+                <h2 className="section-label" style={{ margin: "0 0 12px 0", letterSpacing: "0.08em" }}>
+                  Rating distribution — last 30 days
                 </h2>
                 <div style={{ width: "100%", height: "200px", flex: 1 }}>
                   <ResponsiveContainer width="100%" height={200}>
@@ -1183,14 +1199,7 @@ export default function CommandCenterPage() {
               </div>
 
               <div style={{ ...glass, padding: "24px", minHeight: "280px", display: "flex", flexDirection: "column" }}>
-                <h2
-                  style={{
-                    fontSize: "17px",
-                    fontWeight: 600,
-                    color: "var(--text-primary)",
-                    margin: "0 0 16px 0",
-                  }}
-                >
+                <h2 className="section-label" style={{ margin: "0 0 12px 0", letterSpacing: "0.08em" }}>
                   Sentiment breakdown
                 </h2>
                 <div className="cc-pie-wrap" style={{ flex: 1, justifyContent: "center" }}>

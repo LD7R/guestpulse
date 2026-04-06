@@ -8,25 +8,22 @@ import type { CSSProperties } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 const glassCard: CSSProperties = {
-  background: "var(--glass-bg)",
-  backdropFilter: "blur(24px) saturate(180%)",
-  WebkitBackdropFilter: "blur(24px) saturate(180%)",
-  border: "1px solid var(--glass-border)",
-  borderRadius: "var(--card-radius)",
-  boxShadow: "var(--glass-shadow), var(--glass-inner)",
-  width: "420px",
+  background: "var(--bg-secondary)",
+  border: "1px solid var(--border)",
+  borderRadius: "8px",
+  width: "380px",
   maxWidth: "100%",
-  padding: "48px 40px",
+  padding: "40px",
 };
 
 const glassInput: CSSProperties = {
   width: "100%",
-  background: "var(--glass-input-bg)",
-  border: "1px solid var(--glass-input-border)",
-  borderRadius: "var(--input-radius)",
-  padding: "12px 16px",
+  background: "var(--bg-secondary)",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  padding: "10px 14px",
   color: "var(--input-text)",
-  fontSize: "14px",
+  fontSize: "13px",
   outline: "none",
   boxSizing: "border-box",
 };
@@ -34,16 +31,14 @@ const glassInput: CSSProperties = {
 const primaryBtn: CSSProperties = {
   width: "100%",
   height: "48px",
-  background: "var(--btn-primary-bg)",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid var(--btn-primary-border)",
-  borderRadius: "var(--btn-radius)",
-  color: "var(--on-primary)",
-  fontWeight: 500,
-  fontSize: "14px",
+  background: "var(--text-primary)",
+  border: "none",
+  borderRadius: "6px",
+  color: "var(--bg-primary)",
+  fontWeight: 600,
+  fontSize: "13px",
   cursor: "pointer",
-  transition: "all 0.2s ease",
+  transition: "background 0.15s ease",
 };
 
 export default function SignupPage() {
@@ -87,64 +82,18 @@ export default function SignupPage() {
         overflow: "hidden",
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          width: "400px",
-          height: "400px",
-          borderRadius: "50%",
-          background: "radial-gradient(circle, var(--accent) 0%, transparent 70%)",
-          opacity: 0.15,
-          top: "-100px",
-          left: "-100px",
-          filter: "blur(60px)",
-          pointerEvents: "none",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          width: "300px",
-          height: "300px",
-          borderRadius: "50%",
-          background: "radial-gradient(circle, var(--platform-booking) 0%, transparent 70%)",
-          opacity: 0.1,
-          bottom: "-80px",
-          right: "-80px",
-          filter: "blur(60px)",
-          pointerEvents: "none",
-        }}
-      />
-
       <div style={glassCard}>
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "10px",
+            textAlign: "center",
+            fontSize: "18px",
+            fontWeight: 700,
+            color: "var(--logo-text)",
+            letterSpacing: "-0.02em",
             marginBottom: "8px",
           }}
         >
-          <span
-            style={{
-              width: "8px",
-              height: "8px",
-              borderRadius: "50%",
-              background: "var(--accent)",
-              boxShadow: "var(--accent-glow)",
-            }}
-          />
-          <span
-            style={{
-              fontSize: "20px",
-              fontWeight: 700,
-              color: "var(--logo-text)",
-              letterSpacing: "-0.03em",
-            }}
-          >
-            GuestPulse
-          </span>
+          GuestPulse
         </div>
         <h1
           style={{
@@ -254,11 +203,11 @@ export default function SignupPage() {
             }}
             onMouseEnter={(e) => {
               if (!isPending) {
-                e.currentTarget.style.background = "var(--btn-primary-hover)";
+                e.currentTarget.style.background = "#e0e0e0";
               }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "var(--btn-primary-bg)";
+              e.currentTarget.style.background = "var(--text-primary)";
             }}
           >
             {isPending ? "Creating account…" : "Sign up"}

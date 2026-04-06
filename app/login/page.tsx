@@ -23,12 +23,12 @@ function LoginPageFallback() {
     >
       <div
         style={{
-          width: "420px",
+          width: "380px",
           maxWidth: "100%",
           height: "320px",
-          borderRadius: "var(--card-radius)",
-          background: "var(--glass-bg)",
-          border: "1px solid var(--glass-border)",
+          borderRadius: "8px",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
           animation: "pulse 1.2s ease-in-out infinite",
         }}
       />

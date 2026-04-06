@@ -50,23 +50,19 @@ type Review = {
 
 
 const glass: CSSProperties = {
-  background: "var(--glass-bg)",
-  backdropFilter: "blur(24px) saturate(180%)",
-  WebkitBackdropFilter: "blur(24px) saturate(180%)",
-  border: "1px solid var(--glass-border)",
-  borderRadius: "var(--card-radius)",
-  boxShadow: "var(--glass-shadow), var(--glass-inner)",
+  background: "var(--bg-card)",
+  border: "1px solid var(--border)",
+  borderRadius: "8px",
 };
 
 const glassPrimary: CSSProperties = {
-  background: "var(--btn-primary-bg)",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid var(--btn-primary-border)",
-  borderRadius: "var(--btn-radius)",
-  color: "var(--on-primary)",
-  fontWeight: 500,
-  transition: "all 0.2s ease",
+  background: "var(--text-primary)",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  color: "var(--bg-primary)",
+  fontWeight: 600,
+  fontSize: "13px",
+  transition: "background 0.15s ease",
 };
 
 const glassSecondary: CSSProperties = {
@@ -1910,8 +1906,7 @@ export default function ReviewsInboxPage() {
                   transition: "transform 0.2s ease, border-color 0.2s ease, background 0.2s ease",
                   ...(hasSavedDraft
                     ? {
-                        boxShadow:
-                          "inset 3px 0 0 rgba(99,102,241,0.4), var(--glass-shadow), var(--glass-inner)",
+                        boxShadow: "inset 3px 0 0 #60a5fa",
                       }
                     : {}),
                   ...(flagAccent ? { borderLeft: `3px solid ${flagAccent}` } : {}),
@@ -1923,8 +1918,8 @@ export default function ReviewsInboxPage() {
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.background = "var(--glass-bg)";
-                  e.currentTarget.style.borderColor = "var(--glass-border)";
+                  e.currentTarget.style.background = "var(--bg-card)";
+                  e.currentTarget.style.borderColor = "var(--border)";
                 }}
               >
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", justifyContent: "space-between" }}>
@@ -1997,8 +1992,8 @@ export default function ReviewsInboxPage() {
                               minWidth: "200px",
                               ...glass,
                               padding: "8px",
-                              borderRadius: "12px",
-                              boxShadow: "var(--glass-shadow)",
+                              borderRadius: "8px",
+                              boxShadow: "none",
                             }}
                           >
                             <button
@@ -2192,10 +2187,10 @@ export default function ReviewsInboxPage() {
                       marginTop: "16px",
                       padding: "16px",
                       paddingTop: "40px",
-                      borderRadius: "16px",
-                      background: "var(--accent-panel)",
-                      border: "1px solid var(--accent-panel-border)",
-                      backdropFilter: "blur(12px)",
+                      borderRadius: "0 0 8px 8px",
+                      background: "var(--bg-secondary)",
+                      border: "1px solid var(--border)",
+                      borderTop: "2px solid var(--positive)",
                       display: "flex",
                       flexDirection: "column",
                       gap: "12px",

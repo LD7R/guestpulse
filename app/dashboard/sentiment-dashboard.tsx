@@ -28,12 +28,9 @@ type ReviewRow = {
 };
 
 const glass: CSSProperties = {
-  background: "var(--glass-bg)",
-  backdropFilter: "blur(24px) saturate(180%)",
-  WebkitBackdropFilter: "blur(24px) saturate(180%)",
-  border: "1px solid var(--glass-border)",
-  borderRadius: "20px",
-  boxShadow: "var(--glass-shadow), var(--glass-inner)",
+  background: "var(--bg-card)",
+  border: "1px solid var(--border)",
+  borderRadius: "8px",
 };
 
 const statLabel: CSSProperties = {
@@ -87,16 +84,7 @@ export default function SentimentDashboard() {
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [hotelName, setHotelName] = useState<string | null>(null);
   const [hotelCount, setHotelCount] = useState(0);
-  const [isDark, setIsDark] = useState(true);
   const [hoveredRatingIdx, setHoveredRatingIdx] = useState<number | null>(null);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    setIsDark(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsDark(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,21 +154,20 @@ export default function SentimentDashboard() {
 
   const chartColors = useMemo(
     () => ({
-      axisMuted: isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.35)",
-      grid: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-      tooltipBg: isDark ? "rgba(15,15,30,0.95)" : "rgba(255,255,255,0.98)",
-      tooltipBorder: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
-      tooltipText: isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.85)",
+      axisMuted: "var(--chart-axis)",
+      grid: "var(--chart-grid)",
+      tooltipBg: "var(--chart-tooltip-bg)",
+      tooltipBorder: "var(--chart-tooltip-border)",
+      tooltipText: "var(--chart-tooltip-text)",
     }),
-    [isDark],
+    [],
   );
 
   const tooltipStyle: CSSProperties = useMemo(
     () => ({
       background: chartColors.tooltipBg,
       border: `1px solid ${chartColors.tooltipBorder}`,
-      borderRadius: "12px",
-      backdropFilter: "blur(20px)",
+      borderRadius: "8px",
       color: chartColors.tooltipText,
     }),
     [chartColors],
@@ -240,9 +227,9 @@ export default function SentimentDashboard() {
       neu,
       neg,
       data: [
-        { name: "Positive", value: pos, fill: "#22c55e" },
-        { name: "Neutral", value: neu, fill: "#6b7280" },
-        { name: "Negative", value: neg, fill: "#ef4444" },
+        { name: "Positive", value: pos, fill: "var(--chart-donut-positive)" },
+        { name: "Neutral", value: neu, fill: "var(--chart-donut-neutral)" },
+        { name: "Negative", value: neg, fill: "var(--chart-donut-negative)" },
       ],
     };
   }, [reviews]);

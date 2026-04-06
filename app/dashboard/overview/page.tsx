@@ -21,23 +21,18 @@ type Stats = {
 
 
 const glass: CSSProperties = {
-  background: "var(--glass-bg)",
-  backdropFilter: "blur(24px) saturate(180%)",
-  WebkitBackdropFilter: "blur(24px) saturate(180%)",
-  border: "1px solid var(--glass-border)",
-  borderRadius: "var(--card-radius)",
-  boxShadow: "var(--glass-shadow), var(--glass-inner)",
+  background: "var(--bg-card)",
+  border: "1px solid var(--border)",
+  borderRadius: "8px",
 };
 
 const glassPrimary: CSSProperties = {
-  background: "var(--btn-primary-bg)",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  border: "1px solid var(--btn-primary-border)",
-  borderRadius: "var(--btn-radius)",
-  padding: "12px 24px",
-  color: "var(--on-primary)",
-  fontWeight: 500,
+  background: "var(--text-primary)",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  padding: "8px 16px",
+  color: "var(--bg-primary)",
+  fontWeight: 600,
   fontSize: "14px",
   cursor: "pointer",
   transition: "all 0.2s ease",
