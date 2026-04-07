@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { getRatingColor } from "@/lib/rating-colors";
 
 export type MapHotel = {
   name: string;
@@ -28,6 +27,14 @@ export type MapCompetitor = {
 };
 
 const DEFAULT_CENTER: [number, number] = [-7.7900488, 110.3620332];
+
+function competitorRatingColor(rating: number | null): string {
+  if (rating == null || Number.isNaN(rating)) return "#64748b";
+  if (rating >= 4.5) return "#4ade80";
+  if (rating >= 4.0) return "#84cc16";
+  if (rating >= 3.5) return "#fbbf24";
+  return "#f87171";
+}
 
 export function getCompetitorCoords(c: MapCompetitor): [number, number] | null {
   if (
@@ -110,7 +117,7 @@ function myHotelIcon(hotel: MapHotel) {
 }
 
 function competitorIcon(rating: number | null) {
-  const color = rating != null && !Number.isNaN(rating) ? getRatingColor(rating) : "#64748b";
+  const color = competitorRatingColor(rating);
   const label =
     rating != null && !Number.isNaN(rating) ? rating.toFixed(1) : "?";
   return L.divIcon({
@@ -157,7 +164,8 @@ export default function MapComponent({
       iconRetinaUrl:
         "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
       iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-      shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+      shadowUrl:
+        "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
     });
   }, []);
 
@@ -174,7 +182,7 @@ export default function MapComponent({
   const myReviewsLabel = myHotel.total_reviews.toLocaleString();
 
   return (
-    <div style={{ position: "relative", height, width: "100%", borderRadius: 20, overflow: "hidden" }}>
+    <div style={{ position: "relative", height, width: "100%", overflow: "hidden" }}>
       <MapContainer
         key={`${mapCenter[0]}-${mapCenter[1]}-${mapZoom}`}
         center={mapCenter}
@@ -192,14 +200,7 @@ export default function MapComponent({
           <Marker position={[myHotel.latitude!, myHotel.longitude!]} icon={myHotelIcon(myHotel)}>
             <Popup>
               <div style={{ fontFamily: "sans-serif", minWidth: 160 }}>
-                <div
-                  style={{
-                    fontWeight: 700,
-                    fontSize: 14,
-                    marginBottom: 4,
-                    color: "#6366f1",
-                  }}
-                >
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: "#6366f1" }}>
                   ★ YOUR HOTEL
                 </div>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{myHotel.name}</div>
@@ -238,7 +239,7 @@ export default function MapComponent({
                     <div style={{ marginTop: 8 }}>
                       <span
                         style={{
-                          background: getRatingColor(cr as number),
+                          background: competitorRatingColor(cr),
                           color: "white",
                           fontSize: 11,
                           padding: "2px 8px",
@@ -257,6 +258,7 @@ export default function MapComponent({
         })}
       </MapContainer>
 
+      {/* Legend */}
       <div
         style={{
           position: "absolute",
@@ -264,29 +266,29 @@ export default function MapComponent({
           left: 12,
           bottom: 12,
           fontSize: 11,
-          padding: "10px 12px",
-          borderRadius: 8,
-          background: "var(--bg-card)",
-          border: "1px solid var(--border)",
-          color: "var(--text-secondary)",
-          lineHeight: 1.5,
+          padding: "8px 12px",
+          borderRadius: 6,
+          background: "rgba(20,20,20,0.9)",
+          border: "1px solid #2a2a2a",
+          color: "#888888",
+          lineHeight: 1.7,
           pointerEvents: "none",
         }}
       >
         <div>
-          <span style={{ color: "#6366f1" }}>●</span> Your hotel (indigo)
+          <span style={{ color: "#6366f1" }}>●</span> Your hotel
         </div>
         <div>
-          <span style={{ color: "#22c55e" }}>●</span> 4.5+
+          <span style={{ color: "#4ade80" }}>●</span> 4.5+
         </div>
         <div>
           <span style={{ color: "#84cc16" }}>●</span> 4.0–4.5
         </div>
         <div>
-          <span style={{ color: "#f59e0b" }}>●</span> 3.5–4.0
+          <span style={{ color: "#fbbf24" }}>●</span> 3.5–4.0
         </div>
         <div>
-          <span style={{ color: "#ef4444" }}>●</span> Below 3.5
+          <span style={{ color: "#f87171" }}>●</span> Below 3.5
         </div>
       </div>
     </div>
