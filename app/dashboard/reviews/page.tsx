@@ -1,12 +1,11 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { CSSProperties } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { defaultDraftResponse, useDraftResponses } from "@/lib/useDraftResponses";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 type Hotel = {
   id: string;
   name?: string | null;
@@ -18,7 +17,6 @@ type Hotel = {
 type Review = {
   id?: string;
   hotel_id?: string;
-
   platform?: string | null;
   rating?: number | string | null;
   reviewer_name?: string | null;
@@ -27,8 +25,6 @@ type Review = {
   sentiment?: string | null;
   complaint_topic?: string | null;
   responded?: boolean | null;
-
-  // Fallback field names (in case your schema uses different column names)
   source?: string | null;
   stars?: number | string | null;
   name?: string | null;
@@ -39,7 +35,6 @@ type Review = {
   sentiment_label?: string | null;
   has_responded?: boolean | null;
   is_responded?: boolean | null;
-
   flagged?: boolean | null;
   internal_note?: string | null;
   flag_color?: string | null;
@@ -48,131 +43,90 @@ type Review = {
   topic_type?: string | null;
 };
 
+// ─── Design tokens ────────────────────────────────────────────────────────────
+const C = {
+  pageBg: "#0d0d0d",
+  card: "#141414",
+  border: "#1e1e1e",
+  borderSub: "#2a2a2a",
+  inputBg: "#111111",
+  textPrimary: "#f0f0f0",
+  textSecondary: "#888888",
+  textMuted: "#555555",
+  green: "#4ade80",
+  red: "#f87171",
+  amber: "#fbbf24",
+} as const;
 
-const glass: CSSProperties = {
-  background: "var(--bg-card)",
-  border: "1px solid var(--border)",
-  borderRadius: "8px",
+// ─── Shared style objects ──────────────────────────────────────────────────────
+const cardStyle: CSSProperties = {
+  background: C.card,
+  border: `1px solid ${C.border}`,
+  borderRadius: 8,
 };
 
-const glassPrimary: CSSProperties = {
-  background: "var(--text-primary)",
-  border: "1px solid var(--border)",
-  borderRadius: "6px",
-  color: "var(--bg-primary)",
+const labelStyle: CSSProperties = {
+  fontSize: 10,
   fontWeight: 600,
-  fontSize: "13px",
-  transition: "background 0.15s ease",
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: C.textMuted,
 };
 
-const glassSecondary: CSSProperties = {
-  background: "var(--secondary-btn-bg)",
-  border: "1px solid var(--secondary-btn-border)",
-  borderRadius: "var(--btn-radius)",
-  color: "var(--text-primary)",
-  fontWeight: 500,
-  transition: "all 0.2s ease",
-};
+function primaryBtn(disabled = false): CSSProperties {
+  return {
+    background: C.textPrimary,
+    border: "none",
+    borderRadius: 6,
+    padding: "7px 14px",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#0d0d0d",
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.5 : 1,
+    fontFamily: "inherit",
+    whiteSpace: "nowrap",
+  };
+}
 
-const selectStyle: CSSProperties = {
-  width: "100%",
-  height: "44px",
-  padding: "0 14px",
-  borderRadius: "var(--input-radius)",
-  background: "var(--glass-input-bg)",
-  border: "1px solid var(--glass-input-border)",
-  color: "var(--text-primary)",
-  fontSize: "14px",
+function secondaryBtn(extra: CSSProperties = {}): CSSProperties {
+  return {
+    background: "transparent",
+    border: `1px solid ${C.borderSub}`,
+    borderRadius: 5,
+    color: C.textSecondary,
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    padding: "6px 14px",
+    ...extra,
+  };
+}
+
+const inputStyle: CSSProperties = {
+  background: C.inputBg,
+  border: `1px solid ${C.borderSub}`,
+  borderRadius: 5,
+  color: C.textPrimary,
+  fontSize: 13,
   outline: "none",
-  cursor: "pointer",
-};
-
-const glassInput: CSSProperties = {
-  background: "var(--glass-input-bg)",
-  border: "1px solid var(--glass-input-border)",
-  borderRadius: "var(--input-radius)",
-  padding: "12px 16px",
-  color: "var(--input-text)",
-  outline: "none",
+  fontFamily: "inherit",
   boxSizing: "border-box",
 };
 
-const statLabel: CSSProperties = {
-  fontSize: "11px",
-  fontWeight: 600,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  color: "var(--text-label)",
-};
-
-const statNum: CSSProperties = {
-  fontSize: "36px",
-  fontWeight: 700,
-  color: "var(--text-primary)",
-  marginTop: "8px",
-};
-
-const reviewsResponsiveCss = `
-  @media (max-width: 768px) {
-    .reviews-page .rv-filters {
-      grid-template-columns: 1fr !important;
-    }
-    .reviews-page .rv-card-shell {
-      padding: 16px !important;
-    }
-    .reviews-page .rv-star-row {
-      font-size: 14px !important;
-    }
-    .reviews-page .rv-star-row span[aria-hidden] {
-      font-size: 14px !important;
-    }
-    .reviews-page .rv-meta-row > div:first-child {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 4px;
-    }
-    .reviews-page .rv-draft-wrap button {
-      width: 100%;
-      justify-content: center;
-    }
-  }
-`;
-
-const navLink: CSSProperties = {
-  fontSize: "14px",
-  color: "var(--text-secondary)",
-  textDecoration: "none",
-};
-
-function Skeleton({
-  width = "100%",
-  height = "20px",
-  radius = "8px",
-}: {
-  width?: string;
-  height?: string;
-  radius?: string;
-}) {
-  return (
-    <div
-      style={{
-        width,
-        height,
-        borderRadius: radius,
-        background: "var(--glass-bg)",
-        border: "1px solid var(--glass-border)",
-        animation: "skeleton-pulse 1.5s ease-in-out infinite",
-      }}
-    />
-  );
+// ─── Utility functions ─────────────────────────────────────────────────────────
+function normalizeRating(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isNaN(n) ? null : n;
 }
 
 function getReviewDate(r: Review): string | null {
-  const v = r.review_date ?? r.created_at ?? r.date ?? null;
-  return v || null;
+  return r.review_date ?? r.created_at ?? r.date ?? null;
 }
 
-function daysSinceReview(r: Review): number | null {
+function daysSince(r: Review): number | null {
   const d = getReviewDate(r);
   if (!d) return null;
   const t = new Date(d).getTime();
@@ -180,265 +134,32 @@ function daysSinceReview(r: Review): number | null {
   return Math.floor((Date.now() - t) / 86400000);
 }
 
-function agePillForReview(r: Review, responded: boolean): ReactNode {
-  if (responded) return null;
-  const days = daysSinceReview(r);
-  if (days === null || days <= 2) return null;
-  if (days >= 14) {
-    return (
-      <span
-        style={{
-          fontSize: "11px",
-          fontWeight: 600,
-          padding: "2px 8px",
-          borderRadius: "100px",
-          background: "rgba(239,68,68,0.15)",
-          color: "#ef4444",
-        }}
-      >
-        14d+ old
-      </span>
-    );
-  }
-  if (days >= 7) {
-    return (
-      <span
-        style={{
-          fontSize: "11px",
-          fontWeight: 600,
-          padding: "2px 8px",
-          borderRadius: "100px",
-          background: "rgba(249,115,22,0.15)",
-          color: "#fb923c",
-        }}
-      >
-        {days}d ago
-      </span>
-    );
-  }
-  return (
-    <span
-      style={{
-        fontSize: "11px",
-        fontWeight: 600,
-        padding: "2px 8px",
-        borderRadius: "100px",
-        background: "rgba(245,158,11,0.15)",
-        color: "#f59e0b",
-      }}
-    >
-      {days}d ago
-    </span>
-  );
+function formatRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "—";
+  const sec = Math.floor((Date.now() - t) / 1000);
+  if (sec < 60) return "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(mo / 12)}y ago`;
 }
 
-function SyncMessages({
-  syncError,
-  syncMessage,
-  syncBreakdown,
-}: {
-  syncError: string | null;
-  syncMessage: string | null;
-  syncBreakdown: { tripadvisor: number; google: number; booking: number } | null;
-}) {
-  return (
-    <>
-      {syncError ? (
-        <div
-          style={{
-            marginTop: "16px",
-            padding: "12px 16px",
-            borderRadius: "var(--btn-radius)",
-            background: "var(--message-error-bg)",
-            border: "1px solid var(--message-error-border)",
-            fontSize: "14px",
-            color: "var(--text-error-soft)",
-          }}
-        >
-          {syncError}
-        </div>
-      ) : null}
-      {syncMessage ? (
-        <div
-          style={{
-            marginTop: "12px",
-            padding: "12px 16px",
-            borderRadius: "var(--btn-radius)",
-            background: "var(--message-success-bg)",
-            border: "1px solid var(--message-success-border)",
-            fontSize: "14px",
-            color: "var(--text-primary)",
-          }}
-        >
-          {syncMessage}
-        </div>
-      ) : null}
-      {syncBreakdown ? (
-        <p style={{ marginTop: "12px", fontSize: "13px" }}>
-          <span style={{ color: "var(--text-label)" }}>Synced breakdown — </span>
-          <span
-            style={{
-              color:
-                syncBreakdown.tripadvisor > 0
-                  ? "var(--breakdown-highlight)"
-                  : "var(--text-label)",
-            }}
-          >
-            TripAdvisor: {syncBreakdown.tripadvisor}
-          </span>
-          <span style={{ color: "var(--text-label)" }}> · </span>
-          <span
-            style={{
-              color:
-                syncBreakdown.google > 0
-                  ? "var(--breakdown-highlight)"
-                  : "var(--text-label)",
-            }}
-          >
-            Google: {syncBreakdown.google}
-          </span>
-          <span style={{ color: "var(--text-label)" }}> · </span>
-          <span
-            style={{
-              color:
-                syncBreakdown.booking > 0
-                  ? "var(--breakdown-highlight)"
-                  : "var(--text-label)",
-            }}
-          >
-            Booking: {syncBreakdown.booking}
-          </span>
-        </p>
-      ) : null}
-    </>
-  );
-}
-
-function normalizeRating(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  const n = typeof value === "number" ? value : Number(value);
-  if (Number.isNaN(n)) return null;
-  return n;
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
-}
-
-function StarRow({ rating }: { rating: number | null }) {
-  const safe = rating ?? 0;
-  const filled = Math.max(0, Math.min(5, Math.round(safe)));
-  if (filled <= 0) {
-    return (
-      <span className="rv-star-row" style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-        No rating
-      </span>
-    );
-  }
-  return (
-    <span
-      className="rv-star-row"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "2px",
-        color: "var(--star)",
-        fontSize: "16px",
-      }}
-    >
-      {Array.from({ length: filled }).map((_, i) => (
-        <span key={i} aria-hidden>
-          ★
-        </span>
-      ))}
-      <span style={{ marginLeft: "6px", fontSize: "13px", color: "var(--text-label)" }}>
-        {safe.toFixed(1)}
-      </span>
-    </span>
-  );
-}
-
-function PlatformBadge({ platform }: { platform: string | null | undefined }) {
+function platformLinkColor(platform: string | null | undefined): string {
   const p = (platform ?? "").toLowerCase();
-  const label =
-    (platform ?? "").charAt(0).toUpperCase() + (platform ?? "").slice(1) || "Platform";
-  const base: CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    borderRadius: "100px",
-    padding: "4px 10px",
-    fontSize: "12px",
-    fontWeight: 600,
-    border: "1px solid",
-  };
-  if (p === "tripadvisor") {
-    return (
-      <span
-        style={{
-          ...base,
-          background: "var(--platform-ta-bg)",
-          color: "var(--platform-ta)",
-          borderColor: "var(--platform-ta-border)",
-        }}
-      >
-        {label}
-      </span>
-    );
-  }
-  if (p === "google") {
-    return (
-      <span
-        style={{
-          ...base,
-          background: "var(--platform-google-bg)",
-          color: "var(--platform-google)",
-          borderColor: "var(--platform-google-border)",
-        }}
-      >
-        {label}
-      </span>
-    );
-  }
-  if (p === "booking") {
-    return (
-      <span
-        style={{
-          ...base,
-          background: "var(--platform-booking-bg)",
-          color: "var(--platform-booking)",
-          borderColor: "var(--platform-booking-border)",
-        }}
-      >
-        {label}
-      </span>
-    );
-  }
-  return (
-    <span
-      style={{
-        ...base,
-        background: "var(--glass-input-bg)",
-        color: "var(--text-secondary)",
-        borderColor: "var(--glass-input-border)",
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function platformReviewLinkColor(platform: string | null | undefined): string {
-  const p = (platform ?? "").toLowerCase();
-  if (p === "tripadvisor") return "#34d399";
+  if (p === "tripadvisor") return C.green;
   if (p === "google") return "#60a5fa";
   if (p === "booking") return "#a78bfa";
-  return "var(--accent)";
+  return C.textSecondary;
 }
 
-function platformViewOnLabel(platform: string | null | undefined): string {
+function platformLabel(platform: string | null | undefined): string {
   const p = (platform ?? "").toLowerCase();
   if (p === "tripadvisor") return "TripAdvisor";
   if (p === "google") return "Google";
@@ -447,262 +168,121 @@ function platformViewOnLabel(platform: string | null | undefined): string {
   return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "Platform";
 }
 
-const IMPROVEMENT_TOPIC_PILL_COLORS: Record<string, string> = {
-  wifi: "#60a5fa",
-  noise: "#fb923c",
-  cleanliness: "#ef4444",
-  breakfast: "#eab308",
-  value: "#f59e0b",
-  room: "#6366f1",
-  checkin: "#14b8a6",
-  bathroom: "#ef4444",
-  parking: "#6b7280",
-  staff: "#ef4444",
-  location: "#f97316",
-  service: "#ef4444",
-  amenities: "#a855f7",
-  food: "#eab308",
-  pool: "#06b6d4",
-};
-
-function improvementTopicColor(slug: string): string {
-  return IMPROVEMENT_TOPIC_PILL_COLORS[slug.toLowerCase()] ?? "#ef4444";
+// ─── Sub-components ───────────────────────────────────────────────────────────
+function Skeleton({ width = "100%", height = "16px" }: { width?: string; height?: string }) {
+  return (
+    <div
+      style={{
+        width,
+        height,
+        borderRadius: 3,
+        background: "#1e1e1e",
+        animation: "rv-pulse 1.5s ease-in-out infinite",
+      }}
+    />
+  );
 }
 
-function TopicPill({
-  topicSlug,
-  topicType,
-}: {
-  topicSlug: string;
-  topicType: string | null | undefined;
-}) {
-  const tt = (topicType ?? "").toLowerCase().trim();
-  const label = topicSlug.charAt(0).toUpperCase() + topicSlug.slice(1);
-  if (tt === "strength") {
-    return (
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          borderRadius: "100px",
-          padding: "4px 10px",
-          fontSize: "13px",
-          background: "rgba(34,197,94,0.12)",
-          color: "#22c55e",
-          border: "1px solid rgba(34,197,94,0.25)",
-        }}
-      >
-        ✓ {label}
-      </span>
-    );
-  }
-  if (tt === "improvement") {
-    const c = improvementTopicColor(topicSlug);
-    return (
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          borderRadius: "100px",
-          padding: "4px 10px",
-          fontSize: "13px",
-          background: `${c}22`,
-          color: c,
-          border: `1px solid ${c}55`,
-        }}
-      >
-        ↑ {label}
-      </span>
-    );
+function StarRow({ rating }: { rating: number | null }) {
+  const safe = rating ?? 0;
+  const filled = Math.max(0, Math.min(5, Math.round(safe)));
+  if (filled <= 0) {
+    return <span style={{ fontSize: 12, color: C.textMuted }}>No rating</span>;
   }
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        borderRadius: "100px",
-        padding: "4px 10px",
-        fontSize: "13px",
-        background: "var(--complaint-pill-bg)",
-        color: "var(--text-label)",
-        border: "1px solid var(--complaint-pill-border)",
-      }}
-    >
-      {label}
+    <span style={{ fontSize: 13, letterSpacing: 1 }}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <span key={i} style={{ color: i <= filled ? "#fbbf24" : "#2a2a2a" }}>★</span>
+      ))}
+      <span style={{ marginLeft: 6, fontSize: 11, color: C.textMuted }}>{safe.toFixed(1)}</span>
+    </span>
+  );
+}
+
+function PlatformBadge({ platform }: { platform: string | null | undefined }) {
+  const p = (platform ?? "").toLowerCase();
+  const base: CSSProperties = {
+    borderRadius: 3,
+    padding: "2px 7px",
+    fontSize: 11,
+    fontWeight: 600,
+  };
+  if (p === "tripadvisor")
+    return <span style={{ ...base, background: "#052e16", color: C.green }}>TripAdvisor</span>;
+  if (p === "google")
+    return <span style={{ ...base, background: "#172554", color: "#60a5fa" }}>Google</span>;
+  if (p === "booking")
+    return <span style={{ ...base, background: "#1e1b4b", color: "#a78bfa" }}>Booking</span>;
+  return (
+    <span style={{ ...base, background: "#1e1e1e", color: C.textSecondary }}>
+      {platform || "Platform"}
     </span>
   );
 }
 
 function SentimentBadge({ sentiment }: { sentiment: string | null | undefined }) {
-  const raw = (sentiment ?? "neutral").toString();
-  const s = raw.toLowerCase();
-  const base: CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    borderRadius: "100px",
-    padding: "4px 10px",
-    fontSize: "12px",
-    fontWeight: 600,
-    border: "1px solid",
-  };
-  const text = raw.charAt(0).toUpperCase() + raw.slice(1);
-  if (s === "positive") {
-    return (
-      <span
-        style={{
-          ...base,
-          background: "var(--success-bg)",
-          color: "var(--success)",
-          borderColor: "var(--success-border)",
-        }}
-      >
-        {text}
-      </span>
-    );
-  }
-  if (s === "negative") {
-    return (
-      <span
-        style={{
-          ...base,
-          background: "var(--error-bg)",
-          color: "var(--error)",
-          borderColor: "var(--error-border)",
-        }}
-      >
-        {text}
-      </span>
-    );
-  }
-  return (
-    <span
-      style={{
-        ...base,
-        background: "var(--neutral-sentiment-bg)",
-        color: "var(--text-secondary)",
-        borderColor: "var(--neutral-sentiment-border)",
-      }}
-    >
-      {text}
-    </span>
-  );
+  const s = (sentiment ?? "").toLowerCase();
+  const base: CSSProperties = { borderRadius: 3, padding: "2px 8px", fontSize: 11, fontWeight: 500 };
+  if (s === "positive") return <span style={{ ...base, background: "#052e16", color: C.green }}>Positive</span>;
+  if (s === "negative") return <span style={{ ...base, background: "#2d0a0a", color: C.red }}>Negative</span>;
+  return <span style={{ ...base, background: "#1a1a1a", color: C.textMuted }}>Neutral</span>;
 }
 
-function SyncAllButton({
-  syncing,
-  onSync,
-  label,
-  disabledExternally,
+function TopicPill({ topicSlug, topicType }: { topicSlug: string; topicType: string | null | undefined }) {
+  const tt = (topicType ?? "").toLowerCase().trim();
+  const label = topicSlug.charAt(0).toUpperCase() + topicSlug.slice(1);
+  const base: CSSProperties = { borderRadius: 3, padding: "2px 8px", fontSize: 11, background: "#1e1e1e" };
+  if (tt === "strength") return <span style={{ ...base, color: C.green }}>✓ {label}</span>;
+  if (tt === "improvement") return <span style={{ ...base, color: C.amber }}>↑ {label}</span>;
+  return <span style={{ ...base, color: C.textSecondary }}>{label}</span>;
+}
+
+function AgePill({ review, responded }: { review: Review; responded: boolean }): ReactNode {
+  if (responded) return null;
+  const days = daysSince(review);
+  if (days === null || days <= 2) return null;
+  const pillBase: CSSProperties = { borderRadius: 3, padding: "1px 6px", fontSize: 10, fontWeight: 600 };
+  if (days >= 14)
+    return <span style={{ ...pillBase, background: "#1a0000", color: C.red }}>{days}d old</span>;
+  if (days >= 7)
+    return <span style={{ ...pillBase, background: "#1a1200", color: C.amber }}>{days}d old</span>;
+  return <span style={{ ...pillBase, background: "#1a1200", color: C.amber }}>{days}d old</span>;
+}
+
+function Pill({
+  active,
+  onClick,
+  children,
 }: {
-  syncing: boolean;
-  onSync: () => Promise<void>;
-  label: string;
-  disabledExternally?: boolean;
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
 }) {
-  const disabled = syncing || Boolean(disabledExternally);
   return (
     <button
       type="button"
-      onClick={onSync}
-      disabled={disabled}
+      onClick={onClick}
       style={{
-        ...glassPrimary,
-        padding: "12px 24px",
-        fontSize: "14px",
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "8px",
-        opacity: disabled ? 0.65 : 1,
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
-      onMouseEnter={(e) => {
-        if (!disabled)
-          e.currentTarget.style.background = "var(--btn-primary-hover)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "var(--btn-primary-bg)";
+        background: active ? "#1e1e1e" : C.inputBg,
+        border: `1px solid ${active ? "#3a3a3a" : C.borderSub}`,
+        borderRadius: 4,
+        padding: "5px 10px",
+        fontSize: 11,
+        color: active ? C.textPrimary : C.textMuted,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        whiteSpace: "nowrap",
       }}
     >
-      {syncing ? (
-        <>
-          <span
-            style={{
-              width: "16px",
-              height: "16px",
-              borderRadius: "50%",
-              border: "2px solid var(--spinner-track)",
-              borderTopColor: "var(--on-primary)",
-              animation: "rvspin 0.8s linear infinite",
-            }}
-          />
-          Syncing…
-        </>
-      ) : (
-        label
-      )}
+      {children}
     </button>
   );
 }
 
-function AutoClassifyButton({
-  classifying,
-  onClassify,
-  disabledExternally,
-}: {
-  classifying: boolean;
-  onClassify: () => Promise<void>;
-  disabledExternally?: boolean;
-}) {
-  const disabled = classifying || Boolean(disabledExternally);
-  return (
-    <button
-      type="button"
-      onClick={onClassify}
-      disabled={disabled}
-      style={{
-        ...glassSecondary,
-        padding: "12px 24px",
-        fontSize: "14px",
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "8px",
-        opacity: disabled ? 0.65 : 1,
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
-      onMouseEnter={(e) => {
-        if (!disabled) e.currentTarget.style.background = "var(--secondary-btn-hover)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "var(--secondary-btn-bg)";
-      }}
-    >
-      {classifying ? (
-        <>
-          <span
-            style={{
-              width: "16px",
-              height: "16px",
-              borderRadius: "50%",
-              border: "2px solid var(--spinner-track)",
-              borderTopColor: "var(--text-primary)",
-              animation: "rvspin 0.8s linear infinite",
-            }}
-          />
-          Classifying…
-        </>
-      ) : (
-        "Auto-classify"
-      )}
-    </button>
-  );
-}
-
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function ReviewsInboxPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [reviews, setReviews] = useState<Review[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -719,10 +299,9 @@ export default function ReviewsInboxPage() {
     booking: number;
   } | null>(null);
 
-  const [platformFilter, setPlatformFilter] = useState<string>("all");
-  const [sentimentFilter, setSentimentFilter] = useState<string>("all");
-  const [respondedFilter, setRespondedFilter] = useState<string>("all");
-
+  const [platformFilter, setPlatformFilter] = useState("all");
+  const [sentimentFilter, setSentimentFilter] = useState("all");
+  const [respondedFilter, setRespondedFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [periodDays, setPeriodDays] = useState<7 | 30 | 90 | "all">(30);
   const [reviewType, setReviewType] = useState<"all" | "with-text" | "star-only">("all");
@@ -731,14 +310,14 @@ export default function ReviewsInboxPage() {
   >("newest");
 
   const [flagMenuOpenId, setFlagMenuOpenId] = useState<string | null>(null);
-
   const [noteEditorId, setNoteEditorId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const [undoConfirmId, setUndoConfirmId] = useState<string | null>(null);
 
+  // Close flag menu on outside click
   useEffect(() => {
     function handle(e: MouseEvent) {
-      const el = e.target as HTMLElement;
-      if (el.closest("[data-flag-menu-root]")) return;
+      if ((e.target as HTMLElement).closest("[data-flag-menu-root]")) return;
       setFlagMenuOpenId(null);
     }
     if (flagMenuOpenId) {
@@ -747,35 +326,32 @@ export default function ReviewsInboxPage() {
     }
   }, [flagMenuOpenId]);
 
+  // ── Filter logic ───────────────────────────────────────────────────────────
   const visibleReviews = useMemo(() => {
     let list = reviews.filter((r) => {
       const platform = (r.platform ?? r.source ?? "").toString().toLowerCase();
       const sentimentRaw = (r.sentiment ?? r.sentiment_label ?? "").toString().toLowerCase();
       const sentiment =
         sentimentRaw === "positive" ? "positive" : sentimentRaw === "negative" ? "negative" : "neutral";
+      const responded = r.responded ?? r.has_responded ?? r.is_responded ?? false;
 
-      const responded =
-        r.responded ?? r.has_responded ?? r.is_responded ?? false;
-
-      const platformOk =
-        platformFilter === "all" ? true : platform === platformFilter;
-
-      const sentimentOk =
-        sentimentFilter === "all" ? true : sentiment === sentimentFilter;
-
+      const platformOk = platformFilter === "all" ? true : platform === platformFilter;
+      const sentimentOk = sentimentFilter === "all" ? true : sentiment === sentimentFilter;
       const respondedOk =
         respondedFilter === "all"
           ? true
           : respondedFilter === "responded"
             ? Boolean(responded)
-            : !Boolean(responded);
+            : respondedFilter === "flagged"
+              ? Boolean(r.flagged)
+              : !Boolean(responded); // needsResponse
 
       return platformOk && sentimentOk && respondedOk;
     });
 
     if (reviewType !== "all") {
-      list = list.filter((review) => {
-        const raw = review.review_text ?? review.body ?? review.text ?? null;
+      list = list.filter((r) => {
+        const raw = r.review_text ?? r.body ?? r.text ?? null;
         const s = raw == null ? "" : String(raw).trim();
         const hasText = s !== "" && s !== "—";
         if (reviewType === "with-text") return hasText;
@@ -805,7 +381,6 @@ export default function ReviewsInboxPage() {
 
     const ratingVal = (x: Review) => normalizeRating(x.rating ?? x.stars);
     const respondedVal = (x: Review) => x.responded ?? x.has_responded ?? x.is_responded ?? false;
-    const flaggedVal = (x: Review) => Boolean(x.flagged);
 
     list = [...list].sort((a, b) => {
       const dateA = new Date(getReviewDate(a) || 0).getTime();
@@ -814,56 +389,39 @@ export default function ReviewsInboxPage() {
       const rb = ratingVal(b);
       const respA = respondedVal(a);
       const respB = respondedVal(b);
-      const flA = flaggedVal(a);
-      const flB = flaggedVal(b);
-
       switch (sortBy) {
-        case "newest":
-          return dateB - dateA;
-        case "oldest":
-          return dateA - dateB;
-        case "lowRating": {
-          const na = ra ?? 999;
-          const nb = rb ?? 999;
-          return na - nb;
-        }
-        case "highRating": {
-          const na = ra ?? -1;
-          const nb = rb ?? -1;
-          return nb - na;
-        }
-        case "needsFirst": {
+        case "newest": return dateB - dateA;
+        case "oldest": return dateA - dateB;
+        case "lowRating": return (ra ?? 999) - (rb ?? 999);
+        case "highRating": return (rb ?? -1) - (ra ?? -1);
+        case "needsFirst":
           if (respA === respB) return dateB - dateA;
           return respA ? 1 : -1;
-        }
-        case "flaggedFirst": {
-          if (flA === flB) return dateB - dateA;
-          return flA ? -1 : 1;
-        }
-        default:
-          return dateB - dateA;
+        case "flaggedFirst":
+          if (Boolean(a.flagged) === Boolean(b.flagged)) return dateB - dateA;
+          return a.flagged ? -1 : 1;
+        default: return dateB - dateA;
       }
     });
 
     return list;
-  }, [
-    reviews,
-    platformFilter,
-    sentimentFilter,
-    respondedFilter,
-    reviewType,
-    searchQuery,
-    periodDays,
-    sortBy,
-  ]);
+  }, [reviews, platformFilter, sentimentFilter, respondedFilter, reviewType, searchQuery, periodDays, sortBy]);
 
-  const filteredCount = visibleReviews.length;
-  const totalCount = reviews.length;
+  // ── Summary stats ─────────────────────────────────────────────────────────
+  const summary = useMemo(() => {
+    const total = reviews.length;
+    const ratings = reviews
+      .map((r) => normalizeRating(r.rating ?? r.stars))
+      .filter((n): n is number => typeof n === "number" && !Number.isNaN(n));
+    const avgRating = ratings.length === 0 ? null : ratings.reduce((a, b) => a + b, 0) / ratings.length;
+    const needingResponse = reviews.filter((r) => !(r.responded ?? r.has_responded ?? r.is_responded ?? false)).length;
+    return { total, avgRating, needingResponse };
+  }, [reviews]);
 
+  // ── Actions ───────────────────────────────────────────────────────────────
   async function handleDraftResponse(review: Review) {
     const id = review.id;
     if (!id) return;
-
     const cur = draftResponses[id];
 
     if (cur?.isOpen) {
@@ -872,7 +430,6 @@ export default function ReviewsInboxPage() {
       patchDraftResponse(id, { isOpen: false });
       return;
     }
-
     if (cur?.status === "done" || cur?.status === "error") {
       patchDraftResponse(id, { isOpen: true });
       return;
@@ -882,25 +439,15 @@ export default function ReviewsInboxPage() {
     const controller = new AbortController();
     draftAbortRef.current = controller;
 
-    patchDraftResponse(id, {
-      isOpen: true,
-      status: "loading",
-      text: "",
-      markError: null,
-      copied: false,
-    });
+    patchDraftResponse(id, { isOpen: true, status: "loading", text: "", markError: null, copied: false });
 
     try {
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       );
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user?.id) {
-        throw new Error("You must be signed in.");
-      }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error("You must be signed in.");
 
       const { data: hotelData } = await supabase
         .from("hotels")
@@ -923,57 +470,41 @@ export default function ReviewsInboxPage() {
         signal: controller.signal,
       });
 
-      const json = (await res.json()) as {
-        success?: boolean;
-        response?: string;
-        error?: string;
-      };
-
+      const json = (await res.json()) as { success?: boolean; response?: string; error?: string };
       if (controller.signal.aborted) return;
-
-      if (!res.ok || json.success !== true || !json.response) {
-        throw new Error(json.error ?? "Failed to generate draft");
-      }
-
+      if (!res.ok || json.success !== true || !json.response) throw new Error(json.error ?? "Failed to generate draft");
       patchDraftResponse(id, { status: "done", text: json.response });
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
-      patchDraftResponse(id, {
-        status: "error",
-        text: err instanceof Error ? err.message : "Failed to generate draft",
-      });
+      patchDraftResponse(id, { status: "error", text: err instanceof Error ? err.message : "Failed to generate draft" });
     } finally {
-      if (draftAbortRef.current === controller) {
-        draftAbortRef.current = null;
-      }
+      if (draftAbortRef.current === controller) draftAbortRef.current = null;
     }
   }
 
   async function handleMarkResponded(reviewId: string) {
     patchDraftResponse(reviewId, { markingResponded: true, markError: null });
-
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
-
-    const { error: updateError } = await supabase
-      .from("reviews")
-      .update({ responded: true })
-      .eq("id", reviewId);
-
+    const { error: updateError } = await supabase.from("reviews").update({ responded: true }).eq("id", reviewId);
     if (updateError) {
-      patchDraftResponse(reviewId, {
-        markingResponded: false,
-        markError: updateError.message,
-      });
+      patchDraftResponse(reviewId, { markingResponded: false, markError: updateError.message });
       return;
     }
-
-    setReviews((prev) =>
-      prev.map((r) => (r.id === reviewId ? { ...r, responded: true } : r)),
-    );
+    setReviews((prev) => prev.map((r) => (r.id === reviewId ? { ...r, responded: true } : r)));
     removeDraft(reviewId);
+  }
+
+  async function handleUndoResponded(reviewId: string) {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+    await supabase.from("reviews").update({ responded: false }).eq("id", reviewId);
+    setReviews((prev) => prev.map((r) => (r.id === reviewId ? { ...r, responded: false } : r)));
+    setUndoConfirmId(null);
   }
 
   async function updateReviewFlag(
@@ -983,11 +514,7 @@ export default function ReviewsInboxPage() {
     setReviews((prev) =>
       prev.map((r) =>
         r.id === reviewId
-          ? {
-              ...r,
-              flagged: patch.flagged,
-              flag_color: patch.flagged ? patch.flag_color ?? r.flag_color ?? "red" : "red",
-            }
+          ? { ...r, flagged: patch.flagged, flag_color: patch.flagged ? patch.flag_color ?? r.flag_color ?? "red" : "red" }
           : r,
       ),
     );
@@ -999,65 +526,33 @@ export default function ReviewsInboxPage() {
     const payload = patch.flagged
       ? { flagged: true as const, flag_color: patch.flag_color ?? "red" }
       : { flagged: false as const };
-    const { error } = await supabase.from("reviews").update(payload).eq("id", reviewId);
-    if (error) {
-      console.error(error);
-    }
+    await supabase.from("reviews").update(payload).eq("id", reviewId);
   }
 
   async function saveInternalNote(reviewId: string, text: string) {
     const trimmed = text.trim();
-    setReviews((prev) =>
-      prev.map((r) => (r.id === reviewId ? { ...r, internal_note: trimmed || null } : r)),
-    );
+    setReviews((prev) => prev.map((r) => (r.id === reviewId ? { ...r, internal_note: trimmed || null } : r)));
     setNoteEditorId(null);
     setNoteDraft("");
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
-    const { error } = await supabase
-      .from("reviews")
-      .update({ internal_note: trimmed || null })
-      .eq("id", reviewId);
-    if (error) {
-      console.error(error);
-    }
+    await supabase.from("reviews").update({ internal_note: trimmed || null }).eq("id", reviewId);
   }
 
-  async function syncPlatform(
-    platform: "tripadvisor" | "google" | "booking",
-    url: string,
-    hotelId: string,
-  ) {
+  async function syncPlatform(platform: "tripadvisor" | "google" | "booking", url: string, hotelId: string) {
     try {
       const res = await fetch("/api/scrape-reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          hotel_id: hotelId,
-          url,
-          platform,
-        }),
+        body: JSON.stringify({ hotel_id: hotelId, url, platform }),
       });
-
-      const json = (await res.json()) as {
-        success?: boolean;
-        count?: number;
-        error?: string;
-      };
-
-      if (!res.ok || json.success !== true) {
-        throw new Error(json.error ?? `Failed syncing ${platform}`);
-      }
-
+      const json = (await res.json()) as { success?: boolean; count?: number; error?: string };
+      if (!res.ok || json.success !== true) throw new Error(json.error ?? `Failed syncing ${platform}`);
       return { platform, count: json.count ?? 0, error: null as string | null };
     } catch (e) {
-      return {
-        platform,
-        count: 0,
-        error: e instanceof Error ? e.message : `Failed syncing ${platform}`,
-      };
+      return { platform, count: 0, error: e instanceof Error ? e.message : `Failed syncing ${platform}` };
     }
   }
 
@@ -1067,24 +562,13 @@ export default function ReviewsInboxPage() {
     setSyncBreakdown(null);
     try {
       setSyncing(true);
-
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       );
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        throw new Error(userError.message);
-      }
-
-      if (!user?.id) {
-        throw new Error("You must be signed in to sync reviews.");
-      }
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw new Error(userError.message);
+      if (!user?.id) throw new Error("You must be signed in to sync reviews.");
 
       const { data: hotel, error: hotelError } = await supabase
         .from("hotels")
@@ -1093,67 +577,37 @@ export default function ReviewsInboxPage() {
         .limit(1)
         .maybeSingle();
 
-      if (hotelError) {
-        throw new Error(hotelError.message);
-      }
+      if (hotelError) throw new Error(hotelError.message);
+      if (!hotel?.id) throw new Error("No hotel found. Add one in Settings first.");
 
-      if (!hotel?.id) {
-        throw new Error("No hotel found. Add one in Settings first.");
-      }
+      const tasks = [
+        hotel.tripadvisor_url ? syncPlatform("tripadvisor", hotel.tripadvisor_url, hotel.id) : null,
+        hotel.google_url ? syncPlatform("google", hotel.google_url, hotel.id) : null,
+        hotel.booking_url ? syncPlatform("booking", hotel.booking_url, hotel.id) : null,
+      ].filter(Boolean) as Promise<{ platform: "tripadvisor" | "google" | "booking"; count: number; error: string | null }>[];
 
-      const tripadvisorUrl =
-        typeof hotel.tripadvisor_url === "string" ? hotel.tripadvisor_url.trim() : "";
-      const googleUrl =
-        typeof hotel.google_url === "string" ? hotel.google_url.trim() : "";
-      const bookingUrl =
-        typeof hotel.booking_url === "string" ? hotel.booking_url.trim() : "";
-
-      const platformTasks = [
-        tripadvisorUrl
-          ? syncPlatform("tripadvisor", tripadvisorUrl, hotel.id)
-          : null,
-        googleUrl ? syncPlatform("google", googleUrl, hotel.id) : null,
-        bookingUrl ? syncPlatform("booking", bookingUrl, hotel.id) : null,
-      ].filter(Boolean) as Promise<{
-        platform: "tripadvisor" | "google" | "booking";
-        count: number;
-        error: string | null;
-      }>[];
-
-      if (platformTasks.length === 0) {
-        setSyncMessage("Synced 0 new reviews across 0 platforms");
-        setSyncBreakdown({ tripadvisor: 0, google: 0, booking: 0 });
+      if (tasks.length === 0) {
+        setSyncMessage("No platform URLs configured.");
         return;
       }
 
-      const results = await Promise.all(platformTasks);
-
-      const totalSynced = results.reduce((sum, r) => sum + (r?.count || 0), 0);
+      const results = await Promise.all(tasks);
+      const totalSynced = results.reduce((s, r) => s + (r?.count || 0), 0);
       const platformCount = results.filter((r) => (r?.count ?? 0) > 0).length;
-      const breakdown = {
+      const failed = results.filter((r) => r.error);
+
+      setSyncBreakdown({
         tripadvisor: results.find((r) => r.platform === "tripadvisor")?.count ?? 0,
         google: results.find((r) => r.platform === "google")?.count ?? 0,
         booking: results.find((r) => r.platform === "booking")?.count ?? 0,
-      };
-
-      const failed = results.filter((r) => r.error);
+      });
+      setSyncMessage(`Synced ${totalSynced} new reviews across ${platformCount} platforms`);
       if (failed.length > 0) {
-        setSyncError(
-          `Some platforms failed: ${failed
-            .map((f) => `${f.platform}: ${f.error}`)
-            .join(" | ")}`,
-        );
+        setSyncError(`Some platforms failed: ${failed.map((f) => `${f.platform}: ${f.error}`).join(" | ")}`);
       }
-
-      setSyncBreakdown(breakdown);
-      setSyncMessage(
-        `Synced ${totalSynced} new reviews across ${platformCount} platforms`,
-      );
       setRefreshKey((k) => k + 1);
     } catch (err) {
-      setSyncError(
-        err instanceof Error ? err.message : "Failed to sync reviews.",
-      );
+      setSyncError(err instanceof Error ? err.message : "Failed to sync reviews.");
     } finally {
       setSyncing(false);
     }
@@ -1165,24 +619,13 @@ export default function ReviewsInboxPage() {
     setSyncBreakdown(null);
     try {
       setClassifying(true);
-
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       );
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        throw new Error(userError.message);
-      }
-
-      if (!user?.id) {
-        throw new Error("You must be signed in to classify reviews.");
-      }
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw new Error(userError.message);
+      if (!user?.id) throw new Error("You must be signed in.");
 
       const { data: hotel, error: hotelError } = await supabase
         .from("hotels")
@@ -1191,104 +634,51 @@ export default function ReviewsInboxPage() {
         .limit(1)
         .maybeSingle();
 
-      if (hotelError) {
-        throw new Error(hotelError.message);
-      }
-
-      if (!hotel?.id) {
-        throw new Error("No hotel found. Add one in Settings first.");
-      }
+      if (hotelError) throw new Error(hotelError.message);
+      if (!hotel?.id) throw new Error("No hotel found.");
 
       const res = await fetch("/api/classify-reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hotel_id: hotel.id }),
       });
-
-      const json = (await res.json()) as {
-        success?: boolean;
-        classified?: number;
-        total?: number;
-        error?: string;
-      };
-
-      if (!res.ok || json.success !== true) {
-        throw new Error(json.error ?? "Classification failed");
-      }
+      const json = (await res.json()) as { success?: boolean; classified?: number; total?: number; error?: string };
+      if (!res.ok || json.success !== true) throw new Error(json.error ?? "Classification failed");
 
       const total = json.total ?? 0;
-      const n = json.classified ?? 0;
       setSyncMessage(
         total === 0
           ? "No reviews needed classification."
-          : `Classified ${n} of ${total} review${total === 1 ? "" : "s"}.`,
+          : `Classified ${json.classified ?? 0} of ${total} review${total === 1 ? "" : "s"}.`,
       );
       setRefreshKey((k) => k + 1);
     } catch (err) {
-      setSyncError(
-        err instanceof Error ? err.message : "Failed to classify reviews.",
-      );
+      setSyncError(err instanceof Error ? err.message : "Failed to classify reviews.");
     } finally {
       setClassifying(false);
     }
   }
 
+  // ── Data fetching ─────────────────────────────────────────────────────────
   useEffect(() => {
-    let isCancelled = false;
-
+    let cancelled = false;
     async function fetchInbox() {
       setLoading(true);
       setError(null);
-
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       );
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        if (!isCancelled) {
-          setError(userError.message);
-          setLoading(false);
-        }
-        return;
-      }
-
-      // Confirm the user object before any DB queries.
-      if (!user || typeof user.id !== "string" || !user.id) {
-        if (!isCancelled) {
-          setError("You must be signed in to view reviews.");
-          setLoading(false);
-        }
-        return;
-      }
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) { if (!cancelled) { setError(userError.message); setLoading(false); } return; }
+      if (!user?.id) { if (!cancelled) { setError("You must be signed in."); setLoading(false); } return; }
 
       const { data: hotels, error: hotelsError } = await supabase
-        .from("hotels")
-        .select("id")
-        .eq("user_id", user.id);
-
-      if (hotelsError) {
-        if (!isCancelled) {
-          setError(hotelsError.message);
-          setLoading(false);
-        }
-        return;
-      }
+        .from("hotels").select("id").eq("user_id", user.id);
+      if (hotelsError) { if (!cancelled) { setError(hotelsError.message); setLoading(false); } return; }
 
       const hotelIds = (hotels ?? []).map((h: Hotel) => h.id).filter(Boolean);
-
-      if (hotelIds.length === 0) {
-        if (!isCancelled) {
-          setReviews([]);
-          setLoading(false);
-        }
-        return;
-      }
+      if (hotelIds.length === 0) { if (!cancelled) { setReviews([]); setLoading(false); } return; }
 
       const { data: reviewsData, error: reviewsError } = await supabase
         .from("reviews")
@@ -1296,666 +686,377 @@ export default function ReviewsInboxPage() {
         .in("hotel_id", hotelIds)
         .order("created_at", { ascending: false });
 
-      if (reviewsError) {
-        if (!isCancelled) {
-          setError(reviewsError.message);
-          setLoading(false);
-        }
-        return;
-      }
-
-      if (!isCancelled) {
-        setReviews((reviewsData ?? []) as Review[]);
-        setLoading(false);
-      }
+      if (reviewsError) { if (!cancelled) { setError(reviewsError.message); setLoading(false); } return; }
+      if (!cancelled) { setReviews((reviewsData ?? []) as Review[]); setLoading(false); }
     }
-
     fetchInbox().catch((e) => {
-      if (isCancelled) return;
+      if (cancelled) return;
       setError(e instanceof Error ? e.message : "Failed to load reviews.");
       setLoading(false);
     });
-
-    return () => {
-      isCancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [refreshKey]);
 
-  const summary = useMemo(() => {
-    const total = reviews.length;
-
-    const ratings = reviews
-      .map((r) => normalizeRating(r.rating ?? r.stars))
-      .filter((n): n is number => typeof n === "number" && !Number.isNaN(n));
-
-    const avgRating =
-      ratings.length === 0 ? null : ratings.reduce((a, b) => a + b, 0) / ratings.length;
-
-    const needingResponse = reviews.filter((r) => {
-      const responded =
-        r.responded ?? r.has_responded ?? r.is_responded ?? false;
-      return !responded;
-    }).length;
-
-    return { total, avgRating, needingResponse };
-  }, [reviews]);
-
-  const someReviewsMissingUrl = useMemo(
-    () => reviews.length > 0 && reviews.some((r) => !r.review_url?.trim()),
-    [reviews],
-  );
-
+  // ─────────────────────────────────────────────────────────────────────────
+  // Loading state
   if (loading) {
     return (
-      <div className="reviews-page" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        <Skeleton width="200px" height="22px" />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px" }}>
-          {[0, 1, 2].map((i) => (
-            <div key={i} style={{ ...glass, padding: "16px", minHeight: "88px" }}>
-              <Skeleton width="50%" height="12px" />
-              <div style={{ marginTop: "12px" }}>
-                <Skeleton width="40%" height="28px" radius="10px" />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div style={{ ...glass, padding: "20px" }}>
-          <Skeleton width="100%" height="44px" radius="12px" />
-          <div style={{ marginTop: "16px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
-            <Skeleton width="120px" height="32px" radius="100px" />
-            <Skeleton width="200px" height="44px" radius="12px" />
+      <div style={{ background: C.pageBg, minHeight: "100vh", padding: "24px 28px", boxSizing: "border-box" }}>
+        <style dangerouslySetInnerHTML={{ __html: "@keyframes rv-pulse { 0%,100%{opacity:0.4} 50%{opacity:0.8} }" }} />
+        {/* Header skeleton */}
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <Skeleton width="180px" height="22px" />
+            <Skeleton width="140px" height="12px" />
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} style={{ ...glass, padding: "20px" }}>
-              <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
-                <Skeleton width="56px" height="22px" radius="100px" />
-                <Skeleton width="80px" height="16px" />
-              </div>
-              <Skeleton width="70%" height="14px" />
-              <div style={{ marginTop: "8px" }}>
-                <Skeleton width="50%" height="14px" />
-              </div>
+        {/* Stat cards skeleton */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ ...cardStyle, padding: "16px 18px" }}>
+              <Skeleton width="60%" height="10px" />
+              <div style={{ marginTop: 10 }}><Skeleton width="40%" height="28px" /></div>
             </div>
           ))}
         </div>
-        <style dangerouslySetInnerHTML={{ __html: `@keyframes rvspin { to { transform: rotate(360deg); } }` }} />
+        {/* Filter bar skeleton */}
+        <div style={{ ...cardStyle, padding: "12px 16px", marginBottom: 16 }}>
+          <Skeleton width="100%" height="34px" />
+        </div>
+        {/* Review card skeletons */}
+        {[0, 1, 2].map((i) => (
+          <div key={i} style={{ ...cardStyle, padding: "16px 20px", marginBottom: 8 }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <Skeleton width="70px" height="20px" />
+              <Skeleton width="80px" height="20px" />
+            </div>
+            <Skeleton width="100%" height="13px" />
+            <div style={{ marginTop: 6 }}><Skeleton width="75%" height="13px" /></div>
+          </div>
+        ))}
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="reviews-page">
-        <div style={{ ...glass, padding: "24px", maxWidth: "560px" }}>
-          <h1
-            style={{
-              fontSize: "17px",
-              fontWeight: 600,
-              color: "var(--text-primary)",
-              marginBottom: "8px",
-            }}
-          >
-            Error
-          </h1>
-          <p style={{ fontSize: "14px", color: "var(--text-error-soft)", lineHeight: 1.6 }}>{error}</p>
-        </div>
+      <div style={{ background: C.pageBg, minHeight: "100vh", padding: "24px 28px", color: C.red }}>
+        {error}
       </div>
     );
   }
 
-  if (reviews.length === 0) {
-    return (
-      <div className="reviews-page" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        <nav style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
-          <Link href="/dashboard" style={navLink}>
-            Dashboard
-          </Link>
-          <span style={{ color: "var(--text-subtle)" }}>/</span>
-          <span style={{ color: "var(--text-label)" }}>Reviews inbox</span>
-        </nav>
-
-        <div style={{ ...glass, padding: "24px" }}>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
-            <h1
-              style={{
-                fontSize: "26px",
-                fontWeight: 700,
-                letterSpacing: "-0.5px",
-                color: "var(--text-primary)",
-              }}
-            >
-              Reviews inbox
-            </h1>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                  gap: "10px",
-                }}
-              >
-                <SyncAllButton
-                  syncing={syncing}
-                  disabledExternally={classifying}
-                  onSync={handleSyncAllReviews}
-                  label="Sync all reviews"
-                />
-                <AutoClassifyButton
-                  classifying={classifying}
-                  disabledExternally={syncing}
-                  onClassify={handleAutoClassify}
-                />
-              </div>
-              {someReviewsMissingUrl ? (
-                <p
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--text-muted)",
-                    fontStyle: "italic",
-                    margin: 0,
-                    textAlign: "right",
-                    maxWidth: "320px",
-                  }}
-                >
-                  Sync reviews to load direct links for older reviews
-                </p>
-              ) : null}
-            </div>
-          </div>
-
-          <div style={{ marginTop: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px" }}>
-            <div style={{ ...glass, padding: "16px", background: "var(--glass-muted)" }}>
-              <div style={statLabel}>Total reviews</div>
-              <div style={statNum}>{summary.total}</div>
-            </div>
-            <div style={{ ...glass, padding: "16px", background: "var(--glass-muted)" }}>
-              <div style={statLabel}>Average rating</div>
-              <div style={statNum}>{summary.avgRating === null ? "—" : summary.avgRating.toFixed(2)}</div>
-            </div>
-            <div style={{ ...glass, padding: "16px", background: "var(--glass-muted)" }}>
-              <div style={statLabel}>Needing response</div>
-              <div style={statNum}>{summary.needingResponse}</div>
-            </div>
-          </div>
-
-          <div
-            className="rv-filters"
-            style={{ ...glass, marginTop: "16px", padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: "13px",
-                  color: "var(--text-secondary)",
-                  marginBottom: "8px",
-                }}
-              >
-                Platform
-              </div>
-              <select
-                value={platformFilter}
-                onChange={(e) => setPlatformFilter(e.target.value)}
-                style={selectStyle}
-              >
-                <option value="all">All</option>
-                <option value="tripadvisor">TripAdvisor</option>
-                <option value="google">Google</option>
-                <option value="booking">Booking.com</option>
-              </select>
-            </div>
-            <div>
-              <div
-                style={{
-                  fontSize: "13px",
-                  color: "var(--text-secondary)",
-                  marginBottom: "8px",
-                }}
-              >
-                Sentiment
-              </div>
-              <select
-                value={sentimentFilter}
-                onChange={(e) => setSentimentFilter(e.target.value)}
-                style={selectStyle}
-              >
-                <option value="all">All</option>
-                <option value="positive">Positive</option>
-                <option value="neutral">Neutral</option>
-                <option value="negative">Negative</option>
-              </select>
-            </div>
-            <div>
-              <div
-                style={{
-                  fontSize: "13px",
-                  color: "var(--text-secondary)",
-                  marginBottom: "8px",
-                }}
-              >
-                Status
-              </div>
-              <select
-                value={respondedFilter}
-                onChange={(e) => setRespondedFilter(e.target.value)}
-                style={selectStyle}
-              >
-                <option value="all">All</option>
-                <option value="needsResponse">Needs response</option>
-                <option value="responded">Responded</option>
-              </select>
-            </div>
-          </div>
-
-          <SyncMessages syncError={syncError} syncMessage={syncMessage} syncBreakdown={syncBreakdown} />
-        </div>
-
-        <div style={{ ...glass, padding: "28px" }}>
-          <p style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.7 }}>
-            No reviews yet. Once guests leave feedback, it will show up here for response.
-          </p>
-        </div>
-        <style dangerouslySetInnerHTML={{ __html: reviewsResponsiveCss }} />
-      </div>
-    );
-  }
-
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="reviews-page" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      <nav style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
-          <Link href="/dashboard" style={navLink}>
-          Dashboard
-        </Link>
-        <span style={{ color: "var(--text-subtle)" }}>/</span>
-        <span style={{ color: "var(--text-label)" }}>Reviews inbox</span>
-      </nav>
+    <div style={{ background: C.pageBg, minHeight: "100vh", padding: "24px 28px", boxSizing: "border-box" }}>
+      <style dangerouslySetInnerHTML={{ __html: "@keyframes rv-pulse { 0%,100%{opacity:0.4} 50%{opacity:0.8} } @keyframes rvspin { to { transform: rotate(360deg); } }" }} />
 
-      <div style={{ ...glass, padding: "24px" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
-          <h1
-            style={{
-              fontSize: "26px",
-              fontWeight: 700,
-              letterSpacing: "-0.5px",
-              color: "var(--text-primary)",
-            }}
-          >
-            Reviews inbox
-          </h1>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                gap: "10px",
-              }}
-            >
-              <SyncAllButton
-                syncing={syncing}
-                disabledExternally={classifying}
-                onSync={handleSyncAllReviews}
-                label="Sync all reviews"
-              />
-              <AutoClassifyButton
-                classifying={classifying}
-                disabledExternally={syncing}
-                onClassify={handleAutoClassify}
-              />
-            </div>
-            {someReviewsMissingUrl ? (
-              <p
-                style={{
-                  fontSize: "12px",
-                  color: "var(--text-muted)",
-                  fontStyle: "italic",
-                  margin: 0,
-                  textAlign: "right",
-                  maxWidth: "320px",
-                }}
-              >
-                Sync reviews to load direct links for older reviews
-              </p>
-            ) : null}
-          </div>
-        </div>
-
-        <div style={{ marginTop: "20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px" }}>
-          <div style={{ ...glass, padding: "16px", background: "var(--glass-muted)" }}>
-            <div style={statLabel}>Total reviews</div>
-            <div style={statNum}>{summary.total}</div>
-          </div>
-          <div style={{ ...glass, padding: "16px", background: "var(--glass-muted)" }}>
-            <div style={statLabel}>Average rating</div>
-            <div style={statNum}>{summary.avgRating === null ? "—" : summary.avgRating.toFixed(2)}</div>
-          </div>
-          <div style={{ ...glass, padding: "16px", background: "var(--glass-muted)" }}>
-            <div style={statLabel}>Needing response</div>
-            <div style={statNum}>{summary.needingResponse}</div>
-          </div>
-        </div>
-
-        <div style={{ ...glass, marginTop: "16px", padding: "16px 20px" }}>
-          <div style={{ position: "relative", marginBottom: "16px" }}>
-            <span
-              style={{
-                position: "absolute",
-                left: "14px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                fontSize: "16px",
-                color: "var(--text-muted)",
-                pointerEvents: "none",
-              }}
-              aria-hidden
-            >
-              ⌕
-            </span>
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search reviews by guest name, content, or topic..."
-              style={{
-                ...glassInput,
-                width: "100%",
-                paddingLeft: "40px",
-                paddingRight: searchQuery.trim() ? "40px" : "16px",
-              }}
-            />
-            {searchQuery.trim() ? (
-              <button
-                type="button"
-                aria-label="Clear search"
-                onClick={() => setSearchQuery("")}
-                style={{
-                  position: "absolute",
-                  right: "10px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  border: "none",
-                  background: "transparent",
-                  color: "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: "18px",
-                  lineHeight: 1,
-                }}
-              >
-                ×
-              </button>
-            ) : null}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "flex-end",
-              justifyContent: "space-between",
-              gap: "16px",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "8px" }}>Period</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                {(
-                  [
-                    { v: 7 as const, label: "7 days" },
-                    { v: 30 as const, label: "30 days" },
-                    { v: 90 as const, label: "90 days" },
-                    { v: "all" as const, label: "All time" },
-                  ] as const
-                ).map((p) => {
-                  const active = periodDays === p.v;
-                  return (
-                    <button
-                      key={p.label}
-                      type="button"
-                      onClick={() => setPeriodDays(p.v)}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "100px",
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        border: active ? "1px solid var(--accent-border)" : "1px solid var(--glass-border)",
-                        background: active ? "var(--accent-bg)" : "var(--glass-bg)",
-                        color: active ? "var(--accent)" : "var(--text-secondary)",
-                        cursor: "pointer",
-                        transition: "all 0.2s ease",
-                      }}
-                    >
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "8px" }}>Review type</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                {(
-                  [
-                    { v: "all" as const, label: "All" },
-                    { v: "with-text" as const, label: "With text" },
-                    { v: "star-only" as const, label: "Star only" },
-                  ] as const
-                ).map((opt) => {
-                  const active = reviewType === opt.v;
-                  return (
-                    <button
-                      key={opt.v}
-                      type="button"
-                      onClick={() => setReviewType(opt.v)}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "100px",
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        border: active ? "1px solid var(--accent-border)" : "1px solid var(--glass-border)",
-                        background: active ? "var(--accent-bg)" : "var(--glass-bg)",
-                        color: active ? "var(--accent)" : "var(--text-secondary)",
-                        cursor: "pointer",
-                        transition: "all 0.2s ease",
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div style={{ minWidth: "200px", flex: "1 1 200px" }}>
-              <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "8px" }}>Sort</div>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                style={selectStyle}
-              >
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="lowRating">Lowest rating first</option>
-                <option value="highRating">Highest rating first</option>
-                <option value="needsFirst">Needs response first</option>
-                <option value="flaggedFirst">Flagged first</option>
-              </select>
-            </div>
-          </div>
-          <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "12px 0 0 0" }}>
-            Showing {filteredCount} of {totalCount} reviews
+      {/* ── 1. Page Header ─────────────────────────────────────────────── */}
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.textPrimary, margin: 0 }}>Review inbox</h1>
+          <p style={{ fontSize: 12, color: C.textMuted, marginTop: 2, marginBottom: 0 }}>
+            {summary.total} reviews · {summary.needingResponse} need response
           </p>
         </div>
-
-        <div
-          className="rv-filters"
-          style={{ ...glass, marginTop: "16px", padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}
-        >
-          <div>
-            <div
-              style={{
-                fontSize: "13px",
-                color: "var(--text-secondary)",
-                marginBottom: "8px",
-              }}
-            >
-              Platform
-            </div>
-            <select
-              value={platformFilter}
-              onChange={(e) => setPlatformFilter(e.target.value)}
-              style={selectStyle}
-            >
-              <option value="all">All</option>
-              <option value="tripadvisor">TripAdvisor</option>
-              <option value="google">Google</option>
-              <option value="booking">Booking.com</option>
-            </select>
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: "13px",
-                color: "var(--text-secondary)",
-                marginBottom: "8px",
-              }}
-            >
-              Sentiment
-            </div>
-            <select
-              value={sentimentFilter}
-              onChange={(e) => setSentimentFilter(e.target.value)}
-              style={selectStyle}
-            >
-              <option value="all">All</option>
-              <option value="positive">Positive</option>
-              <option value="neutral">Neutral</option>
-              <option value="negative">Negative</option>
-            </select>
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: "13px",
-                color: "var(--text-secondary)",
-                marginBottom: "8px",
-              }}
-            >
-              Status
-            </div>
-            <select
-              value={respondedFilter}
-              onChange={(e) => setRespondedFilter(e.target.value)}
-              style={selectStyle}
-            >
-              <option value="all">All</option>
-              <option value="needsResponse">Needs response</option>
-              <option value="responded">Responded</option>
-            </select>
-          </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            disabled={classifying || syncing}
+            onClick={() => void handleAutoClassify()}
+            style={secondaryBtn({ opacity: classifying || syncing ? 0.5 : 1, cursor: classifying || syncing ? "not-allowed" : "pointer" })}
+          >
+            {classifying ? "Classifying…" : "✦ Auto-classify"}
+          </button>
+          <button
+            type="button"
+            disabled={syncing || classifying}
+            onClick={() => void handleSyncAllReviews()}
+            style={primaryBtn(syncing || classifying)}
+          >
+            {syncing ? "Syncing…" : "Sync all reviews"}
+          </button>
         </div>
+      </header>
 
-        <SyncMessages syncError={syncError} syncMessage={syncMessage} syncBreakdown={syncBreakdown} />
+      {/* ── 2. Stat Cards ──────────────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
+        {[
+          { label: "Total reviews", value: String(summary.total), urgent: false },
+          {
+            label: "Average rating",
+            value: summary.avgRating === null ? "—" : summary.avgRating.toFixed(1),
+            urgent: false,
+          },
+          {
+            label: "Needing response",
+            value: String(summary.needingResponse),
+            urgent: summary.needingResponse > 0,
+          },
+        ].map((s) => (
+          <div key={s.label} style={{ ...cardStyle, padding: "16px 18px" }}>
+            <div style={{ ...labelStyle, marginBottom: 8 }}>{s.label}</div>
+            <div
+              style={{
+                fontSize: 36,
+                fontWeight: 700,
+                letterSpacing: "-1.5px",
+                color: s.urgent ? "#ef4444" : C.textPrimary,
+                lineHeight: 1,
+              }}
+            >
+              {s.value}
+            </div>
+          </div>
+        ))}
       </div>
 
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `@keyframes rvspin { to { transform: rotate(360deg); } } ${reviewsResponsiveCss}`,
-        }}
-      />
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      {/* ── 3. Filter Bar ──────────────────────────────────────────────── */}
+      <div style={{ ...cardStyle, padding: "12px 16px", marginBottom: 12 }}>
+        {/* Search */}
+        <div style={{ position: "relative" }}>
+          <span
+            style={{
+              position: "absolute",
+              left: 10,
+              top: "50%",
+              transform: "translateY(-50%)",
+              fontSize: 16,
+              color: "#444444",
+              pointerEvents: "none",
+            }}
+          >
+            ⌕
+          </span>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search reviews..."
+            style={{
+              ...inputStyle,
+              width: "100%",
+              padding: "8px 12px 8px 32px",
+            }}
+          />
+        </div>
+
+        {/* Filter row */}
+        <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+          {/* Date range */}
+          <div style={{ display: "flex", gap: 4 }}>
+            {(
+              [
+                { v: 7 as const, label: "7d" },
+                { v: 30 as const, label: "30d" },
+                { v: 90 as const, label: "90d" },
+                { v: "all" as const, label: "All" },
+              ] as const
+            ).map((p) => (
+              <Pill key={String(p.v)} active={periodDays === p.v} onClick={() => setPeriodDays(p.v)}>
+                {p.label}
+              </Pill>
+            ))}
+          </div>
+
+          {/* Review type */}
+          <div style={{ display: "flex", gap: 4 }}>
+            {(
+              [
+                { v: "all" as const, label: "All" },
+                { v: "with-text" as const, label: "With text" },
+                { v: "star-only" as const, label: "Star only" },
+              ] as const
+            ).map((opt) => (
+              <Pill key={opt.v} active={reviewType === opt.v} onClick={() => setReviewType(opt.v)}>
+                {opt.label}
+              </Pill>
+            ))}
+          </div>
+
+          {/* Sort */}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            style={{
+              ...inputStyle,
+              padding: "5px 10px",
+              fontSize: 11,
+              color: C.textSecondary,
+              cursor: "pointer",
+            }}
+          >
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="lowRating">Lowest rating</option>
+            <option value="highRating">Highest rating</option>
+            <option value="needsFirst">Needs response first</option>
+            <option value="flaggedFirst">Flagged first</option>
+          </select>
+
+          {/* Platform */}
+          <div style={{ display: "flex", gap: 4 }}>
+            <Pill active={platformFilter === "all"} onClick={() => setPlatformFilter("all")}>All</Pill>
+            <Pill active={platformFilter === "tripadvisor"} onClick={() => setPlatformFilter("tripadvisor")}>
+              <span style={{ color: C.green }}>●</span> TripAdvisor
+            </Pill>
+            <Pill active={platformFilter === "google"} onClick={() => setPlatformFilter("google")}>
+              <span style={{ color: "#60a5fa" }}>●</span> Google
+            </Pill>
+            <Pill active={platformFilter === "booking"} onClick={() => setPlatformFilter("booking")}>
+              <span style={{ color: "#a78bfa" }}>●</span> Booking
+            </Pill>
+          </div>
+
+          {/* Sentiment */}
+          <div style={{ display: "flex", gap: 4 }}>
+            <Pill active={sentimentFilter === "all"} onClick={() => setSentimentFilter("all")}>All</Pill>
+            <Pill active={sentimentFilter === "positive"} onClick={() => setSentimentFilter("positive")}>
+              <span style={{ color: C.green }}>●</span> Positive
+            </Pill>
+            <Pill active={sentimentFilter === "neutral"} onClick={() => setSentimentFilter("neutral")}>
+              <span style={{ color: C.textMuted }}>●</span> Neutral
+            </Pill>
+            <Pill active={sentimentFilter === "negative"} onClick={() => setSentimentFilter("negative")}>
+              <span style={{ color: C.red }}>●</span> Negative
+            </Pill>
+          </div>
+
+          {/* Status */}
+          <div style={{ display: "flex", gap: 4 }}>
+            <Pill active={respondedFilter === "all"} onClick={() => setRespondedFilter("all")}>All</Pill>
+            <Pill active={respondedFilter === "needsResponse"} onClick={() => setRespondedFilter("needsResponse")}>Needs response</Pill>
+            <Pill active={respondedFilter === "responded"} onClick={() => setRespondedFilter("responded")}>Responded</Pill>
+            <Pill active={respondedFilter === "flagged"} onClick={() => setRespondedFilter("flagged")}>Flagged</Pill>
+          </div>
+
+          {/* Count */}
+          <span style={{ marginLeft: "auto", fontSize: 11, color: "#444444", whiteSpace: "nowrap" }}>
+            Showing {visibleReviews.length} of {reviews.length}
+          </span>
+        </div>
+      </div>
+
+      {/* ── 4. Sync/Classify Result ─────────────────────────────────────── */}
+      {(syncMessage || syncError) && (
+        <div style={{ marginBottom: 12, position: "relative" }}>
+          {syncMessage && (
+            <div
+              style={{
+                background: "#0a1a0a",
+                border: "1px solid #1a3a1a",
+                borderRadius: 6,
+                padding: "10px 36px 10px 14px",
+                marginBottom: syncError ? 6 : 0,
+              }}
+            >
+              <div style={{ fontSize: 13, color: C.green }}>✓ {syncMessage}</div>
+              {syncBreakdown && (
+                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>
+                  TripAdvisor: {syncBreakdown.tripadvisor} · Google: {syncBreakdown.google} · Booking: {syncBreakdown.booking}
+                </div>
+              )}
+            </div>
+          )}
+          {syncError && (
+            <div style={{ background: "#1a0a0a", border: "1px solid #3a1a1a", borderRadius: 6, padding: "10px 36px 10px 14px" }}>
+              <div style={{ fontSize: 13, color: C.red }}>⚠ {syncError}</div>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => { setSyncMessage(null); setSyncError(null); setSyncBreakdown(null); }}
+            style={{
+              position: "absolute",
+              top: 8,
+              right: 10,
+              border: "none",
+              background: "transparent",
+              color: C.textMuted,
+              cursor: "pointer",
+              fontSize: 16,
+              lineHeight: 1,
+              fontFamily: "inherit",
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* ── 5. Empty state ──────────────────────────────────────────────── */}
+      {!loading && visibleReviews.length === 0 && (
+        <div style={{ ...cardStyle, padding: 40, textAlign: "center" }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: C.textMuted }}>No reviews found</div>
+          <div style={{ fontSize: 13, color: "#444444", marginTop: 4 }}>
+            Try adjusting your filters or sync new reviews
+          </div>
+          <button
+            type="button"
+            disabled={syncing}
+            onClick={() => void handleSyncAllReviews()}
+            style={{ ...primaryBtn(syncing), marginTop: 16 }}
+          >
+            {syncing ? "Syncing…" : "Sync reviews"}
+          </button>
+        </div>
+      )}
+
+      {/* ── 6. Review Cards ─────────────────────────────────────────────── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {visibleReviews.map((review, idx) => {
-            const platform = review.platform ?? review.source ?? "";
-            const rating = normalizeRating(review.rating ?? review.stars);
-            const reviewerName = review.reviewer_name ?? review.name ?? "Anonymous";
-            const createdAt = review.created_at ?? review.date ?? null;
-            const reviewText = review.review_text ?? review.body ?? review.text ?? "";
-            const sentiment =
-              review.sentiment ?? review.sentiment_label ?? "neutral";
-            const complaintTopic = review.complaint_topic ?? review.topic ?? null;
-            const responded = review.responded ?? review.has_responded ?? review.is_responded ?? false;
-            const externalReviewUrl = review.review_url?.trim() || null;
+          const platform = review.platform ?? review.source ?? "";
+          const rating = normalizeRating(review.rating ?? review.stars);
+          const reviewerName = review.reviewer_name ?? review.name ?? "Anonymous";
+          const reviewText = review.review_text ?? review.body ?? review.text ?? "";
+          const sentiment = review.sentiment ?? review.sentiment_label ?? "neutral";
+          const complaintTopic = review.complaint_topic ?? review.topic ?? null;
+          const responded = review.responded ?? review.has_responded ?? review.is_responded ?? false;
+          const externalUrl = review.review_url?.trim() || null;
+          const reviewId = review.id ?? `${idx}-${platform}`;
+          const draft = draftResponses[reviewId] ?? defaultDraftResponse();
+          const isPanelOpen = draft.isOpen;
+          const hasSavedDraft = (draft.status === "done" || draft.status === "error") && Boolean(draft.text?.trim());
+          const hasStableId = Boolean(review.id);
+          const timeAgo = formatRelativeTime(getReviewDate(review));
 
-            const reviewId = review.id ?? `${idx}-${platform}-${createdAt}`;
-            const draft = draftResponses[reviewId] ?? defaultDraftResponse();
-            const isPanelOpen = draft.isOpen;
-            const hasSavedDraft =
-              (draft.status === "done" || draft.status === "error") && Boolean(draft.text?.trim());
-            const hasStableId = Boolean(review.id);
-            const dateLabel = formatDate(getReviewDate(review) ?? createdAt);
-            const flagAccent = review.flagged
-              ? review.flag_color === "amber"
-                ? "#f59e0b"
-                : review.flag_color === "green"
-                  ? "#22c55e"
-                  : "#ef4444"
-              : undefined;
-            const flagIconColor = review.flagged
-              ? flagAccent
-              : "var(--text-muted)";
+          // Left border color
+          const flagAccent = review.flagged
+            ? review.flag_color === "green" ? "#22c55e" : review.flag_color === "amber" ? C.amber : C.red
+            : null;
+          const borderLeft = flagAccent
+            ? `3px solid ${flagAccent}`
+            : sentiment.toLowerCase() === "negative"
+              ? `3px solid ${C.red}`
+              : sentiment.toLowerCase() === "positive"
+                ? `3px solid ${C.green}`
+                : "3px solid #333333";
 
-            return (
+          return (
+            <div key={reviewId}>
+              {/* Review card */}
               <div
-                key={reviewId}
-                className="rv-card-shell"
                 style={{
-                  ...glass,
-                  padding: "24px",
-                  position: "relative",
-                  transition: "transform 0.2s ease, border-color 0.2s ease, background 0.2s ease",
-                  ...(hasSavedDraft
-                    ? {
-                        boxShadow: "inset 3px 0 0 #60a5fa",
-                      }
-                    : {}),
-                  ...(flagAccent ? { borderLeft: `3px solid ${flagAccent}` } : {}),
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                  e.currentTarget.style.background = "var(--glass-hover-bg)";
-                  e.currentTarget.style.borderColor = "var(--glass-hover-border)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.background = "var(--bg-card)";
-                  e.currentTarget.style.borderColor = "var(--border)";
+                  ...cardStyle,
+                  padding: "16px 20px",
+                  borderLeft,
                 }}
               >
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", justifyContent: "space-between" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                {/* Top row */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <PlatformBadge platform={platform} />
-                    {externalReviewUrl ? (
-                      <a
-                        href={externalReviewUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          fontSize: "12px",
-                          color: platformReviewLinkColor(platform),
-                          textDecoration: "none",
-                          background: "transparent",
-                          lineHeight: 1.4,
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.textDecoration = "underline";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.textDecoration = "none";
-                        }}
-                      >
-                        View on {platformViewOnLabel(platform)} ↗
-                      </a>
-                    ) : null}
                     <StarRow rating={rating} />
+                    <AgePill review={review} responded={Boolean(responded)} />
                   </div>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "auto" }}>
-                    {hasStableId ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 13, color: C.textSecondary }}>{reviewerName}</span>
+                    <span style={{ fontSize: 11, color: "#444444" }}>{timeAgo}</span>
+                    {/* Flag button */}
+                    {hasStableId && (
                       <div data-flag-menu-root style={{ position: "relative" }}>
                         <button
                           type="button"
-                          aria-label={review.flagged ? "Remove flag" : "Flag review"}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!review.id) return;
@@ -1966,301 +1067,211 @@ export default function ReviewsInboxPage() {
                             }
                           }}
                           style={{
-                            width: "36px",
-                            height: "36px",
-                            borderRadius: "10px",
-                            border: "1px solid var(--glass-border)",
+                            border: "none",
                             background: "transparent",
-                            color: flagIconColor,
+                            color: flagAccent ?? "#333333",
                             cursor: "pointer",
-                            fontSize: "18px",
+                            fontSize: 14,
                             lineHeight: 1,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
+                            padding: "2px 4px",
                           }}
+                          title={review.flagged ? "Remove flag" : "Flag review"}
                         >
                           ⚑
                         </button>
-                        {!review.flagged && flagMenuOpenId === review.id ? (
+                        {!review.flagged && flagMenuOpenId === review.id && (
                           <div
                             style={{
                               position: "absolute",
-                              top: "calc(100% + 6px)",
+                              top: "calc(100% + 4px)",
                               right: 0,
                               zIndex: 10,
-                              minWidth: "200px",
-                              ...glass,
-                              padding: "8px",
-                              borderRadius: "8px",
-                              boxShadow: "none",
+                              minWidth: 180,
+                              background: "#1a1a1a",
+                              border: `1px solid ${C.borderSub}`,
+                              borderRadius: 6,
+                              padding: 4,
                             }}
                           >
-                            <button
-                              type="button"
-                              onClick={() => review.id && updateReviewFlag(review.id, { flagged: true, flag_color: "red" })}
-                              style={{
-                                display: "block",
-                                width: "100%",
-                                textAlign: "left",
-                                padding: "10px 12px",
-                                border: "none",
-                                borderRadius: "8px",
-                                background: "transparent",
-                                color: "var(--text-primary)",
-                                cursor: "pointer",
-                                fontSize: "13px",
-                              }}
-                            >
-                              🔴 Flag as urgent
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => review.id && updateReviewFlag(review.id, { flagged: true, flag_color: "amber" })}
-                              style={{
-                                display: "block",
-                                width: "100%",
-                                textAlign: "left",
-                                padding: "10px 12px",
-                                border: "none",
-                                borderRadius: "8px",
-                                background: "transparent",
-                                color: "var(--text-primary)",
-                                cursor: "pointer",
-                                fontSize: "13px",
-                              }}
-                            >
-                              🟡 Flag for follow-up
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => review.id && updateReviewFlag(review.id, { flagged: true, flag_color: "green" })}
-                              style={{
-                                display: "block",
-                                width: "100%",
-                                textAlign: "left",
-                                padding: "10px 12px",
-                                border: "none",
-                                borderRadius: "8px",
-                                background: "transparent",
-                                color: "var(--text-primary)",
-                                cursor: "pointer",
-                                fontSize: "13px",
-                              }}
-                            >
-                              🟢 Flag as resolved
-                            </button>
+                            {[
+                              { color: "red" as const, label: "🔴 Flag urgent" },
+                              { color: "amber" as const, label: "🟡 Flag follow-up" },
+                              { color: "green" as const, label: "🟢 Flag resolved" },
+                            ].map(({ color, label }) => (
+                              <button
+                                key={color}
+                                type="button"
+                                onClick={() => review.id && void updateReviewFlag(review.id, { flagged: true, flag_color: color })}
+                                style={{
+                                  display: "block",
+                                  width: "100%",
+                                  textAlign: "left",
+                                  padding: "6px 12px",
+                                  border: "none",
+                                  borderRadius: 4,
+                                  background: "transparent",
+                                  color: C.textPrimary,
+                                  cursor: "pointer",
+                                  fontSize: 12,
+                                  fontFamily: "inherit",
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "#222222"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                              >
+                                {label}
+                              </button>
+                            ))}
                           </div>
-                        ) : null}
+                        )}
                       </div>
-                    ) : null}
-                    {responded ? (
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          borderRadius: "100px",
-                          padding: "6px 12px",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          background: "var(--success-bg)",
-                          color: "var(--success)",
-                          border: "1px solid var(--success-border)",
-                        }}
-                      >
-                        <span aria-hidden>✓</span> Responded
-                      </span>
-                    ) : null}
+                    )}
                   </div>
                 </div>
 
-                <div className="rv-meta-row" style={{ marginTop: "12px" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <span style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)" }}>
-                      {reviewerName}
+                {/* Review text */}
+                <div style={{ marginTop: 10, fontSize: 13, color: "#cccccc", lineHeight: 1.6 }}>
+                  {reviewText ? reviewText : <em style={{ color: "#444444" }}>No written review</em>}
+                </div>
+
+                {/* Tags row */}
+                <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                  <SentimentBadge sentiment={sentiment} />
+                  {complaintTopic && <TopicPill topicSlug={complaintTopic} topicType={review.topic_type} />}
+                  {externalUrl && (
+                    <a
+                      href={externalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: 11, color: platformLinkColor(platform), textDecoration: "none" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+                    >
+                      View on {platformLabel(platform)} ↗
+                    </a>
+                  )}
+                  {responded && (
+                    <span style={{ borderRadius: 3, padding: "2px 8px", fontSize: 11, background: "#052e16", color: C.green }}>
+                      ✓ Responded
                     </span>
-                    <span style={{ fontSize: "13px", color: "var(--text-label)" }}>{dateLabel}</span>
-                    {agePillForReview(review, responded)}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: "8px",
-                      display: "flex",
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <SentimentBadge sentiment={sentiment} />
-                    {complaintTopic ? (
-                      <TopicPill topicSlug={complaintTopic} topicType={review.topic_type} />
-                    ) : null}
-                  </div>
+                  )}
                 </div>
 
-                <div
-                  style={{
-                    marginTop: "12px",
-                    color: "var(--review-text)",
-                    fontSize: "14px",
-                    lineHeight: 1.7,
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {reviewText || "—"}
-                </div>
-
-                {!responded && hasStableId ? (
-                  <div className="rv-draft-wrap" style={{ marginTop: "16px" }}>
+                {/* Actions row */}
+                <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                  {/* Draft button (only if not responded) */}
+                  {!responded && hasStableId && (
                     <button
                       type="button"
-                      onClick={() => handleDraftResponse(review)}
+                      onClick={() => void handleDraftResponse(review)}
                       disabled={isPanelOpen && draft.status === "loading"}
                       style={{
-                        ...glassPrimary,
-                        padding: "8px 16px",
-                        fontSize: "13px",
-                        opacity: isPanelOpen && draft.status === "loading" ? 0.65 : 1,
+                        background: C.textPrimary,
+                        color: "#0d0d0d",
+                        border: "none",
+                        borderRadius: 5,
+                        padding: "6px 14px",
+                        fontSize: 12,
+                        fontWeight: 600,
                         cursor: isPanelOpen && draft.status === "loading" ? "not-allowed" : "pointer",
+                        opacity: isPanelOpen && draft.status === "loading" ? 0.6 : 1,
+                        fontFamily: "inherit",
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: "8px",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!(isPanelOpen && draft.status === "loading")) {
-                          e.currentTarget.style.background = "var(--btn-primary-hover)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "var(--btn-primary-bg)";
+                        gap: 6,
                       }}
                     >
                       {isPanelOpen && draft.status === "loading" ? (
                         <>
-                          <span
-                            style={{
-                              width: "14px",
-                              height: "14px",
-                              borderRadius: "50%",
-                              border: "2px solid var(--spinner-track)",
-                              borderTopColor: "var(--on-primary)",
-                              animation: "rvspin 0.8s linear infinite",
-                            }}
-                          />
-                          Generating...
+                          <span style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid #ccc", borderTopColor: "#0d0d0d", animation: "rvspin 0.8s linear infinite", display: "inline-block" }} />
+                          Generating…
                         </>
-                      ) : isPanelOpen ? (
-                        "Hide response"
-                      ) : hasSavedDraft ? (
-                        <>
-                          <span
-                            style={{
-                              width: 6,
-                              height: 6,
-                              borderRadius: "50%",
-                              background: "#22c55e",
-                              display: "inline-block",
-                              marginRight: 6,
-                            }}
-                          />
-                          Show drafted response
-                        </>
-                      ) : (
-                        "Draft AI Response"
-                      )}
+                      ) : isPanelOpen ? "Hide response" : hasSavedDraft ? (
+                        <><span style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, display: "inline-block" }} />Show draft</>
+                      ) : "Draft AI response"}
                     </button>
-                  </div>
-                ) : null}
+                  )}
 
+                  {/* Undo responded */}
+                  {responded && hasStableId && (
+                    undoConfirmId === review.id ? (
+                      <span style={{ fontSize: 11, color: C.textMuted, display: "flex", alignItems: "center", gap: 6 }}>
+                        Sure?
+                        <button type="button" onClick={() => review.id && void handleUndoResponded(review.id)} style={{ border: "none", background: "transparent", color: C.red, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>Yes</button>
+                        <button type="button" onClick={() => setUndoConfirmId(null)} style={{ border: "none", background: "transparent", color: C.textSecondary, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>No</button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setUndoConfirmId(review.id!)}
+                        style={{ background: "transparent", border: `1px solid ${C.borderSub}`, color: C.textMuted, borderRadius: 4, padding: "4px 10px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}
+                      >
+                        ↩ Undo
+                      </button>
+                    )
+                  )}
+
+                  {/* Note toggle */}
+                  {hasStableId && !noteEditorId && !review.internal_note && (
+                    <button
+                      type="button"
+                      onClick={() => { setNoteEditorId(review.id!); setNoteDraft(""); }}
+                      style={{ border: "none", background: "transparent", color: C.textMuted, fontSize: 11, cursor: "pointer", fontFamily: "inherit", padding: 0 }}
+                    >
+                      ＋ Note
+                    </button>
+                  )}
+                </div>
+
+                {/* Draft panel */}
                 {isPanelOpen && draft.status !== "idle" && hasStableId && (
                   <div
                     style={{
-                      position: "relative",
-                      marginTop: "16px",
-                      padding: "16px",
-                      paddingTop: "40px",
+                      marginTop: 12,
+                      background: C.inputBg,
+                      border: `1px solid ${C.borderSub}`,
+                      borderTop: `2px solid ${C.green}`,
                       borderRadius: "0 0 8px 8px",
-                      background: "var(--bg-secondary)",
-                      border: "1px solid var(--border)",
-                      borderTop: "2px solid var(--positive)",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "12px",
+                      padding: "14px 16px",
+                      position: "relative",
                     }}
                   >
-                    <button
-                      type="button"
-                      aria-label="Close draft panel"
-                      onClick={() => patchDraftResponse(reviewId, { isOpen: false })}
-                      style={{
-                        position: "absolute",
-                        top: "10px",
-                        right: "12px",
-                        border: "none",
-                        background: "transparent",
-                        color: "var(--text-muted)",
-                        fontSize: "18px",
-                        lineHeight: 1,
-                        cursor: "pointer",
-                        padding: "4px",
-                      }}
-                    >
-                      ×
-                    </button>
-                    {draft.status === "loading" ? (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                          fontSize: "14px",
-                          color: "var(--text-secondary)",
-                        }}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", color: C.green, textTransform: "uppercase" }}>
+                        AI DRAFT READY
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => patchDraftResponse(reviewId, { isOpen: false })}
+                        style={{ border: "none", background: "transparent", color: "#444444", fontSize: 16, cursor: "pointer", lineHeight: 1, fontFamily: "inherit" }}
                       >
-                        <span
-                          style={{
-                            width: "16px",
-                            height: "16px",
-                            borderRadius: "50%",
-                            border: "2px solid var(--spinner-track)",
-                            borderTopColor: "var(--accent)",
-                            animation: "rvspin 0.8s linear infinite",
-                          }}
-                        />
-                        Generating...
+                        ×
+                      </button>
+                    </div>
+
+                    {draft.status === "loading" ? (
+                      <div style={{ fontSize: 13, color: C.textSecondary, display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid #333", borderTopColor: C.green, animation: "rvspin 0.8s linear infinite", display: "inline-block" }} />
+                        Generating…
                       </div>
                     ) : draft.status === "error" ? (
-                      <p style={{ fontSize: "14px", color: "var(--text-error-soft)" }}>{draft.text}</p>
+                      <p style={{ fontSize: 13, color: C.red, margin: 0 }}>{draft.text}</p>
                     ) : (
                       <>
                         <textarea
                           value={draft.text}
                           onChange={(e) => patchDraftResponse(reviewId, { text: e.target.value })}
-                          rows={5}
                           style={{
-                            ...glassInput,
+                            ...inputStyle,
                             width: "100%",
-                            minHeight: "120px",
+                            minHeight: 100,
                             resize: "vertical",
-                            fontSize: "14px",
-                            lineHeight: 1.6,
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.borderColor = "var(--focus-ring)";
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.borderColor = "var(--glass-input-border)";
+                            padding: "10px 12px",
+                            lineHeight: 1.7,
+                            fontSize: 13,
+                            color: "#cccccc",
                           }}
                         />
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                           <button
                             type="button"
                             onClick={async () => {
@@ -2269,206 +1280,112 @@ export default function ReviewsInboxPage() {
                               setTimeout(() => patchDraftResponse(reviewId, { copied: false }), 2000);
                             }}
                             style={{
-                              ...glassSecondary,
-                              padding: "10px 18px",
-                              fontSize: "14px",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = "var(--secondary-btn-hover)";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = "var(--secondary-btn-bg)";
+                              background: "#1e1e1e",
+                              border: `1px solid ${C.borderSub}`,
+                              color: C.textPrimary,
+                              borderRadius: 5,
+                              padding: "6px 14px",
+                              fontSize: 12,
+                              cursor: "pointer",
+                              fontFamily: "inherit",
                             }}
                           >
-                            {draft.copied ? "Copied!" : "Copy"}
+                            {draft.copied ? "Copied!" : "Copy response"}
                           </button>
                           <button
                             type="button"
-                            onClick={() => review.id && handleMarkResponded(review.id)}
                             disabled={draft.markingResponded}
-                            style={{
-                              ...glassPrimary,
-                              padding: "10px 18px",
-                              fontSize: "14px",
-                              opacity: draft.markingResponded ? 0.6 : 1,
-                              cursor: draft.markingResponded ? "not-allowed" : "pointer",
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!draft.markingResponded) {
-                                e.currentTarget.style.background = "var(--btn-primary-hover)";
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = "var(--btn-primary-bg)";
-                            }}
+                            onClick={() => review.id && void handleMarkResponded(review.id)}
+                            style={primaryBtn(draft.markingResponded)}
                           >
-                            {draft.markingResponded ? "Saving..." : "Mark as responded"}
+                            {draft.markingResponded ? "Saving…" : "Mark as responded"}
                           </button>
                         </div>
-                        {draft.markError ? (
-                          <p style={{ fontSize: "14px", color: "var(--text-error-soft)" }}>{draft.markError}</p>
-                        ) : null}
+                        {draft.markError && (
+                          <p style={{ fontSize: 12, color: C.red, marginTop: 6, marginBottom: 0 }}>{draft.markError}</p>
+                        )}
                       </>
                     )}
                   </div>
                 )}
 
-                {hasStableId ? (
-                  <div
-                    style={{ marginTop: "16px" }}
-                    title="Private note — only visible to you"
-                  >
+                {/* Internal note */}
+                {hasStableId && (
+                  <div style={{ marginTop: noteEditorId === review.id || review.internal_note ? 10 : 0 }}>
                     {noteEditorId === review.id ? (
-                      <>
+                      <div>
                         <textarea
                           value={noteDraft}
                           onChange={(e) => setNoteDraft(e.target.value)}
                           rows={3}
-                          placeholder="Add a private note... (only you can see this)"
-                          style={{
-                            ...glassInput,
-                            width: "100%",
-                            fontSize: "13px",
-                            lineHeight: 1.5,
-                            resize: "vertical",
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.borderColor = "var(--focus-ring)";
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.borderColor = "var(--glass-input-border)";
-                          }}
+                          placeholder="Add a private note… (only you can see this)"
+                          style={{ ...inputStyle, width: "100%", padding: "8px", minHeight: 60, resize: "vertical", fontSize: 12, lineHeight: 1.5 }}
                         />
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px" }}>
+                        <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                           <button
                             type="button"
                             onClick={() => review.id && void saveInternalNote(review.id, noteDraft)}
-                            style={{
-                              ...glassPrimary,
-                              padding: "6px 14px",
-                              fontSize: "13px",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = "var(--btn-primary-hover)";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = "var(--btn-primary-bg)";
-                            }}
+                            style={primaryBtn()}
                           >
-                            Save note
+                            Save
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              setNoteEditorId(null);
-                              setNoteDraft("");
-                            }}
-                            style={{
-                              ...glassSecondary,
-                              padding: "6px 14px",
-                              fontSize: "13px",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = "var(--secondary-btn-hover)";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = "var(--secondary-btn-bg)";
-                            }}
+                            onClick={() => { setNoteEditorId(null); setNoteDraft(""); }}
+                            style={secondaryBtn({ padding: "6px 12px", fontSize: 12 })}
                           >
                             Cancel
                           </button>
                         </div>
-                      </>
+                      </div>
                     ) : review.internal_note ? (
                       <div
                         style={{
-                          padding: "12px 14px",
-                          borderRadius: "12px",
-                          background: "rgba(245,158,11,0.05)",
-                          border: "1px solid rgba(245,158,11,0.1)",
-                          fontSize: "13px",
-                          color: "var(--text-secondary)",
+                          background: C.inputBg,
+                          borderLeft: `2px solid ${C.amber}`,
+                          borderRadius: 5,
+                          padding: "8px 12px",
+                          fontSize: 12,
+                          color: C.textSecondary,
                           fontStyle: "italic",
                           display: "flex",
-                          alignItems: "flex-start",
                           justifyContent: "space-between",
-                          gap: "10px",
+                          alignItems: "flex-start",
+                          gap: 8,
                         }}
                       >
-                        <span style={{ flex: 1, minWidth: 0, wordBreak: "break-word" }}>
-                          📝 {review.internal_note}
-                        </span>
-                        <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+                        <span style={{ flex: 1, wordBreak: "break-word" }}>Note: {review.internal_note}</span>
+                        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                           <button
                             type="button"
-                            aria-label="Edit note"
+                            onClick={() => { setNoteEditorId(review.id!); setNoteDraft(review.internal_note ?? ""); }}
+                            style={{ border: "none", background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 2 }}
                             title="Edit note"
-                            onClick={() => {
-                              setNoteEditorId(review.id!);
-                              setNoteDraft(review.internal_note ?? "");
-                            }}
-                            style={{
-                              border: "none",
-                              background: "transparent",
-                              color: "var(--text-muted)",
-                              cursor: "pointer",
-                              fontSize: "16px",
-                              lineHeight: 1,
-                              padding: "4px",
-                            }}
                           >
                             ✎
                           </button>
                           <button
                             type="button"
-                            aria-label="Delete note"
-                            title="Delete note"
                             onClick={() => {
-                              if (typeof window !== "undefined" && window.confirm("Delete this private note?")) {
+                              if (typeof window !== "undefined" && window.confirm("Delete this note?")) {
                                 void saveInternalNote(review.id!, "");
                               }
                             }}
-                            style={{
-                              border: "none",
-                              background: "transparent",
-                              color: "var(--text-muted)",
-                              cursor: "pointer",
-                              fontSize: "18px",
-                              lineHeight: 1,
-                              padding: "4px",
-                            }}
+                            style={{ border: "none", background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 2 }}
+                            title="Delete note"
                           >
                             ×
                           </button>
                         </div>
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNoteEditorId(review.id!);
-                          setNoteDraft("");
-                        }}
-                        style={{
-                          marginTop: "8px",
-                          border: "none",
-                          background: "transparent",
-                          color: "var(--text-muted)",
-                          fontSize: "13px",
-                          cursor: "pointer",
-                          padding: 0,
-                        }}
-                      >
-                        ＋ Add note
-                      </button>
-                    )}
+                    ) : null}
                   </div>
-                ) : null}
+                )}
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
-
