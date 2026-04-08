@@ -897,9 +897,15 @@ export default function ReviewsInboxPage() {
           {/* Platform */}
           <div style={{ display: "flex", gap: 4 }}>
             <Pill active={platformFilter === "all"} onClick={() => setPlatformFilter("all")}>All</Pill>
-            <Pill active={platformFilter === "tripadvisor"} onClick={() => setPlatformFilter("tripadvisor")}>TripAdvisor</Pill>
-            <Pill active={platformFilter === "google"} onClick={() => setPlatformFilter("google")}>Google</Pill>
-            <Pill active={platformFilter === "booking"} onClick={() => setPlatformFilter("booking")}>Booking</Pill>
+            <Pill active={platformFilter === "tripadvisor"} onClick={() => setPlatformFilter("tripadvisor")}>
+              <span style={{ color: "#2dd4bf" }}>●</span> TripAdvisor
+            </Pill>
+            <Pill active={platformFilter === "google"} onClick={() => setPlatformFilter("google")}>
+              <span style={{ color: "#60a5fa" }}>●</span> Google
+            </Pill>
+            <Pill active={platformFilter === "booking"} onClick={() => setPlatformFilter("booking")}>
+              <span style={{ color: "#a78bfa" }}>●</span> Booking
+            </Pill>
           </div>
 
           {/* Sentiment */}

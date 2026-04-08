@@ -1,6 +1,11 @@
 /**
- * Run in Supabase:
- * alter table public.reviews add column if not exists topic_type text;
+ * Run in Supabase to reset classifications:
+ * update public.reviews
+ * set sentiment = null, complaint_topic = null,
+ *    topic_type = null
+ * where review_text is not null
+ * and review_text != ''
+ * and review_text != '—';
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -14,6 +19,34 @@ type ReviewRow = {
   rating: number | null;
   platform: string | null;
 };
+
+const VALID_SENTIMENTS = ["positive", "neutral", "negative"];
+const VALID_TOPICS: (string | null)[] = [
+  "cleanliness",
+  "smell",
+  "noise",
+  "wifi",
+  "breakfast",
+  "staff",
+  "location",
+  "value",
+  "room",
+  "checkin",
+  "bathroom",
+  "food",
+  "parking",
+  "pool",
+  "amenities",
+  "service",
+  "mold",
+  "temperature",
+  "view",
+  null,
+];
+const VALID_LANGUAGES = [
+  "en", "nl", "id", "de", "fr", "es", "it", "pt",
+  "ja", "zh", "ar", "ru", "ko", "tr", "pl", "other",
+];
 
 export async function POST(request: NextRequest) {
   try {
@@ -68,27 +101,7 @@ export async function POST(request: NextRequest) {
     const rows = reviews as ReviewRow[];
 
     let classified = 0;
-    const batchSize = 5;
-
-    const validSentiments = ["positive", "neutral", "negative"];
-    const validTopics: (string | null)[] = [
-      "wifi",
-      "noise",
-      "cleanliness",
-      "breakfast",
-      "staff",
-      "location",
-      "value",
-      "room",
-      "checkin",
-      "bathroom",
-      "food",
-      "parking",
-      "pool",
-      "amenities",
-      "service",
-      null,
-    ];
+    const batchSize = 10;
 
     for (let i = 0; i < rows.length; i += batchSize) {
       const batch = rows.slice(i, i + batchSize);
@@ -109,29 +122,62 @@ export async function POST(request: NextRequest) {
                 messages: [
                   {
                     role: "user",
-                    content: `Analyze this hotel review. Respond with ONLY a JSON object, no markdown:
-{
-  "sentiment": "positive"|"neutral"|"negative",
-  "topic": "wifi"|"noise"|"cleanliness"|"breakfast"|"staff"|"location"|"value"|"room"|"checkin"|"bathroom"|"food"|"parking"|"pool"|"amenities"|"service"|null,
-  "topic_type": "strength"|"improvement"|null
-}
+                    content: `You are a hotel review analyst. Analyze this hotel review and classify it regardless of what language it is written in.
 
-Sentiment rules:
-- positive: rating 4-5 AND happy tone
-- negative: rating 1-2 OR strong complaints
-- neutral: rating 3 OR mixed feelings
+IMPORTANT: The review may be in any language including English, Dutch, Indonesian, German, French, Spanish, Italian, Portuguese, Japanese, Chinese, Arabic, etc. Understand the meaning regardless of language.
 
-Topic rules:
-- Pick the single most prominent topic mentioned
-- null if no specific topic
+SENTIMENT RULES (based primarily on star rating):
+- 1 star = negative ALWAYS
+- 2 stars = negative ALWAYS
+- 3 stars = neutral
+- 4 stars = positive (unless text has serious complaints)
+- 5 stars = positive ALWAYS
 
-Topic type rules:
-- strength: guest is praising this aspect (e.g. "staff was amazing", "breakfast was excellent")
-- improvement: guest is complaining about this aspect (e.g. "wifi was terrible", "room was noisy")
-- null if no specific topic
+TOPIC - identify the most prominent issue or praise.
+Pick ONE from this list:
+cleanliness, smell, noise, wifi, breakfast, staff, location, value, room, checkin, bathroom, food, parking, pool, amenities, service, mold, temperature, view, null
+
+MULTILINGUAL EXAMPLES:
+Dutch: "De kamer rook naar sigaretten en was vies"
+→ topic: "smell", sentiment: "negative"
+
+Dutch: "Het personeel was onvriendelijk en de kamer stonk"
+→ topic: "smell", sentiment: "negative"
+
+Indonesian: "Kamar sangat kotor dan berbau tidak enak"
+→ topic: "cleanliness", sentiment: "negative"
+
+German: "Das Zimmer war laut und der WLAN funktionierte nicht"
+→ topic: "noise", sentiment: "negative"
+
+French: "Le petit déjeuner était excellent, personnel très sympa"
+→ topic: "breakfast", sentiment: "positive"
+
+Spanish: "Mucho ruido por la noche, no pudimos dormir"
+→ topic: "noise", sentiment: "negative"
+
+TOPIC TYPE:
+- "improvement": guest is complaining about this aspect
+- "strength": guest is praising this aspect
+- null: if topic is null
+
+LANGUAGE DETECTION:
+Detect the language and return ISO 639-1 code:
+en=English, nl=Dutch, id=Indonesian, de=German,
+fr=French, es=Spanish, it=Italian, pt=Portuguese,
+ja=Japanese, zh=Chinese, ar=Arabic, ru=Russian,
+ko=Korean, tr=Turkish, pl=Polish, other=other
 
 Rating: ${review.rating}/5
-Review: ${review.review_text || "No text provided"}`,
+Review text: "${review.review_text || "No text provided"}"
+
+Respond with ONLY this JSON, no other text:
+{
+  "sentiment": "positive" | "neutral" | "negative",
+  "topic": "cleanliness" | "smell" | "noise" | "wifi" | "breakfast" | "staff" | "location" | "value" | "room" | "checkin" | "bathroom" | "food" | "parking" | "pool" | "amenities" | "service" | "mold" | "temperature" | "view" | null,
+  "topic_type": "strength" | "improvement" | null,
+  "original_language": "en" | "nl" | "id" | "de" | "fr" | "es" | "it" | "pt" | "ja" | "zh" | "ar" | "ru" | "ko" | "tr" | "pl" | "other"
+}`,
                   },
                 ],
               }),
@@ -158,31 +204,29 @@ Review: ${review.review_text || "No text provided"}`,
               sentiment: string;
               topic: string | null;
               topic_type?: string | null;
+              original_language?: string | null;
             };
             try {
-              parsed = JSON.parse(text) as {
-                sentiment: string;
-                topic: string | null;
-                topic_type?: string | null;
-              };
+              parsed = JSON.parse(text) as typeof parsed;
             } catch {
               const match = text.match(/\{[\s\S]*\}/);
               if (!match) return;
-              parsed = JSON.parse(match[0]) as {
-                sentiment: string;
-                topic: string | null;
-                topic_type?: string | null;
-              };
+              parsed = JSON.parse(match[0]) as typeof parsed;
             }
 
-            const sentiment = validSentiments.includes(parsed.sentiment)
+            const sentiment = VALID_SENTIMENTS.includes(parsed.sentiment)
               ? parsed.sentiment
               : null;
-            const topic = validTopics.includes(parsed.topic) ? parsed.topic : null;
+            const topic = VALID_TOPICS.includes(parsed.topic) ? parsed.topic : null;
             const topicType = ["strength", "improvement"].includes(
               String(parsed.topic_type ?? ""),
             )
               ? (parsed.topic_type as "strength" | "improvement")
+              : null;
+            const originalLanguage = VALID_LANGUAGES.includes(
+              String(parsed.original_language ?? ""),
+            )
+              ? (parsed.original_language as string)
               : null;
 
             const { error: updateError } = await supabase
@@ -191,6 +235,7 @@ Review: ${review.review_text || "No text provided"}`,
                 sentiment,
                 complaint_topic: topic,
                 topic_type: topicType,
+                original_language: originalLanguage,
               })
               .eq("id", review.id);
 
