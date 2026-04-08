@@ -466,6 +466,7 @@ export default function ReviewsInboxPage() {
           reviewer_name: review.reviewer_name ?? review.name ?? null,
           platform: review.platform ?? review.source ?? null,
           signature,
+          user_id: user?.id ?? null,
         }),
         signal: controller.signal,
       });

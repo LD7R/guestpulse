@@ -219,6 +219,7 @@ export default function DashboardLayout({
 
         <div style={labelStyle}>Settings</div>
         <NavLink href="/dashboard/settings" icon="⚙" label="Settings" />
+        <NavLink href="/dashboard/pricing" icon="◈" label="Pricing" />
         <Link
           href="/dashboard/settings"
           style={{

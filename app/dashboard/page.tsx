@@ -300,6 +300,7 @@ export default function DashboardOverviewPage() {
     Record<string, { text: string; loading: boolean; error?: string }>
   >({});
   const [copiedReviewId, setCopiedReviewId] = useState<string | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     const supabase = createBrowserClient(
@@ -321,6 +322,16 @@ export default function DashboardOverviewPage() {
       .eq("user_id", user.id);
 
     if (hotelsError) throw hotelsError;
+
+    // Fetch subscription status for upgrade banner
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("subscription_status")
+      .eq("id", user.id)
+      .maybeSingle();
+    const status = (profileData as { subscription_status?: string | null } | null)
+      ?.subscription_status ?? null;
+    setSubscriptionStatus(status);
 
     const hotelIds = (hotels ?? []).map((h: Hotel) => h.id);
     if (hotelIds.length === 0) {
@@ -750,6 +761,11 @@ export default function DashboardOverviewPage() {
       "The Management Team";
     setDrafts((prev) => ({ ...prev, [id]: { text: "", loading: true } }));
     try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
       const res = await fetch("/api/draft-response", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -759,6 +775,7 @@ export default function DashboardOverviewPage() {
           reviewer_name: review.reviewer_name,
           platform: review.platform,
           signature: sig,
+          user_id: currentUser?.id ?? null,
         }),
       });
       const json = (await res.json()) as {
@@ -1083,6 +1100,45 @@ export default function DashboardOverviewPage() {
           ) : null}
         </div>
       </header>
+
+      {/* Upgrade banner for free users */}
+      {(!subscriptionStatus || subscriptionStatus === "free") && (
+        <div
+          style={{
+            background: "#0a1a0a",
+            border: "1px solid #1a3a1a",
+            borderRadius: 8,
+            padding: "12px 16px",
+            marginBottom: 20,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div style={{ fontSize: 13, color: "#f0f0f0" }}>
+            🚀 Start your 7-day free trial — Essential from $99/mo
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard/pricing")}
+            style={{
+              background: "#4ade80",
+              border: "none",
+              borderRadius: 6,
+              padding: "6px 14px",
+              fontSize: 12,
+              fontWeight: 600,
+              color: "#0d0d0d",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              fontFamily: "inherit",
+            }}
+          >
+            View plans
+          </button>
+        </div>
+      )}
 
       <nav
         style={{

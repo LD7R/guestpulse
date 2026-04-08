@@ -13,6 +13,8 @@ type ProfileRow = {
   display_name: string | null;
   avatar_initials: string | null;
   subscription_status: string | null;
+  subscription_plan: string | null;
+  stripe_customer_id: string | null;
 };
 
 type HotelRow = {
@@ -316,6 +318,8 @@ export default function SettingsPage() {
         display_name: displayName.trim() || null,
         avatar_initials: initials,
         subscription_status: prev?.subscription_status ?? null,
+        subscription_plan: prev?.subscription_plan ?? null,
+        stripe_customer_id: prev?.stripe_customer_id ?? null,
       }));
 
       if (hotelId) {
@@ -1125,198 +1129,116 @@ export default function SettingsPage() {
             <h3 style={{ fontSize: "17px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 16px 0" }}>
               Current plan
             </h3>
+
+            {/* FREE */}
             {billingPlan === "free" && (
-              <div
-                style={{
-                  padding: "24px",
-                  borderRadius: "16px",
-                  background: "rgba(99, 102, 241, 0.08)",
-                  border: "1px solid rgba(99, 102, 241, 0.2)",
-                }}
-              >
-                <span
-                  style={{
-                    display: "inline-block",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    padding: "4px 10px",
-                    borderRadius: "100px",
-                    background: "var(--glass-muted)",
-                    color: "var(--text-muted)",
-                    marginBottom: "12px",
-                  }}
-                >
+              <div style={{ padding: "20px", borderRadius: "8px", background: "#111111", border: "1px solid #1e1e1e" }}>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: "#555555", marginBottom: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                   Free Plan
-                </span>
-                <p style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 16px 0" }}>
+                </div>
+                <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 8px 0" }}>
                   You&apos;re on the free plan
                 </p>
-                <ul style={{ margin: "0 0 12px 0", paddingLeft: "20px", color: "var(--text-secondary)", fontSize: "14px" }}>
-                  <li>Review inbox & sync</li>
-                  <li>Basic sentiment overview</li>
-                  <li>Single property</li>
-                </ul>
-                <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 8px 0" }}>Premium (locked)</p>
-                <ul style={{ margin: "0 0 20px 0", paddingLeft: "20px", color: "var(--text-muted)", fontSize: "13px" }}>
-                  <li>🔒 Advanced analytics</li>
-                  <li>🔒 Competitor benchmarks</li>
-                  <li>🔒 Priority support</li>
-                </ul>
+                <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 16px 0" }}>
+                  Upgrade to unlock AI features, competitor benchmarking, and more
+                </p>
                 <button
                   type="button"
                   onClick={() => router.push("/dashboard/pricing")}
-                  style={{
-                    ...primaryBtn,
-                    width: "100%",
-                    justifyContent: "center",
-                    display: "inline-flex",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-bg)";
-                  }}
+                  style={{ ...primaryBtn, display: "inline-flex" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--btn-primary-hover)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "var(--btn-primary-bg)"; }}
                 >
-                  Upgrade to Pro — $99/mo
+                  View pricing plans →
                 </button>
-                <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "12px 0 0 0", textAlign: "center" }}>
-                  7-day free trial included · No credit card required
+                <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "10px 0 0 0" }}>
+                  7-day free trial · No credit card required
                 </p>
               </div>
             )}
+
+            {/* TRIALING */}
             {billingPlan === "trialing" && (
-              <div
-                style={{
-                  padding: "24px",
-                  borderRadius: "16px",
-                  background: "rgba(245, 158, 11, 0.1)",
-                  border: "1px solid rgba(245, 158, 11, 0.25)",
-                }}
-              >
-                <span
-                  style={{
-                    display: "inline-block",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    padding: "4px 10px",
-                    borderRadius: "100px",
-                    background: "rgba(245, 158, 11, 0.2)",
-                    color: "#d97706",
-                    marginBottom: "12px",
-                  }}
-                >
-                  Trial
-                </span>
-                <p style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 8px 0" }}>
-                  Your free trial is active
+              <div style={{ padding: "20px", borderRadius: "8px", background: "#111111", border: "1px solid #2a2000" }}>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: "#fbbf24", marginBottom: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Trial active
+                </div>
+                <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 4px 0" }}>
+                  {profile?.subscription_plan
+                    ? `${profile.subscription_plan.charAt(0).toUpperCase()}${profile.subscription_plan.slice(1)} — Trial`
+                    : "Free trial"}
                 </p>
-                <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "0 0 16px 0" }}>
-                  Trial end date: set in Stripe when connected
-                </p>
-                <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 16px 0" }}>
-                  Upgrade before trial ends to keep access
+                <p style={{ fontSize: "13px", color: "#fbbf24", margin: "0 0 4px 0" }}>Trial active</p>
+                <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 16px 0" }}>
+                  Your trial is active. Upgrade before it ends to keep access.
                 </p>
                 <button
                   type="button"
                   onClick={() => router.push("/dashboard/pricing")}
-                  style={primaryBtn}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-bg)";
-                  }}
-                >
-                  Upgrade
-                </button>
-              </div>
-            )}
-            {billingPlan === "active" && (
-              <div
-                style={{
-                  padding: "24px",
-                  borderRadius: "16px",
-                  background: "rgba(34, 197, 94, 0.08)",
-                  border: "1px solid rgba(34, 197, 94, 0.25)",
-                }}
-              >
-                <span
-                  style={{
-                    display: "inline-block",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    padding: "4px 10px",
-                    borderRadius: "100px",
-                    background: "rgba(34, 197, 94, 0.15)",
-                    color: "var(--success)",
-                    marginBottom: "12px",
-                  }}
-                >
-                  Pro ✓
-                </span>
-                <p style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 8px 0" }}>
-                  You&apos;re on the Pro plan
-                </p>
-                <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "0 0 16px 0" }}>
-                  Next billing date: — (Stripe)
-                </p>
-                <Link
-                  href="/dashboard/pricing"
-                  style={{
-                    ...primaryBtn,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    textDecoration: "none",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-bg)";
-                  }}
+                  style={{ ...primaryBtn }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--btn-primary-hover)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "var(--btn-primary-bg)"; }}
                 >
                   Manage subscription
-                </Link>
+                </button>
               </div>
             )}
+
+            {/* ACTIVE */}
+            {billingPlan === "active" && (() => {
+              const plan = profile?.subscription_plan ?? "professional";
+              const isEssential = plan === "essential";
+              const isBusiness = plan === "business";
+              const borderColor = isEssential ? "#2a2a2a" : isBusiness ? "#1e3a5f" : "#1a3a1a";
+              const accentColor = isEssential ? "#888888" : isBusiness ? "#60a5fa" : "#4ade80";
+              const planLabel = isEssential ? "Essential" : isBusiness ? "Multi-property" : "Professional";
+              return (
+                <div style={{ padding: "20px", borderRadius: "8px", background: "#111111", border: `1px solid ${borderColor}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                    <div style={{ fontSize: "12px", fontWeight: 600, color: accentColor, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                      {planLabel}
+                    </div>
+                    <span style={{ fontSize: "12px", color: "#4ade80" }}>Active ✓</span>
+                  </div>
+                  <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 4px 0" }}>
+                    You&apos;re on the {planLabel} plan
+                  </p>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 16px 0" }}>
+                    Next billing: managed via Stripe
+                  </p>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => showToast("error", "Open Stripe customer portal to manage billing.")}
+                      style={{ ...primaryBtn }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "var(--btn-primary-hover)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "var(--btn-primary-bg)"; }}
+                    >
+                      Manage subscription
+                    </button>
+                    <Link href="/dashboard/pricing" style={{ fontSize: "13px", color: "var(--text-secondary)", textDecoration: "underline" }}>
+                      Upgrade plan
+                    </Link>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* PAST_DUE */}
             {billingPlan === "past_due" && (
-              <div
-                style={{
-                  padding: "24px",
-                  borderRadius: "16px",
-                  background: "rgba(239, 68, 68, 0.08)",
-                  border: "1px solid rgba(239, 68, 68, 0.2)",
-                }}
-              >
-                <span
-                  style={{
-                    display: "inline-block",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    padding: "4px 10px",
-                    borderRadius: "100px",
-                    background: "rgba(239, 68, 68, 0.15)",
-                    color: "var(--error)",
-                    marginBottom: "12px",
-                  }}
-                >
+              <div style={{ padding: "20px", borderRadius: "8px", background: "#111111", border: "1px solid #3a1a1a" }}>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: "#f87171", marginBottom: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                   Payment failed
-                </span>
-                <p style={{ fontSize: "15px", color: "var(--text-primary)", margin: "0 0 16px 0" }}>
-                  Update payment method to restore access
+                </div>
+                <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 8px 0" }}>
+                  Payment failed — update billing to restore access
                 </p>
                 <button
                   type="button"
                   onClick={() => showToast("error", "Connect Stripe to update billing.")}
-                  style={primaryBtn}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-bg)";
-                  }}
+                  style={{ ...primaryBtn }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--btn-primary-hover)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "var(--btn-primary-bg)"; }}
                 >
                   Update billing
                 </button>
@@ -1324,67 +1246,6 @@ export default function SettingsPage() {
             )}
           </div>
 
-          <div style={{ ...glass, padding: "28px" }}>
-            <h3 style={{ fontSize: "17px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 16px 0" }}>
-              Payment method
-            </h3>
-            {billingPlan === "free" ? (
-              <>
-                <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
-                  No payment method on file
-                </p>
-                <Link
-                  href="/dashboard/pricing"
-                  style={{
-                    ...primaryBtn,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    textDecoration: "none",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-bg)";
-                  }}
-                >
-                  Add payment method
-                </Link>
-              </>
-            ) : (
-              <>
-                <p style={{ fontSize: "14px", color: "var(--text-primary)", margin: "0 0 6px 0", fontWeight: 500 }}>
-                  Payment method on file
-                </p>
-                <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "0 0 6px 0" }}>
-                  Card ending in{" "}
-                  <span style={{ fontFamily: "ui-monospace, monospace", letterSpacing: "0.06em" }}>••••</span>
-                </p>
-                <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
-                  Last 4 digits will display here once Stripe billing is connected.
-                </p>
-                <Link
-                  href="/dashboard/pricing"
-                  style={{
-                    ...primaryBtn,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    textDecoration: "none",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-bg)";
-                  }}
-                >
-                  Update payment method
-                </Link>
-              </>
-            )}
-          </div>
         </div>
       )}
 
