@@ -8,8 +8,8 @@ import type { CSSProperties } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 const glassCard: CSSProperties = {
-  background: "var(--bg-secondary)",
-  border: "1px solid var(--border)",
+  background: "#141414",
+  border: "1px solid #1e1e1e",
   borderRadius: "8px",
   width: "380px",
   maxWidth: "100%",
@@ -18,11 +18,11 @@ const glassCard: CSSProperties = {
 
 const glassInput: CSSProperties = {
   width: "100%",
-  background: "var(--bg-secondary)",
-  border: "1px solid var(--border)",
+  background: "#111111",
+  border: "1px solid #2a2a2a",
   borderRadius: "6px",
   padding: "10px 14px",
-  color: "var(--input-text)",
+  color: "#f0f0f0",
   fontSize: "13px",
   outline: "none",
   boxSizing: "border-box",
@@ -31,14 +31,13 @@ const glassInput: CSSProperties = {
 const primaryBtn: CSSProperties = {
   width: "100%",
   height: "48px",
-  background: "var(--text-primary)",
+  background: "#f0f0f0",
   border: "none",
   borderRadius: "6px",
-  color: "var(--bg-primary)",
+  color: "#0d0d0d",
   fontWeight: 600,
   fontSize: "13px",
   cursor: "pointer",
-  transition: "background 0.15s ease",
 };
 
 export default function SignupPage() {
@@ -73,13 +72,12 @@ export default function SignupPage() {
   return (
     <div
       style={{
-        position: "relative",
+        background: "#0d0d0d",
         minHeight: "100vh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: "24px",
-        overflow: "hidden",
       }}
     >
       <div style={glassCard}>
@@ -88,7 +86,7 @@ export default function SignupPage() {
             textAlign: "center",
             fontSize: "18px",
             fontWeight: 700,
-            color: "var(--logo-text)",
+            color: "#f0f0f0",
             letterSpacing: "-0.02em",
             marginBottom: "8px",
           }}
@@ -100,7 +98,7 @@ export default function SignupPage() {
             textAlign: "center",
             fontSize: "22px",
             fontWeight: 700,
-            color: "var(--text-primary)",
+            color: "#f0f0f0",
             marginBottom: "8px",
             letterSpacing: "-0.5px",
           }}
@@ -111,7 +109,7 @@ export default function SignupPage() {
           style={{
             textAlign: "center",
             fontSize: "14px",
-            color: "var(--text-secondary)",
+            color: "#888888",
             marginBottom: "36px",
           }}
         >
@@ -125,7 +123,7 @@ export default function SignupPage() {
               style={{
                 display: "block",
                 fontSize: "13px",
-                color: "var(--text-secondary)",
+                color: "#888888",
                 marginBottom: "6px",
               }}
             >
@@ -141,10 +139,10 @@ export default function SignupPage() {
               placeholder="you@company.com"
               style={glassInput}
               onFocus={(e) => {
-                e.target.style.borderColor = "var(--focus-ring)";
+                e.target.style.borderColor = "#3a3a3a";
               }}
               onBlur={(e) => {
-                e.target.style.borderColor = "var(--glass-input-border)";
+                e.target.style.borderColor = "#2a2a2a";
               }}
             />
           </div>
@@ -155,7 +153,7 @@ export default function SignupPage() {
               style={{
                 display: "block",
                 fontSize: "13px",
-                color: "var(--text-secondary)",
+                color: "#888888",
                 marginBottom: "6px",
               }}
             >
@@ -171,10 +169,10 @@ export default function SignupPage() {
               placeholder="••••••••"
               style={glassInput}
               onFocus={(e) => {
-                e.target.style.borderColor = "var(--focus-ring)";
+                e.target.style.borderColor = "#3a3a3a";
               }}
               onBlur={(e) => {
-                e.target.style.borderColor = "var(--glass-input-border)";
+                e.target.style.borderColor = "#2a2a2a";
               }}
             />
           </div>
@@ -183,7 +181,7 @@ export default function SignupPage() {
             <p
               style={{
                 fontSize: "13px",
-                color: "var(--error)",
+                color: "#f87171",
                 marginTop: "12px",
                 marginBottom: "8px",
               }}
@@ -207,7 +205,7 @@ export default function SignupPage() {
               }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "var(--text-primary)";
+              e.currentTarget.style.background = "#f0f0f0";
             }}
           >
             {isPending ? "Creating account…" : "Sign up"}
@@ -219,13 +217,15 @@ export default function SignupPage() {
             marginTop: "24px",
             textAlign: "center",
             fontSize: "14px",
-            color: "var(--text-secondary)",
+            color: "#888888",
           }}
         >
           Already have an account?{" "}
           <Link
             href="/login"
-            style={{ color: "var(--accent)", fontWeight: 500, textDecoration: "none" }}
+            style={{ color: "#888888", fontWeight: 500, textDecoration: "none" }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "#f0f0f0"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "#888888"; }}
           >
             Sign in
           </Link>

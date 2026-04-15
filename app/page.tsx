@@ -6,31 +6,29 @@ import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
-const glassPrimary: CSSProperties = {
-  background: "var(--text-primary)",
-  border: "1px solid var(--border)",
+const primaryBtn: CSSProperties = {
+  background: "#f0f0f0",
+  border: "none",
   borderRadius: "6px",
-  color: "var(--bg-primary)",
+  color: "#0d0d0d",
   fontWeight: 600,
   fontSize: "13px",
   cursor: "pointer",
-  transition: "background 0.15s ease",
 };
 
-const glassSecondary: CSSProperties = {
+const secondaryBtn: CSSProperties = {
   background: "transparent",
-  border: "1px solid var(--border)",
+  border: "1px solid #2a2a2a",
   borderRadius: "6px",
-  color: "var(--text-secondary)",
+  color: "#888888",
   fontWeight: 500,
   fontSize: "13px",
   cursor: "pointer",
-  transition: "border-color 0.15s ease, color 0.15s ease",
 };
 
-const miniGlass: CSSProperties = {
-  background: "var(--bg-card)",
-  border: "1px solid var(--border)",
+const card: CSSProperties = {
+  background: "#141414",
+  border: "1px solid #1e1e1e",
   borderRadius: "8px",
 };
 
@@ -101,21 +99,23 @@ export default function LandingPage() {
 
   const badgePill: CSSProperties = {
     display: "inline-block",
-    background: "var(--accent-bg)",
-    border: "1px solid var(--accent-border)",
-    color: "var(--accent)",
-    fontSize: "13px",
+    background: "#1e1e1e",
+    border: "1px solid #2a2a2a",
+    color: "#888888",
+    fontSize: "11px",
+    fontWeight: 600,
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
     padding: "6px 16px",
     borderRadius: "100px",
-    fontWeight: 500,
   };
 
   return (
     <div
       style={{
         minHeight: "100vh",
-        background: "var(--bg-primary)",
-        color: "var(--text-primary)",
+        background: "#0d0d0d",
+        color: "#f0f0f0",
       }}
     >
       <style
@@ -129,17 +129,17 @@ export default function LandingPage() {
               z-index: 100;
             }
             .landing-announce {
-              background: var(--bg-secondary);
-              border-bottom: 1px solid var(--border);
+              background: #111111;
+              border-bottom: 1px solid #1e1e1e;
               padding: 10px 48px;
               text-align: center;
               font-size: 13px;
-              color: var(--text-secondary);
+              color: #888888;
             }
             .landing-nav {
               position: relative;
-              background: var(--bg-secondary);
-              border-bottom: 1px solid var(--border);
+              background: #111111;
+              border-bottom: 1px solid #1e1e1e;
               padding: 0 48px;
               height: 64px;
               display: flex;
@@ -215,11 +215,10 @@ export default function LandingPage() {
               width: "8px",
               height: "8px",
               borderRadius: "50%",
-              background: "var(--accent)",
-              boxShadow: "var(--accent-glow)",
+              background: "#60a5fa",
             }}
           />
-          <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--logo-text)" }}>
+          <span style={{ fontSize: "18px", fontWeight: 700, color: "#f0f0f0" }}>
             GuestPulse
           </span>
         </div>
@@ -233,15 +232,15 @@ export default function LandingPage() {
                 background: "none",
                 border: "none",
                 fontSize: "14px",
-                color: "var(--text-secondary)",
+                color: "#888888",
                 cursor: "pointer",
                 padding: 0,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = "var(--text-primary)";
+                e.currentTarget.style.color = "#f0f0f0";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.color = "var(--text-secondary)";
+                e.currentTarget.style.color = "#888888";
               }}
             >
               Features
@@ -253,15 +252,15 @@ export default function LandingPage() {
                 background: "none",
                 border: "none",
                 fontSize: "14px",
-                color: "var(--text-secondary)",
+                color: "#888888",
                 cursor: "pointer",
                 padding: 0,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = "var(--text-primary)";
+                e.currentTarget.style.color = "#f0f0f0";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.color = "var(--text-secondary)";
+                e.currentTarget.style.color = "#888888";
               }}
             >
               Pricing
@@ -273,15 +272,15 @@ export default function LandingPage() {
                 background: "none",
                 border: "none",
                 fontSize: "14px",
-                color: "var(--text-secondary)",
+                color: "#888888",
                 cursor: "pointer",
                 padding: 0,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = "var(--text-primary)";
+                e.currentTarget.style.color = "#f0f0f0";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.color = "var(--text-secondary)";
+                e.currentTarget.style.color = "#888888";
               }}
             >
               FAQ
@@ -293,16 +292,15 @@ export default function LandingPage() {
             type="button"
             onClick={goLogin}
             style={{
-              ...glassSecondary,
+              ...secondaryBtn,
               padding: "8px 20px",
-              borderRadius: "12px",
               fontSize: "14px",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--secondary-btn-hover)";
+              e.currentTarget.style.background = "#1e1e1e";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "var(--secondary-btn-bg)";
+              e.currentTarget.style.background = "transparent";
             }}
           >
             Sign in
@@ -311,16 +309,15 @@ export default function LandingPage() {
             type="button"
             onClick={goLogin}
             style={{
-              ...glassPrimary,
+              ...primaryBtn,
               padding: "8px 20px",
-              borderRadius: "12px",
               fontSize: "14px",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--btn-primary-hover)";
+              e.currentTarget.style.background = "#e0e0e0";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "var(--btn-primary-bg)";
+              e.currentTarget.style.background = "#f0f0f0";
             }}
           >
             Start free trial
@@ -333,16 +330,15 @@ export default function LandingPage() {
           className="landing-nav-mobile-cta"
           onClick={goLogin}
           style={{
-            ...glassPrimary,
+            ...primaryBtn,
             padding: "8px 18px",
-            borderRadius: "12px",
             fontSize: "14px",
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--btn-primary-hover)";
+            e.currentTarget.style.background = "#e0e0e0";
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = "var(--btn-primary-bg)";
+            e.currentTarget.style.background = "#f0f0f0";
           }}
         >
           Get started
@@ -372,7 +368,7 @@ export default function LandingPage() {
             className="landing-hero-h1"
             style={{
               fontWeight: 800,
-              color: "var(--text-primary)",
+              color: "#f0f0f0",
               marginBottom: "24px",
               maxWidth: "900px",
               marginLeft: "auto",
@@ -381,14 +377,7 @@ export default function LandingPage() {
           >
             Every unanswered review
             <br />
-            <span
-              style={{
-                background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-              }}
-            >
+            <span style={{ color: "#4ade80" }}>
               costs you a booking.
             </span>
           </h1>
@@ -396,7 +385,7 @@ export default function LandingPage() {
           <p
             style={{
               fontSize: "18px",
-              color: "var(--text-secondary)",
+              color: "#888888",
               maxWidth: "580px",
               lineHeight: 1.75,
               marginBottom: "40px",
@@ -422,17 +411,16 @@ export default function LandingPage() {
               type="button"
               onClick={goLogin}
               style={{
-                ...glassPrimary,
+                ...primaryBtn,
                 height: "52px",
                 padding: "0 32px",
                 fontSize: "16px",
-                borderRadius: "14px",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = "var(--btn-primary-hover)";
+                e.currentTarget.style.background = "#e0e0e0";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = "var(--btn-primary-bg)";
+                e.currentTarget.style.background = "#f0f0f0";
               }}
             >
               Start free trial — it&apos;s free
@@ -441,17 +429,16 @@ export default function LandingPage() {
               type="button"
               onClick={() => scrollToId("features")}
               style={{
-                ...glassSecondary,
+                ...secondaryBtn,
                 height: "52px",
                 padding: "0 32px",
                 fontSize: "16px",
-                borderRadius: "14px",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = "var(--secondary-btn-hover)";
+                e.currentTarget.style.background = "#1e1e1e";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = "var(--secondary-btn-bg)";
+                e.currentTarget.style.background = "transparent";
               }}
             >
               See how it works
@@ -461,7 +448,7 @@ export default function LandingPage() {
           <p
             style={{
               fontSize: "14px",
-              color: "var(--text-muted)",
+              color: "#555555",
               textAlign: "center",
               marginTop: "24px",
               marginBottom: 0,
@@ -476,19 +463,18 @@ export default function LandingPage() {
               maxWidth: "960px",
               margin: "60px auto 0",
               width: "100%",
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "24px",
+              background: "#141414",
+              border: "1px solid #1e1e1e",
+              borderRadius: "8px",
               padding: 0,
               overflow: "hidden",
-              boxShadow: "0 60px 120px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)",
               textAlign: "left",
             }}
           >
             <div
               style={{
-                background: "rgba(255,255,255,0.03)",
-                borderBottom: "1px solid rgba(255,255,255,0.06)",
+                background: "#111111",
+                borderBottom: "1px solid #1e1e1e",
                 padding: "12px 20px",
                 display: "flex",
                 alignItems: "center",
@@ -498,7 +484,7 @@ export default function LandingPage() {
               <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#ff5f57", flexShrink: 0 }} />
               <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#ffbd2e", flexShrink: 0 }} />
               <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#28c840", flexShrink: 0 }} />
-              <span style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginLeft: 16 }}>
+              <span style={{ fontSize: 12, color: "#555555", marginLeft: 16 }}>
                 guestpulse.app/dashboard/reviews
               </span>
             </div>
@@ -506,9 +492,9 @@ export default function LandingPage() {
               {/* Card 1 */}
               <div
                 style={{
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "14px",
+                  background: "#141414",
+                  border: "1px solid #1e1e1e",
+                  borderRadius: "8px",
                   padding: "14px 16px",
                   marginBottom: "10px",
                   display: "flex",
@@ -527,18 +513,18 @@ export default function LandingPage() {
                         letterSpacing: "0.04em",
                         padding: "3px 8px",
                         borderRadius: "100px",
-                        background: "rgba(52,211,153,0.15)",
-                        border: "1px solid rgba(52,211,153,0.35)",
-                        color: "#34d399",
+                        background: "#1e2a1e",
+                        border: "1px solid #2a3a2a",
+                        color: "#4ade80",
                       }}
                     >
                       TRIPADVISOR
                     </span>
                     <span style={{ color: "#fbbf24", fontSize: "13px" }}>★★★★★</span>
                   </div>
-                  <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "6px" }}>
-                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>Sarah M.</span>
-                    <span style={{ color: "var(--text-muted)" }}> · 2 days ago</span>
+                  <div style={{ fontSize: "13px", color: "#888888", marginBottom: "6px" }}>
+                    <span style={{ fontWeight: 600, color: "#f0f0f0" }}>Sarah M.</span>
+                    <span style={{ color: "#555555" }}> · 2 days ago</span>
                     <span
                       style={{
                         marginLeft: 8,
@@ -546,25 +532,24 @@ export default function LandingPage() {
                         fontWeight: 600,
                         padding: "2px 8px",
                         borderRadius: "100px",
-                        background: "var(--success-bg)",
-                        border: "1px solid var(--success-border)",
-                        color: "var(--success)",
+                        background: "#1e2a1e",
+                        border: "1px solid #2a3a2a",
+                        color: "#4ade80",
                       }}
                     >
                       Positive
                     </span>
                   </div>
-                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.55, margin: 0 }}>
+                  <p style={{ fontSize: "13px", color: "#888888", lineHeight: 1.55, margin: 0 }}>
                     Absolutely stunning hotel. The staff were incredibly welcoming and the room was spotless...
                   </p>
                 </div>
                 <button
                   type="button"
                   style={{
-                    ...glassPrimary,
+                    ...primaryBtn,
                     padding: "6px 12px",
                     fontSize: "12px",
-                    borderRadius: "10px",
                     flexShrink: 0,
                   }}
                 >
@@ -575,9 +560,9 @@ export default function LandingPage() {
               {/* Card 2 + AI panel */}
               <div
                 style={{
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "14px",
+                  background: "#141414",
+                  border: "1px solid #1e1e1e",
+                  borderRadius: "8px",
                   padding: "14px 16px",
                   marginBottom: 0,
                   display: "flex",
@@ -596,8 +581,8 @@ export default function LandingPage() {
                         letterSpacing: "0.04em",
                         padding: "3px 8px",
                         borderRadius: "100px",
-                        background: "rgba(96,165,250,0.15)",
-                        border: "1px solid rgba(96,165,250,0.35)",
+                        background: "#1a2233",
+                        border: "1px solid #1e2a3a",
                         color: "#60a5fa",
                       }}
                     >
@@ -605,9 +590,9 @@ export default function LandingPage() {
                     </span>
                     <span style={{ color: "#fbbf24", fontSize: "13px" }}>★★</span>
                   </div>
-                  <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "6px" }}>
-                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>James K.</span>
-                    <span style={{ color: "var(--text-muted)" }}> · 5 days ago</span>
+                  <div style={{ fontSize: "13px", color: "#888888", marginBottom: "6px" }}>
+                    <span style={{ fontWeight: 600, color: "#f0f0f0" }}>James K.</span>
+                    <span style={{ color: "#555555" }}> · 5 days ago</span>
                     <span
                       style={{
                         marginLeft: 8,
@@ -615,9 +600,9 @@ export default function LandingPage() {
                         fontWeight: 600,
                         padding: "2px 8px",
                         borderRadius: "100px",
-                        background: "var(--error-bg)",
-                        border: "1px solid var(--error-border)",
-                        color: "var(--error)",
+                        background: "#2a1e1e",
+                        border: "1px solid #3a2a2a",
+                        color: "#f87171",
                       }}
                     >
                       Negative
@@ -628,25 +613,24 @@ export default function LandingPage() {
                         fontSize: "11px",
                         padding: "2px 8px",
                         borderRadius: "100px",
-                        background: "rgba(251,146,60,0.12)",
-                        border: "1px solid rgba(251,146,60,0.35)",
+                        background: "#2a1e14",
+                        border: "1px solid #3a2a1e",
                         color: "#fb923c",
                       }}
                     >
                       noise
                     </span>
                   </div>
-                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.55, margin: 0 }}>
+                  <p style={{ fontSize: "13px", color: "#888888", lineHeight: 1.55, margin: 0 }}>
                     Very disappointed with our stay. The room was noisy all night due to construction...
                   </p>
                 </div>
                 <button
                   type="button"
                   style={{
-                    ...glassPrimary,
+                    ...primaryBtn,
                     padding: "6px 12px",
                     fontSize: "12px",
-                    borderRadius: "10px",
                     flexShrink: 0,
                   }}
                 >
@@ -655,9 +639,9 @@ export default function LandingPage() {
               </div>
               <div
                 style={{
-                  background: "rgba(99,102,241,0.06)",
-                  border: "1px solid rgba(99,102,241,0.2)",
-                  borderRadius: "12px",
+                  background: "#141414",
+                  border: "1px solid #1e1e1e",
+                  borderRadius: "8px",
                   padding: "16px",
                   marginTop: "-4px",
                   marginBottom: "10px",
@@ -666,7 +650,7 @@ export default function LandingPage() {
                 <div
                   style={{
                     fontSize: "11px",
-                    color: "rgba(99,102,241,0.8)",
+                    color: "#888888",
                     textTransform: "uppercase",
                     letterSpacing: "0.08em",
                     marginBottom: "8px",
@@ -677,12 +661,12 @@ export default function LandingPage() {
                 <div
                   style={{
                     fontSize: "13px",
-                    color: "var(--text-secondary)",
+                    color: "#888888",
                     lineHeight: 1.6,
                     padding: "12px 14px",
-                    borderRadius: "10px",
-                    background: "rgba(0,0,0,0.15)",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    borderRadius: "6px",
+                    background: "#0d0d0d",
+                    border: "1px solid #1e1e1e",
                   }}
                 >
                   Dear James, thank you for taking the time to share your experience. We sincerely apologize for the
@@ -693,10 +677,9 @@ export default function LandingPage() {
                   <button
                     type="button"
                     style={{
-                      ...glassSecondary,
+                      ...secondaryBtn,
                       padding: "6px 14px",
                       fontSize: "12px",
-                      borderRadius: "10px",
                     }}
                   >
                     Copy
@@ -704,10 +687,9 @@ export default function LandingPage() {
                   <button
                     type="button"
                     style={{
-                      ...glassSecondary,
+                      ...secondaryBtn,
                       padding: "6px 14px",
                       fontSize: "12px",
-                      borderRadius: "10px",
                     }}
                   >
                     Mark as responded
@@ -718,9 +700,9 @@ export default function LandingPage() {
               {/* Card 3 */}
               <div
                 style={{
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: "14px",
+                  background: "#141414",
+                  border: "1px solid #1e1e1e",
+                  borderRadius: "8px",
                   padding: "14px 16px",
                   display: "flex",
                   flexWrap: "wrap",
@@ -738,8 +720,8 @@ export default function LandingPage() {
                         letterSpacing: "0.04em",
                         padding: "3px 8px",
                         borderRadius: "100px",
-                        background: "rgba(167,139,250,0.15)",
-                        border: "1px solid rgba(167,139,250,0.35)",
+                        background: "#1e1a2a",
+                        border: "1px solid #2a2038",
                         color: "#a78bfa",
                       }}
                     >
@@ -747,9 +729,9 @@ export default function LandingPage() {
                     </span>
                     <span style={{ color: "#fbbf24", fontSize: "13px" }}>★★★★</span>
                   </div>
-                  <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "6px" }}>
-                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>Maria L.</span>
-                    <span style={{ color: "var(--text-muted)" }}> · 1 week ago</span>
+                  <div style={{ fontSize: "13px", color: "#888888", marginBottom: "6px" }}>
+                    <span style={{ fontWeight: 600, color: "#f0f0f0" }}>Maria L.</span>
+                    <span style={{ color: "#555555" }}> · 1 week ago</span>
                     <span
                       style={{
                         marginLeft: 8,
@@ -757,9 +739,9 @@ export default function LandingPage() {
                         fontWeight: 600,
                         padding: "2px 8px",
                         borderRadius: "100px",
-                        background: "var(--neutral-sentiment-bg)",
-                        border: "1px solid var(--neutral-sentiment-border)",
-                        color: "var(--text-secondary)",
+                        background: "#1e1e1e",
+                        border: "1px solid #2a2a2a",
+                        color: "#888888",
                       }}
                     >
                       Neutral
@@ -770,25 +752,24 @@ export default function LandingPage() {
                         fontSize: "11px",
                         padding: "2px 8px",
                         borderRadius: "100px",
-                        background: "rgba(96,165,250,0.12)",
-                        border: "1px solid rgba(96,165,250,0.35)",
+                        background: "#1a2233",
+                        border: "1px solid #1e2a3a",
                         color: "#60a5fa",
                       }}
                     >
                       wifi
                     </span>
                   </div>
-                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.55, margin: 0 }}>
+                  <p style={{ fontSize: "13px", color: "#888888", lineHeight: 1.55, margin: 0 }}>
                     Great location and lovely decor. Only complaint is the WiFi kept dropping...
                   </p>
                 </div>
                 <button
                   type="button"
                   style={{
-                    ...glassPrimary,
+                    ...primaryBtn,
                     padding: "6px 12px",
                     fontSize: "12px",
-                    borderRadius: "10px",
                     flexShrink: 0,
                   }}
                 >
@@ -815,7 +796,7 @@ export default function LandingPage() {
           style={{
             fontSize: "clamp(28px, 4vw, 40px)",
             fontWeight: 800,
-            color: "var(--text-primary)",
+            color: "#f0f0f0",
             margin: "0 0 12px",
             lineHeight: 1.2,
             letterSpacing: "-0.5px",
@@ -826,7 +807,7 @@ export default function LandingPage() {
         <p
           style={{
             fontSize: "16px",
-            color: "var(--text-secondary)",
+            color: "#888888",
             maxWidth: "560px",
             margin: "0 auto 48px",
             lineHeight: 1.65,
@@ -860,21 +841,20 @@ export default function LandingPage() {
               l: "drop in rating = 9% fewer bookings",
               s: "— Harvard Business Review",
             },
-          ].map((card) => (
+          ].map((statCard) => (
             <div
-              key={card.l}
+              key={statCard.l}
               style={{
-                ...miniGlass,
+                ...card,
                 padding: "28px 20px",
-                borderRadius: "20px",
                 textAlign: "center",
               }}
             >
-              <div style={{ fontSize: "40px", fontWeight: 800, color: card.c, lineHeight: 1.1 }}>{card.n}</div>
-              <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "12px 0 8px", lineHeight: 1.5 }}>
-                {card.l}
+              <div style={{ fontSize: "40px", fontWeight: 800, color: statCard.c, lineHeight: 1.1 }}>{statCard.n}</div>
+              <p style={{ fontSize: "14px", color: "#888888", margin: "12px 0 8px", lineHeight: 1.5 }}>
+                {statCard.l}
               </p>
-              <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: 0 }}>{card.s}</p>
+              <p style={{ fontSize: "11px", color: "#555555", margin: 0 }}>{statCard.s}</p>
             </div>
           ))}
         </div>
@@ -885,9 +865,9 @@ export default function LandingPage() {
         id="features"
         style={{
           width: "100%",
-          background: "rgba(255,255,255,0.015)",
-          borderTop: "1px solid rgba(255,255,255,0.05)",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          background: "#111111",
+          borderTop: "1px solid #1e1e1e",
+          borderBottom: "1px solid #1e1e1e",
         }}
       >
         <div
@@ -904,7 +884,7 @@ export default function LandingPage() {
               maxWidth: "600px",
               margin: "16px auto 64px",
               lineHeight: 1.2,
-              color: "var(--text-primary)",
+              color: "#f0f0f0",
             }}
           >
             Everything you need to protect your reputation
@@ -915,37 +895,37 @@ export default function LandingPage() {
           {[
             {
               icon: "◈",
-              iconBox: { bg: "var(--accent-bg)", bd: "var(--accent-border)", c: "var(--accent)" },
+              iconBox: { bg: "#1a2233", bd: "#1e2a3a", c: "#60a5fa" },
               title: "All reviews in one place",
               desc: "Pull reviews automatically from TripAdvisor, Google Maps, and Booking.com every day.",
             },
             {
               icon: "✦",
-              iconBox: { bg: "var(--accent-bg)", bd: "var(--accent-border)", c: "var(--accent)" },
+              iconBox: { bg: "#1a2233", bd: "#1e2a3a", c: "#60a5fa" },
               title: "AI-powered responses",
               desc: "Generate professional, personalized responses in seconds. Edit and copy with one click.",
             },
             {
               icon: "◎",
-              iconBox: { bg: "rgba(139,92,246,0.15)", bd: "rgba(139,92,246,0.25)", c: "#a78bfa" },
+              iconBox: { bg: "#1e1a2a", bd: "#2a2038", c: "#a78bfa" },
               title: "Smart sentiment analysis",
               desc: "Automatically classify reviews as positive, neutral, or negative. Spot trends before they hurt your ranking.",
             },
             {
               icon: "⟁",
-              iconBox: { bg: "rgba(245,158,11,0.12)", bd: "rgba(245,158,11,0.25)", c: "var(--warning)" },
+              iconBox: { bg: "#2a1e0a", bd: "#3a2a14", c: "#f59e0b" },
               title: "Competitor benchmarking",
               desc: "See how your rating compares to the top 5 hotels in your area. Know exactly where you're winning and losing.",
             },
             {
               icon: "◉",
-              iconBox: { bg: "var(--error-bg)", bd: "var(--error-border)", c: "var(--error)" },
+              iconBox: { bg: "#2a1e1e", bd: "#3a2a2a", c: "#f87171" },
               title: "Urgent review alerts",
               desc: "Get instantly notified when a 1 or 2 star review comes in. Respond within hours, not days.",
             },
             {
               icon: "◷",
-              iconBox: { bg: "var(--success-bg)", bd: "var(--success-border)", c: "var(--success)" },
+              iconBox: { bg: "#1e2a1e", bd: "#2a3a2a", c: "#4ade80" },
               title: "Weekly email digest",
               desc: "Every Monday morning: new reviews, rating changes, and one actionable improvement tip.",
             },
@@ -953,9 +933,8 @@ export default function LandingPage() {
             <div
               key={f.title}
               style={{
-                ...miniGlass,
+                ...card,
                 padding: "28px",
-                borderRadius: "20px",
                 transition: "transform 0.3s ease",
               }}
               onMouseEnter={(e) => {
@@ -969,7 +948,7 @@ export default function LandingPage() {
                 style={{
                   width: "48px",
                   height: "48px",
-                  borderRadius: "14px",
+                  borderRadius: "8px",
                   background: f.iconBox.bg,
                   border: `1px solid ${f.iconBox.bd}`,
                   display: "flex",
@@ -982,10 +961,10 @@ export default function LandingPage() {
               >
                 {f.icon}
               </div>
-              <h3 style={{ fontSize: "17px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "8px" }}>
+              <h3 style={{ fontSize: "15px", fontWeight: 600, color: "#f0f0f0", marginBottom: "8px" }}>
                 {f.title}
               </h3>
-              <p style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>{f.desc}</p>
+              <p style={{ fontSize: "14px", color: "#888888", lineHeight: 1.6, margin: 0 }}>{f.desc}</p>
             </div>
           ))}
         </div>
@@ -1000,7 +979,7 @@ export default function LandingPage() {
             fontWeight: 700,
             textAlign: "center",
             marginBottom: "48px",
-            color: "var(--text-primary)",
+            color: "#f0f0f0",
           }}
         >
           Up and running in minutes
@@ -1040,9 +1019,9 @@ export default function LandingPage() {
                     height: "40px",
                     borderRadius: "50%",
                     margin: "0 auto 16px",
-                    background: "var(--accent-bg)",
-                    border: "1px solid var(--accent-border)",
-                    color: "var(--accent)",
+                    background: "#1e1e1e",
+                    border: "1px solid #2a2a2a",
+                    color: "#f0f0f0",
                     fontWeight: 700,
                     fontSize: "18px",
                     display: "flex",
@@ -1052,10 +1031,10 @@ export default function LandingPage() {
                 >
                   {step.n}
                 </div>
-                <h3 style={{ fontSize: "17px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "8px" }}>
+                <h3 style={{ fontSize: "15px", fontWeight: 600, color: "#f0f0f0", marginBottom: "8px" }}>
                   {step.t}
                 </h3>
-                <p style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>{step.d}</p>
+                <p style={{ fontSize: "14px", color: "#888888", lineHeight: 1.6, margin: 0 }}>{step.d}</p>
               </div>
               {i < 2 ? (
                 <div
@@ -1063,7 +1042,7 @@ export default function LandingPage() {
                     flex: "0 1 60px",
                     alignSelf: "center",
                     marginTop: "20px",
-                    borderTop: "2px dashed var(--divider)",
+                    borderTop: "2px dashed #1e1e1e",
                     minWidth: "24px",
                   }}
                   aria-hidden
@@ -1079,9 +1058,9 @@ export default function LandingPage() {
         id="pricing"
         style={{
           width: "100%",
-          background: "rgba(255,255,255,0.015)",
-          borderTop: "1px solid rgba(255,255,255,0.05)",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          background: "#111111",
+          borderTop: "1px solid #1e1e1e",
+          borderBottom: "1px solid #1e1e1e",
         }}
       >
         <div
@@ -1093,23 +1072,20 @@ export default function LandingPage() {
           style={{
             fontSize: "36px",
             fontWeight: 700,
-            color: "var(--text-primary)",
+            color: "#f0f0f0",
             margin: "16px 0 12px",
           }}
         >
           Simple pricing
         </h2>
-        <p style={{ fontSize: "16px", color: "var(--text-secondary)", marginBottom: "32px" }}>
+        <p style={{ fontSize: "16px", color: "#888888", marginBottom: "32px" }}>
           One plan. Everything included. Cancel anytime.
         </p>
 
         <div
           style={{
-            ...miniGlass,
-            border: "1px solid var(--accent-border)",
-            boxShadow: "0 0 60px rgba(99,102,241,0.1)",
+            ...card,
             padding: "48px 40px",
-            borderRadius: "24px",
             textAlign: "center",
           }}
         >
@@ -1121,21 +1097,21 @@ export default function LandingPage() {
               borderRadius: "100px",
               fontSize: "13px",
               fontWeight: 600,
-              background: "rgba(245,158,11,0.15)",
-              color: "#f59e0b",
-              border: "1px solid rgba(245,158,11,0.25)",
+              background: "#2a1e0a",
+              color: "#fbbf24",
+              border: "1px solid #3a2a14",
             }}
           >
             Founding Member Price
           </div>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: "6px" }}>
-            <span style={{ fontSize: "64px", fontWeight: 800, color: "var(--text-primary)" }}>$99</span>
-            <span style={{ fontSize: "18px", color: "var(--text-muted)" }}>/month</span>
+            <span style={{ fontSize: "64px", fontWeight: 800, color: "#f0f0f0" }}>$99</span>
+            <span style={{ fontSize: "18px", color: "#555555" }}>/month</span>
           </div>
-          <p style={{ fontSize: "12px", color: "rgba(245,158,11,0.7)", marginTop: "4px" }}>
+          <p style={{ fontSize: "12px", color: "#fbbf24", marginTop: "4px" }}>
             Lock in $99/mo before we raise prices
           </p>
-          <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "8px" }}>
+          <p style={{ fontSize: "13px", color: "#555555", marginTop: "8px" }}>
             Billed monthly · Cancel anytime
           </p>
           <div
@@ -1144,9 +1120,9 @@ export default function LandingPage() {
               marginTop: "16px",
               padding: "6px 14px",
               borderRadius: "100px",
-              background: "var(--message-success-bg)",
-              border: "1px solid var(--message-success-border)",
-              color: "var(--success)",
+              background: "#052e16",
+              border: "1px solid #14532d",
+              color: "#4ade80",
               fontSize: "13px",
               fontWeight: 600,
             }}
@@ -1174,16 +1150,16 @@ export default function LandingPage() {
               "Urgent review alerts (1-2 star)",
               "Priority customer support",
             ].map((line) => (
-              <li key={line} style={{ display: "flex", alignItems: "flex-start", gap: "12px", fontSize: "14px", color: "var(--text-secondary)" }}>
+              <li key={line} style={{ display: "flex", alignItems: "flex-start", gap: "12px", fontSize: "14px", color: "#888888" }}>
                 <span
                   style={{
                     flexShrink: 0,
                     width: "20px",
                     height: "20px",
                     borderRadius: "50%",
-                    background: "var(--accent-bg)",
-                    border: "1px solid var(--accent-border)",
-                    color: "var(--accent)",
+                    background: "#1e2a1e",
+                    border: "1px solid #2a3a2a",
+                    color: "#4ade80",
                     fontSize: "12px",
                     display: "flex",
                     alignItems: "center",
@@ -1201,23 +1177,22 @@ export default function LandingPage() {
             type="button"
             onClick={goLogin}
             style={{
-              ...glassPrimary,
+              ...primaryBtn,
               width: "100%",
               height: "56px",
               fontSize: "17px",
-              borderRadius: "14px",
               marginTop: "32px",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--btn-primary-hover)";
+              e.currentTarget.style.background = "#e0e0e0";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "var(--btn-primary-bg)";
+              e.currentTarget.style.background = "#f0f0f0";
             }}
           >
             Start your free trial
           </button>
-          <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "12px" }}>No credit card required</p>
+          <p style={{ fontSize: "13px", color: "#555555", marginTop: "12px" }}>No credit card required</p>
         </div>
         </div>
       </section>
@@ -1234,7 +1209,7 @@ export default function LandingPage() {
             fontWeight: 700,
             textAlign: "center",
             marginBottom: "48px",
-            color: "var(--text-primary)",
+            color: "#f0f0f0",
           }}
         >
           Frequently asked questions
@@ -1247,18 +1222,16 @@ export default function LandingPage() {
               type="button"
               onClick={() => toggleFaq(i)}
               style={{
-                ...miniGlass,
+                ...card,
                 width: "100%",
                 padding: "20px 24px",
-                borderRadius: "16px",
                 marginBottom: "12px",
                 cursor: "pointer",
                 textAlign: "left",
                 display: "block",
-                background: "var(--glass-bg)",
               }}
             >
-              <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", paddingRight: "24px" }}>
+              <div style={{ fontSize: "16px", fontWeight: 600, color: "#f0f0f0", paddingRight: "24px" }}>
                 {item.q}
               </div>
               <div
@@ -1270,7 +1243,7 @@ export default function LandingPage() {
                   marginTop: open ? "12px" : "0",
                 }}
               >
-                <p style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.65, margin: 0 }}>{item.a}</p>
+                <p style={{ fontSize: "14px", color: "#888888", lineHeight: 1.65, margin: 0 }}>{item.a}</p>
               </div>
             </button>
           );
@@ -1283,9 +1256,9 @@ export default function LandingPage() {
           style={{
             maxWidth: "800px",
             margin: "0 auto",
-            background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.08))",
-            border: "1px solid rgba(99,102,241,0.2)",
-            borderRadius: "28px",
+            background: "#141414",
+            border: "1px solid #1e1e1e",
+            borderRadius: "8px",
             padding: "80px 48px",
           }}
         >
@@ -1294,13 +1267,13 @@ export default function LandingPage() {
               fontSize: "40px",
               fontWeight: 800,
               letterSpacing: "-1px",
-              color: "var(--text-primary)",
+              color: "#f0f0f0",
               lineHeight: 1.15,
             }}
           >
             Ready to protect your hotel&apos;s reputation?
           </h2>
-          <p style={{ fontSize: "18px", color: "var(--text-secondary)", margin: "16px 0 40px", lineHeight: 1.6 }}>
+          <p style={{ fontSize: "18px", color: "#888888", margin: "16px 0 40px", lineHeight: 1.6 }}>
             Start responding faster with AI drafts tailored to each guest — across TripAdvisor, Google, and Booking.com.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", justifyContent: "center" }}>
@@ -1308,17 +1281,16 @@ export default function LandingPage() {
               type="button"
               onClick={goLogin}
               style={{
-                ...glassPrimary,
+                ...primaryBtn,
                 height: "56px",
                 padding: "0 40px",
                 fontSize: "17px",
-                borderRadius: "14px",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = "var(--btn-primary-hover)";
+                e.currentTarget.style.background = "#e0e0e0";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = "var(--btn-primary-bg)";
+                e.currentTarget.style.background = "#f0f0f0";
               }}
             >
               Start free trial — no credit card needed
@@ -1327,17 +1299,16 @@ export default function LandingPage() {
               type="button"
               onClick={goLogin}
               style={{
-                ...glassSecondary,
+                ...secondaryBtn,
                 height: "56px",
                 padding: "0 40px",
                 fontSize: "17px",
-                borderRadius: "14px",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = "var(--secondary-btn-hover)";
+                e.currentTarget.style.background = "#1e1e1e";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = "var(--secondary-btn-bg)";
+                e.currentTarget.style.background = "transparent";
               }}
             >
               Sign in to existing account
@@ -1351,7 +1322,7 @@ export default function LandingPage() {
         className="landing-section-pad"
         style={{
           padding: "40px 48px",
-          borderTop: "1px solid var(--divider)",
+          borderTop: "1px solid #1e1e1e",
           display: "flex",
           flexWrap: "wrap",
           justifyContent: "space-between",
@@ -1365,17 +1336,17 @@ export default function LandingPage() {
               width: "6px",
               height: "6px",
               borderRadius: "50%",
-              background: "var(--accent)",
+              background: "#60a5fa",
             }}
           />
-          <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--logo-text)" }}>GuestPulse</span>
-          <span style={{ fontSize: "13px", color: "var(--text-muted)", marginLeft: "8px" }}>
+          <span style={{ fontSize: "14px", fontWeight: 700, color: "#f0f0f0" }}>GuestPulse</span>
+          <span style={{ fontSize: "13px", color: "#555555", marginLeft: "8px" }}>
             © 2026 GuestPulse. All rights reserved.
           </span>
         </div>
         <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
           {["Privacy", "Terms", "Contact"].map((label) => (
-            <span key={label} style={{ fontSize: "13px", color: "var(--text-muted)", cursor: "pointer" }}>
+            <span key={label} style={{ fontSize: "13px", color: "#555555", cursor: "pointer" }}>
               {label}
             </span>
           ))}

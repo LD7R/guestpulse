@@ -9,9 +9,9 @@ import { createBrowserClient } from "@supabase/ssr";
 const labelStyle: CSSProperties = {
   fontSize: "10px",
   fontWeight: 600,
-  letterSpacing: "0.12em",
+  letterSpacing: "0.1em",
   textTransform: "uppercase",
-  color: "var(--text-muted)",
+  color: "#555555",
   padding: "12px 16px 4px",
 };
 
@@ -21,14 +21,25 @@ const navItemBase: CSSProperties = {
   borderRadius: 6,
   fontSize: 13,
   fontWeight: 500,
-  color: "var(--text-secondary)",
+  color: "#888888",
   display: "flex",
   alignItems: "center",
   gap: 8,
   cursor: "pointer",
   textDecoration: "none",
-  transition: "background 0.15s ease, color 0.15s ease",
 };
+
+function computeInitials(fullName: string | null | undefined, email: string | null | undefined): string {
+  const n = fullName?.trim();
+  if (n) {
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return `${parts[0]![0]!}${parts[parts.length - 1]![0]!}`.toUpperCase();
+    return n.slice(0, 2).toUpperCase();
+  }
+  const e = email?.trim();
+  if (e) return e.slice(0, 2).toUpperCase();
+  return "?";
+}
 
 export default function DashboardLayout({
   children,
@@ -39,19 +50,28 @@ export default function DashboardLayout({
   const router = useRouter();
 
   const [email, setEmail] = useState<string | null>(null);
+  const [initials, setInitials] = useState<string>("?");
   const [inboxUnrespondedCount, setInboxUnrespondedCount] = useState(0);
   const [hotels, setHotels] = useState<{ id: string; name: string | null }[]>([]);
 
   useEffect(() => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
-
-    supabase.auth.getUser().then(({ data, error }) => {
-      if (error) return;
-      setEmail(data.user?.email ?? null);
-    });
+    async function loadUser() {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data.user) return;
+      const userEmail = data.user.email ?? null;
+      setEmail(userEmail);
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      setInitials(computeInitials((profile as { full_name?: string | null } | null)?.full_name, userEmail));
+    }
+    void loadUser();
   }, []);
 
   useEffect(() => {
@@ -129,8 +149,6 @@ export default function DashboardLayout({
     return `${hotels.length} properties`;
   }, [hotels]);
 
-  const avatarLetter = email?.trim()?.charAt(0)?.toUpperCase() ?? "?";
-
   const NavLink = ({
     href,
     icon,
@@ -148,8 +166,8 @@ export default function DashboardLayout({
         href={href}
         style={{
           ...navItemBase,
-          background: active ? "var(--bg-hover)" : "transparent",
-          color: active ? "var(--text-primary)" : "var(--text-secondary)",
+          background: active ? "#1e1e1e" : "transparent",
+          color: active ? "#f0f0f0" : "#888888",
         }}
       >
         <span style={{ width: 18, textAlign: "center", opacity: 0.9 }} aria-hidden>
@@ -163,7 +181,7 @@ export default function DashboardLayout({
               minWidth: 16,
               padding: "1px 5px",
               borderRadius: 3,
-              background: "var(--urgent)",
+              background: "#ef4444",
               color: "#fff",
               fontSize: 10,
               fontWeight: 700,
@@ -189,8 +207,8 @@ export default function DashboardLayout({
           zIndex: 20,
           width: 220,
           height: "100vh",
-          background: "var(--bg-secondary)",
-          borderRight: "1px solid var(--border)",
+          background: "#111111",
+          borderRight: "1px solid #1e1e1e",
           display: "flex",
           flexDirection: "column",
           padding: 0,
@@ -199,11 +217,11 @@ export default function DashboardLayout({
         <div
           style={{
             padding: "16px 16px 8px",
-            borderBottom: "1px solid var(--border-subtle)",
+            borderBottom: "1px solid #1a1a1a",
             marginBottom: 8,
           }}
         >
-          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>GuestPulse</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "#f0f0f0" }}>GuestPulse</span>
         </div>
 
         <div style={labelStyle}>Overview</div>
@@ -211,7 +229,7 @@ export default function DashboardLayout({
 
         <div style={labelStyle}>Reviews</div>
         <NavLink href="/dashboard/reviews" icon="☰" label="Review inbox" badge={inboxUnrespondedCount} />
-        <NavLink href="/dashboard/reviews" icon="◷" label="Response drafts" />
+        <NavLink href="/dashboard/reviews?view=drafts" icon="◷" label="Response drafts" />
 
         <div style={labelStyle}>Intelligence</div>
         <NavLink href="/dashboard/analytics" icon="∿" label="Sentiment trends" />
@@ -225,7 +243,7 @@ export default function DashboardLayout({
           style={{
             ...navItemBase,
             background: "transparent",
-            color: "var(--text-secondary)",
+            color: "#888888",
           }}
         >
           <span style={{ width: 18, textAlign: "center" }} aria-hidden>
@@ -250,7 +268,7 @@ export default function DashboardLayout({
           <div
             style={{
               fontSize: 12,
-              color: "var(--text-muted)",
+              color: "#555555",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -268,7 +286,7 @@ export default function DashboardLayout({
               border: "none",
               padding: 0,
               fontSize: 12,
-              color: "var(--text-muted)",
+              color: "#555555",
               cursor: "pointer",
               textDecoration: "underline",
             }}
@@ -287,8 +305,8 @@ export default function DashboardLayout({
           right: 0,
           zIndex: 15,
           height: 52,
-          background: "var(--bg-secondary)",
-          borderBottom: "1px solid var(--border)",
+          background: "#111111",
+          borderBottom: "1px solid #1e1e1e",
           display: "flex",
           alignItems: "center",
           justifyContent: "flex-end",
@@ -298,12 +316,12 @@ export default function DashboardLayout({
       >
         <div
           style={{
-            background: "var(--bg-card)",
-            border: "1px solid var(--border)",
+            background: "#141414",
+            border: "1px solid #1e1e1e",
             borderRadius: 6,
             padding: "6px 12px",
             fontSize: 13,
-            color: "var(--text-primary)",
+            color: "#f0f0f0",
             minWidth: 200,
             display: "flex",
             alignItems: "center",
@@ -314,7 +332,7 @@ export default function DashboardLayout({
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {currentHotelLabel}
           </span>
-          <span style={{ color: "var(--text-muted)", flexShrink: 0 }} aria-hidden>
+          <span style={{ color: "#555555", flexShrink: 0 }} aria-hidden>
             ▾
           </span>
         </div>
@@ -329,11 +347,11 @@ export default function DashboardLayout({
             justifyContent: "center",
             fontSize: 12,
             fontWeight: 600,
-            color: "var(--text-primary)",
+            color: "#f0f0f0",
           }}
           title={email ?? undefined}
         >
-          {avatarLetter}
+          {initials}
         </div>
       </header>
 
@@ -359,7 +377,7 @@ export default function DashboardLayout({
                 gap: 4,
                 flex: 1,
                 textDecoration: "none",
-                color: active ? "var(--text-primary)" : "var(--text-muted)",
+                color: active ? "#f0f0f0" : "#555555",
                 minWidth: 0,
               }}
             >
@@ -376,9 +394,8 @@ export default function DashboardLayout({
             .main-content {
               margin-left: 220px;
               margin-top: 52px;
-              padding: 24px 28px;
               min-height: calc(100vh - 52px);
-              background: var(--bg-primary);
+              background: #0d0d0d;
               box-sizing: border-box;
             }
             .bottom-nav {
@@ -391,8 +408,8 @@ export default function DashboardLayout({
               height: 64px;
               align-items: center;
               justify-content: space-around;
-              background: var(--bg-secondary);
-              border-top: 1px solid var(--border);
+              background: #111111;
+              border-top: 1px solid #1e1e1e;
             }
             @media (max-width: 768px) {
               .dash-sidebar { display: none !important; }
@@ -404,7 +421,7 @@ export default function DashboardLayout({
               .main-content {
                 margin-left: 0 !important;
                 margin-top: 52px;
-                padding: 20px 16px 80px !important;
+                padding-bottom: 80px !important;
               }
             }
           `,

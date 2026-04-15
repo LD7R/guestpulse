@@ -37,51 +37,50 @@ type HotelRow = {
 };
 
 const glass: CSSProperties = {
-  background: "var(--bg-card)",
-  border: "1px solid var(--border)",
+  background: "#141414",
+  border: "1px solid #1e1e1e",
   borderRadius: "8px",
 };
 
 const glassInput: CSSProperties = {
   width: "100%",
-  background: "var(--glass-input-bg)",
-  border: "1px solid var(--glass-input-border)",
-  borderRadius: "var(--input-radius)",
+  background: "#111111",
+  border: "1px solid #2a2a2a",
+  borderRadius: "6px",
   padding: "12px 16px",
-  color: "var(--input-text)",
+  color: "#f0f0f0",
   fontSize: "14px",
   outline: "none",
   boxSizing: "border-box",
 };
 
 const primaryBtn: CSSProperties = {
-  background: "var(--text-primary)",
-  border: "1px solid var(--border)",
+  background: "#f0f0f0",
+  border: "none",
   borderRadius: "6px",
-  padding: "8px 16px",
-  color: "var(--bg-primary)",
+  padding: "7px 14px",
+  color: "#0d0d0d",
   fontWeight: 600,
   fontSize: "13px",
   cursor: "pointer",
-  transition: "background 0.15s ease",
+  fontFamily: "inherit",
 };
 
 const labelStyle: CSSProperties = {
   display: "block",
   fontSize: "13px",
-  color: "var(--text-secondary)",
+  color: "#888888",
   marginBottom: "6px",
 };
 
 const tabBar: CSSProperties = {
   display: "flex",
-  gap: "4px",
-  background: "var(--bg-card)",
-  border: "1px solid var(--border)",
-  borderRadius: "8px",
-  padding: "4px",
+  gap: 0,
+  background: "transparent",
+  border: "none",
+  borderBottom: "1px solid #1e1e1e",
+  padding: 0,
   marginBottom: "32px",
-  flexWrap: "wrap",
 };
 
 function computeInitials(fullName: string | null | undefined, email: string | null | undefined): string {
@@ -117,8 +116,8 @@ function Skeleton({
         width,
         height,
         borderRadius: radius,
-        background: "var(--glass-bg)",
-        border: "1px solid var(--glass-border)",
+        background: "#1a1a1a",
+        border: "1px solid #1e1e1e",
         animation: "skeleton-pulse 1.5s ease-in-out infinite",
         ...style,
       }}
@@ -146,7 +145,7 @@ function ToggleSwitch({
         border: "none",
         padding: 0,
         cursor: "pointer",
-        background: checked ? "var(--accent)" : "var(--glass-border)",
+        background: checked ? "#4ade80" : "#2a2a2a",
         transition: "background 0.2s ease",
         position: "relative",
         flexShrink: 0,
@@ -475,7 +474,7 @@ export default function SettingsPage() {
           {[1, 2, 3, 4].map((i) => (
             <div key={i} style={{ marginBottom: i === 4 ? 0 : "20px" }}>
               <Skeleton width="120px" height="14px" radius="6px" />
-              <Skeleton height="44px" radius="var(--input-radius)" style={{ marginTop: "8px" }} />
+              <Skeleton height="44px" radius="6px" style={{ marginTop: "8px" }} />
             </div>
           ))}
         </div>
@@ -486,7 +485,7 @@ export default function SettingsPage() {
   if (error) {
     return (
       <div className="settings-page">
-        <div style={{ ...glass, padding: "24px", color: "var(--error)", fontSize: "14px" }}>{error}</div>
+        <div style={{ ...glass, padding: "24px", color: "#f87171", fontSize: "14px" }}>{error}</div>
       </div>
     );
   }
@@ -496,16 +495,15 @@ export default function SettingsPage() {
       <div style={{ marginBottom: "8px" }}>
         <h1
           style={{
-            fontSize: "26px",
+            fontSize: "22px",
             fontWeight: 700,
-            letterSpacing: "-0.5px",
-            color: "var(--text-primary)",
+            color: "#f0f0f0",
             margin: "0 0 4px 0",
           }}
         >
           Settings
         </h1>
-        <p style={{ fontSize: "14px", color: "var(--text-muted)", margin: 0 }}>
+        <p style={{ fontSize: "14px", color: "#555555", margin: 0 }}>
           Manage your account, property, and preferences
         </p>
       </div>
@@ -519,21 +517,18 @@ export default function SettingsPage() {
               type="button"
               onClick={() => setActiveTab(t.id)}
               style={{
-                padding: "10px 20px",
-                borderRadius: "10px",
-                fontSize: "14px",
+                padding: "8px 0",
+                marginRight: 24,
+                marginBottom: -1,
+                borderRadius: 6,
+                fontSize: "13px",
                 fontWeight: 500,
                 cursor: "pointer",
-                border: active ? "1px solid var(--accent-border)" : "1px solid transparent",
-                transition: "all 0.2s ease",
-                background: active ? "var(--accent-bg)" : "transparent",
-                color: active ? "var(--accent)" : "var(--text-secondary)",
-              }}
-              onMouseEnter={(e) => {
-                if (!active) e.currentTarget.style.background = "var(--glass-hover-bg)";
-              }}
-              onMouseLeave={(e) => {
-                if (!active) e.currentTarget.style.background = "transparent";
+                border: "none",
+                borderBottom: active ? "2px solid #f0f0f0" : "2px solid transparent",
+                background: "transparent",
+                color: active ? "#f0f0f0" : "#555555",
+                fontFamily: "inherit",
               }}
             >
               {t.label}
@@ -545,10 +540,10 @@ export default function SettingsPage() {
       {activeTab === "account" && (
         <div>
           <header style={{ marginBottom: "20px" }}>
-            <h2 style={{ fontSize: "20px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 6px 0" }}>
+            <h2 style={{ fontSize: "20px", fontWeight: 600, color: "#f0f0f0", margin: "0 0 6px 0" }}>
               Account
             </h2>
-            <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: 0 }}>
+            <p style={{ fontSize: "14px", color: "#888888", margin: 0 }}>
               Manage your personal details and preferences
             </p>
           </header>
@@ -556,9 +551,9 @@ export default function SettingsPage() {
           <form onSubmit={onSaveAccount} style={{ ...glass, padding: "28px", marginBottom: "20px" }}>
             <h3
               style={{
-                fontSize: "17px",
+                fontSize: "15px",
                 fontWeight: 600,
-                color: "var(--text-primary)",
+                color: "#f0f0f0",
                 marginBottom: "20px",
               }}
             >
@@ -586,10 +581,10 @@ export default function SettingsPage() {
                   placeholder="Leonardo Baaijens"
                   style={glassInput}
                   onFocus={(e) => {
-                    e.target.style.borderColor = "var(--focus-ring)";
+                    e.target.style.borderColor = "#3a3a3a";
                   }}
                   onBlur={(e) => {
-                    e.target.style.borderColor = "var(--glass-input-border)";
+                    e.target.style.borderColor = "#2a2a2a";
                   }}
                 />
               </div>
@@ -605,13 +600,13 @@ export default function SettingsPage() {
                   placeholder="Leo"
                   style={glassInput}
                   onFocus={(e) => {
-                    e.target.style.borderColor = "var(--focus-ring)";
+                    e.target.style.borderColor = "#3a3a3a";
                   }}
                   onBlur={(e) => {
-                    e.target.style.borderColor = "var(--glass-input-border)";
+                    e.target.style.borderColor = "#2a2a2a";
                   }}
                 />
-                <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "6px 0 0 0", lineHeight: 1.5 }}>
+                <p style={{ fontSize: "12px", color: "#555555", margin: "6px 0 0 0", lineHeight: 1.5 }}>
                   This name appears in AI-generated review responses. Example: &apos;Kind regards, Leo&apos;
                 </p>
               </div>
@@ -628,9 +623,9 @@ export default function SettingsPage() {
                     fontWeight: 600,
                     padding: "2px 8px",
                     borderRadius: "100px",
-                    background: "var(--glass-muted)",
-                    color: "var(--text-muted)",
-                    border: "1px solid var(--glass-border)",
+                    background: "#111111",
+                    color: "#555555",
+                    border: "1px solid #1e1e1e",
                   }}
                 >
                   Cannot be changed here
@@ -646,7 +641,7 @@ export default function SettingsPage() {
                   ...glassInput,
                   opacity: 0.85,
                   cursor: "not-allowed",
-                  background: "var(--glass-muted)",
+                  background: "#111111",
                 }}
               />
             </div>
@@ -663,23 +658,23 @@ export default function SettingsPage() {
                 placeholder="The Management Team at Hotel Neo Malioboro"
                 style={glassInput}
                 onFocus={(e) => {
-                  e.target.style.borderColor = "var(--focus-ring)";
+                  e.target.style.borderColor = "#3a3a3a";
                 }}
                 onBlur={(e) => {
-                  e.target.style.borderColor = "var(--glass-input-border)";
+                  e.target.style.borderColor = "#2a2a2a";
                 }}
               />
-              <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "6px 0 0 0", lineHeight: 1.5 }}>
+              <p style={{ fontSize: "12px", color: "#555555", margin: "6px 0 0 0", lineHeight: 1.5 }}>
                 This signature appears at the end of every AI-generated response
               </p>
               <div style={{ marginTop: "8px" }}>
-                <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>Preview</div>
+                <div style={{ fontSize: "12px", color: "#888888", marginBottom: "6px" }}>Preview</div>
                 <div
                   style={{
                     ...glass,
                     padding: "10px 14px",
                     fontSize: "13px",
-                    color: "var(--text-secondary)",
+                    color: "#888888",
                     fontStyle: "italic",
                     borderRadius: "10px",
                   }}
@@ -703,9 +698,9 @@ export default function SettingsPage() {
                   width: "40px",
                   height: "40px",
                   borderRadius: "50%",
-                  background: "var(--accent-bg)",
-                  border: "1px solid var(--accent-border)",
-                  color: "var(--accent)",
+                  background: "#1e1e1e",
+                  border: "1px solid #2a2a2a",
+                  color: "#4ade80",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -715,7 +710,7 @@ export default function SettingsPage() {
               >
                 {initialsDisplay.slice(0, 2)}
               </div>
-              <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>
+              <p style={{ fontSize: "13px", color: "#555555", margin: 0 }}>
                 Your initials appear in the sidebar
               </p>
             </div>
@@ -730,10 +725,10 @@ export default function SettingsPage() {
                   cursor: savingAccount ? "not-allowed" : "pointer",
                 }}
                 onMouseEnter={(e) => {
-                  if (!savingAccount) e.currentTarget.style.background = "var(--btn-primary-hover)";
+                  if (!savingAccount) e.currentTarget.style.background = "#e0e0e0";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "var(--btn-primary-bg)";
+                  e.currentTarget.style.background = "#f0f0f0";
                 }}
               >
                 {savingAccount ? "Saving…" : "Save account"}
@@ -746,10 +741,10 @@ export default function SettingsPage() {
       {activeTab === "hotel" && (
         <div>
           <header style={{ marginBottom: "20px" }}>
-            <h2 style={{ fontSize: "20px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 6px 0" }}>
+            <h2 style={{ fontSize: "20px", fontWeight: 600, color: "#f0f0f0", margin: "0 0 6px 0" }}>
               Hotel
             </h2>
-            <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: 0 }}>
+            <p style={{ fontSize: "14px", color: "#888888", margin: 0 }}>
               Property details, location, and review platform links
             </p>
           </header>
@@ -758,9 +753,9 @@ export default function SettingsPage() {
             <div style={{ ...glass, padding: "28px", marginBottom: "20px" }}>
               <h3
                 style={{
-                  fontSize: "17px",
+                  fontSize: "15px",
                   fontWeight: 600,
-                  color: "var(--text-primary)",
+                  color: "#f0f0f0",
                   marginBottom: "20px",
                 }}
               >
@@ -787,10 +782,10 @@ export default function SettingsPage() {
                     placeholder="My Boutique Hotel"
                     style={glassInput}
                     onFocus={(e) => {
-                      e.target.style.borderColor = "var(--focus-ring)";
+                      e.target.style.borderColor = "#3a3a3a";
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "var(--glass-input-border)";
+                      e.target.style.borderColor = "#2a2a2a";
                     }}
                   />
                 </div>
@@ -805,10 +800,10 @@ export default function SettingsPage() {
                     onChange={(e) => setPhone(e.target.value)}
                     style={glassInput}
                     onFocus={(e) => {
-                      e.target.style.borderColor = "var(--focus-ring)";
+                      e.target.style.borderColor = "#3a3a3a";
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "var(--glass-input-border)";
+                      e.target.style.borderColor = "#2a2a2a";
                     }}
                   />
                 </div>
@@ -824,10 +819,10 @@ export default function SettingsPage() {
                     placeholder="https://"
                     style={glassInput}
                     onFocus={(e) => {
-                      e.target.style.borderColor = "var(--focus-ring)";
+                      e.target.style.borderColor = "#3a3a3a";
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "var(--glass-input-border)";
+                      e.target.style.borderColor = "#2a2a2a";
                     }}
                   />
                 </div>
@@ -844,10 +839,10 @@ export default function SettingsPage() {
                     placeholder="24"
                     style={glassInput}
                     onFocus={(e) => {
-                      e.target.style.borderColor = "var(--focus-ring)";
+                      e.target.style.borderColor = "#3a3a3a";
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "var(--glass-input-border)";
+                      e.target.style.borderColor = "#2a2a2a";
                     }}
                   />
                 </div>
@@ -857,9 +852,9 @@ export default function SettingsPage() {
             <div style={{ ...glass, padding: "28px", marginBottom: "12px" }}>
               <h3
                 style={{
-                  fontSize: "17px",
+                  fontSize: "15px",
                   fontWeight: 600,
-                  color: "var(--text-primary)",
+                  color: "#f0f0f0",
                   marginBottom: "20px",
                 }}
               >
@@ -877,10 +872,10 @@ export default function SettingsPage() {
                   placeholder="Jalan Pasar Kembang No. 21"
                   style={glassInput}
                   onFocus={(e) => {
-                    e.target.style.borderColor = "var(--focus-ring)";
+                    e.target.style.borderColor = "#3a3a3a";
                   }}
                   onBlur={(e) => {
-                    e.target.style.borderColor = "var(--glass-input-border)";
+                    e.target.style.borderColor = "#2a2a2a";
                   }}
                 />
               </div>
@@ -904,10 +899,10 @@ export default function SettingsPage() {
                     placeholder="Yogyakarta"
                     style={glassInput}
                     onFocus={(e) => {
-                      e.target.style.borderColor = "var(--focus-ring)";
+                      e.target.style.borderColor = "#3a3a3a";
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "var(--glass-input-border)";
+                      e.target.style.borderColor = "#2a2a2a";
                     }}
                   />
                 </div>
@@ -923,10 +918,10 @@ export default function SettingsPage() {
                     placeholder="Indonesia"
                     style={glassInput}
                     onFocus={(e) => {
-                      e.target.style.borderColor = "var(--focus-ring)";
+                      e.target.style.borderColor = "#3a3a3a";
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "var(--glass-input-border)";
+                      e.target.style.borderColor = "#2a2a2a";
                     }}
                   />
                 </div>
@@ -942,10 +937,10 @@ export default function SettingsPage() {
                     placeholder="55271"
                     style={glassInput}
                     onFocus={(e) => {
-                      e.target.style.borderColor = "var(--focus-ring)";
+                      e.target.style.borderColor = "#3a3a3a";
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "var(--glass-input-border)";
+                      e.target.style.borderColor = "#2a2a2a";
                     }}
                   />
                 </div>
@@ -953,7 +948,7 @@ export default function SettingsPage() {
               <p
                 style={{
                   fontSize: "12px",
-                  color: "var(--text-muted)",
+                  color: "#555555",
                   fontStyle: "italic",
                   margin: "16px 0 0 0",
                   lineHeight: 1.5,
@@ -966,15 +961,15 @@ export default function SettingsPage() {
             <div style={{ ...glass, padding: "28px", marginBottom: "24px" }}>
               <h3
                 style={{
-                  fontSize: "17px",
+                  fontSize: "15px",
                   fontWeight: 600,
-                  color: "var(--text-primary)",
+                  color: "#f0f0f0",
                   margin: "0 0 4px 0",
                 }}
               >
                 Review platforms
               </h3>
-              <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
+              <p style={{ fontSize: "13px", color: "#888888", margin: "0 0 20px 0", lineHeight: 1.5 }}>
                 Add your hotel&apos;s URLs on each platform to enable automatic review syncing
               </p>
 
@@ -989,10 +984,10 @@ export default function SettingsPage() {
                       alignItems: "center",
                       justifyContent: "center",
                       minWidth: "40px",
-                      borderRadius: "var(--input-radius)",
-                      background: "var(--success-bg)",
-                      color: "var(--success)",
-                      border: "1px solid var(--success-border)",
+                      borderRadius: "6px",
+                      background: "rgba(74,222,128,0.1)",
+                      color: "#4ade80",
+                      border: "1px solid rgba(74,222,128,0.25)",
                       fontSize: "12px",
                       fontWeight: 700,
                     }}
@@ -1007,10 +1002,10 @@ export default function SettingsPage() {
                     placeholder="https://tripadvisor.com/hotel/..."
                     style={{ ...glassInput, flex: 1 }}
                     onFocus={(e) => {
-                      e.target.style.borderColor = "var(--focus-ring)";
+                      e.target.style.borderColor = "#3a3a3a";
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "var(--glass-input-border)";
+                      e.target.style.borderColor = "#2a2a2a";
                     }}
                   />
                 </div>
@@ -1026,7 +1021,7 @@ export default function SettingsPage() {
                       alignItems: "center",
                       justifyContent: "center",
                       minWidth: "40px",
-                      borderRadius: "var(--input-radius)",
+                      borderRadius: "6px",
                       background: "rgba(59, 130, 246, 0.12)",
                       color: "#3b82f6",
                       border: "1px solid rgba(59, 130, 246, 0.35)",
@@ -1044,10 +1039,10 @@ export default function SettingsPage() {
                     placeholder="https://www.google.com/maps/place/..."
                     style={{ ...glassInput, flex: 1 }}
                     onFocus={(e) => {
-                      e.target.style.borderColor = "var(--focus-ring)";
+                      e.target.style.borderColor = "#3a3a3a";
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "var(--glass-input-border)";
+                      e.target.style.borderColor = "#2a2a2a";
                     }}
                   />
                 </div>
@@ -1063,10 +1058,10 @@ export default function SettingsPage() {
                       alignItems: "center",
                       justifyContent: "center",
                       minWidth: "40px",
-                      borderRadius: "var(--input-radius)",
-                      background: "var(--platform-booking-bg)",
-                      color: "var(--platform-booking)",
-                      border: "1px solid var(--platform-booking-border)",
+                      borderRadius: "6px",
+                      background: "rgba(167,139,250,0.1)",
+                      color: "#a78bfa",
+                      border: "1px solid rgba(167,139,250,0.25)",
                       fontSize: "11px",
                       fontWeight: 700,
                     }}
@@ -1081,10 +1076,10 @@ export default function SettingsPage() {
                     placeholder="https://booking.com/hotel/..."
                     style={{ ...glassInput, flex: 1 }}
                     onFocus={(e) => {
-                      e.target.style.borderColor = "var(--focus-ring)";
+                      e.target.style.borderColor = "#3a3a3a";
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "var(--glass-input-border)";
+                      e.target.style.borderColor = "#2a2a2a";
                     }}
                   />
                 </div>
@@ -1101,10 +1096,10 @@ export default function SettingsPage() {
                   cursor: savingHotel ? "not-allowed" : "pointer",
                 }}
                 onMouseEnter={(e) => {
-                  if (!savingHotel) e.currentTarget.style.background = "var(--btn-primary-hover)";
+                  if (!savingHotel) e.currentTarget.style.background = "#e0e0e0";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "var(--btn-primary-bg)";
+                  e.currentTarget.style.background = "#f0f0f0";
                 }}
               >
                 {savingHotel ? "Saving…" : "Save hotel settings"}
@@ -1117,16 +1112,16 @@ export default function SettingsPage() {
       {activeTab === "billing" && (
         <div>
           <header style={{ marginBottom: "20px" }}>
-            <h2 style={{ fontSize: "20px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 6px 0" }}>
+            <h2 style={{ fontSize: "20px", fontWeight: 600, color: "#f0f0f0", margin: "0 0 6px 0" }}>
               Billing
             </h2>
-            <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: 0 }}>
+            <p style={{ fontSize: "14px", color: "#888888", margin: 0 }}>
               Subscription and invoices
             </p>
           </header>
 
           <div style={{ ...glass, padding: "28px", marginBottom: "20px" }}>
-            <h3 style={{ fontSize: "17px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 16px 0" }}>
+            <h3 style={{ fontSize: "15px", fontWeight: 600, color: "#f0f0f0", margin: "0 0 16px 0" }}>
               Current plan
             </h3>
 
@@ -1136,22 +1131,22 @@ export default function SettingsPage() {
                 <div style={{ fontSize: "12px", fontWeight: 600, color: "#555555", marginBottom: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                   Free Plan
                 </div>
-                <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 8px 0" }}>
+                <p style={{ fontSize: "15px", fontWeight: 600, color: "#f0f0f0", margin: "0 0 8px 0" }}>
                   You&apos;re on the free plan
                 </p>
-                <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 16px 0" }}>
+                <p style={{ fontSize: "13px", color: "#888888", margin: "0 0 16px 0" }}>
                   Upgrade to unlock AI features, competitor benchmarking, and more
                 </p>
                 <button
                   type="button"
                   onClick={() => router.push("/dashboard/pricing")}
                   style={{ ...primaryBtn, display: "inline-flex" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--btn-primary-hover)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "var(--btn-primary-bg)"; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#e0e0e0"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "#f0f0f0"; }}
                 >
                   View pricing plans →
                 </button>
-                <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "10px 0 0 0" }}>
+                <p style={{ fontSize: "12px", color: "#555555", margin: "10px 0 0 0" }}>
                   7-day free trial · No credit card required
                 </p>
               </div>
@@ -1163,21 +1158,21 @@ export default function SettingsPage() {
                 <div style={{ fontSize: "12px", fontWeight: 600, color: "#fbbf24", marginBottom: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                   Trial active
                 </div>
-                <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 4px 0" }}>
+                <p style={{ fontSize: "15px", fontWeight: 600, color: "#f0f0f0", margin: "0 0 4px 0" }}>
                   {profile?.subscription_plan
                     ? `${profile.subscription_plan.charAt(0).toUpperCase()}${profile.subscription_plan.slice(1)} — Trial`
                     : "Free trial"}
                 </p>
                 <p style={{ fontSize: "13px", color: "#fbbf24", margin: "0 0 4px 0" }}>Trial active</p>
-                <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 16px 0" }}>
+                <p style={{ fontSize: "13px", color: "#888888", margin: "0 0 16px 0" }}>
                   Your trial is active. Upgrade before it ends to keep access.
                 </p>
                 <button
                   type="button"
                   onClick={() => router.push("/dashboard/pricing")}
                   style={{ ...primaryBtn }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--btn-primary-hover)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "var(--btn-primary-bg)"; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#e0e0e0"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "#f0f0f0"; }}
                 >
                   Manage subscription
                 </button>
@@ -1200,10 +1195,10 @@ export default function SettingsPage() {
                     </div>
                     <span style={{ fontSize: "12px", color: "#4ade80" }}>Active ✓</span>
                   </div>
-                  <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 4px 0" }}>
+                  <p style={{ fontSize: "15px", fontWeight: 600, color: "#f0f0f0", margin: "0 0 4px 0" }}>
                     You&apos;re on the {planLabel} plan
                   </p>
-                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 16px 0" }}>
+                  <p style={{ fontSize: "13px", color: "#888888", margin: "0 0 16px 0" }}>
                     Next billing: managed via Stripe
                   </p>
                   <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -1211,12 +1206,12 @@ export default function SettingsPage() {
                       type="button"
                       onClick={() => showToast("error", "Open Stripe customer portal to manage billing.")}
                       style={{ ...primaryBtn }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = "var(--btn-primary-hover)"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = "var(--btn-primary-bg)"; }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "#e0e0e0"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "#f0f0f0"; }}
                     >
                       Manage subscription
                     </button>
-                    <Link href="/dashboard/pricing" style={{ fontSize: "13px", color: "var(--text-secondary)", textDecoration: "underline" }}>
+                    <Link href="/dashboard/pricing" style={{ fontSize: "13px", color: "#888888", textDecoration: "underline" }}>
                       Upgrade plan
                     </Link>
                   </div>
@@ -1230,15 +1225,15 @@ export default function SettingsPage() {
                 <div style={{ fontSize: "12px", fontWeight: 600, color: "#f87171", marginBottom: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                   Payment failed
                 </div>
-                <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 8px 0" }}>
+                <p style={{ fontSize: "15px", fontWeight: 600, color: "#f0f0f0", margin: "0 0 8px 0" }}>
                   Payment failed — update billing to restore access
                 </p>
                 <button
                   type="button"
                   onClick={() => showToast("error", "Connect Stripe to update billing.")}
                   style={{ ...primaryBtn }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--btn-primary-hover)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "var(--btn-primary-bg)"; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#e0e0e0"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "#f0f0f0"; }}
                 >
                   Update billing
                 </button>
@@ -1253,10 +1248,10 @@ export default function SettingsPage() {
         <div>
           <form onSubmit={onSaveNotifications}>
             <div style={{ ...glass, padding: "28px" }}>
-              <h2 style={{ fontSize: "17px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 4px 0" }}>
+              <h2 style={{ fontSize: "15px", fontWeight: 600, color: "#f0f0f0", margin: "0 0 4px 0" }}>
                 Email notifications
               </h2>
-              <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "0 0 20px 0" }}>
+              <p style={{ fontSize: "14px", color: "#888888", margin: "0 0 20px 0" }}>
                 Choose what emails you receive from GuestPulse
               </p>
 
@@ -1297,12 +1292,12 @@ export default function SettingsPage() {
                     alignItems: "center",
                     gap: "16px",
                     padding: "16px 0",
-                    borderBottom: i < 4 ? "1px solid var(--divider)" : "none",
+                    borderBottom: i < 4 ? "1px solid #1e1e1e" : "none",
                   }}
                 >
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>{row.title}</div>
-                    <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>{row.desc}</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: "#f0f0f0" }}>{row.title}</div>
+                    <div style={{ fontSize: "13px", color: "#888888", marginTop: "4px" }}>{row.desc}</div>
                   </div>
                   <ToggleSwitch
                     checked={notifications[row.key]}
@@ -1321,10 +1316,10 @@ export default function SettingsPage() {
                     cursor: savingNotifications ? "not-allowed" : "pointer",
                   }}
                   onMouseEnter={(e) => {
-                    if (!savingNotifications) e.currentTarget.style.background = "var(--btn-primary-hover)";
+                    if (!savingNotifications) e.currentTarget.style.background = "#e0e0e0";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "var(--btn-primary-bg)";
+                    e.currentTarget.style.background = "#f0f0f0";
                   }}
                 >
                   {savingNotifications ? "Saving…" : "Save preferences"}
@@ -1345,21 +1340,20 @@ export default function SettingsPage() {
             zIndex: 1000,
             ...glass,
             padding: "14px 20px",
-            borderRadius: "14px",
+            borderRadius: "8px",
             display: "flex",
             alignItems: "center",
             gap: "10px",
             maxWidth: "360px",
-            boxShadow: "var(--glass-shadow), 0 12px 40px rgba(0,0,0,0.15)",
             background:
               toast.type === "success"
-                ? "var(--message-success-bg)"
-                : "var(--message-error-bg)",
+                ? "#052e16"
+                : "#2d0a0a",
             border:
               toast.type === "success"
-                ? "1px solid var(--message-success-border)"
-                : "1px solid var(--message-error-border)",
-            color: toast.type === "success" ? "var(--text-primary)" : "var(--text-error-soft)",
+                ? "1px solid #14532d"
+                : "1px solid #7f1d1d",
+            color: toast.type === "success" ? "#f0f0f0" : "#fca5a5",
             animation: "settings-toast-in 0.3s ease forwards",
           }}
         >

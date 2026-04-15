@@ -26,7 +26,7 @@ const MapComponent = dynamic(() => import("./MapComponent"), {
 });
 
 // ─── Color palette ────────────────────────────────────────────────────────────
-const PAGE_BG = "#0a0a0a";
+const PAGE_BG = "#0d0d0d";
 const CARD = "#141414";
 const BORDER = "#1e1e1e";
 const BORDER_SUB = "#2a2a2a";
@@ -195,13 +195,13 @@ function secondaryBtnStyle(extra: CSSProperties = {}): CSSProperties {
   return {
     background: "transparent",
     border: `1px solid ${BORDER_SUB}`,
-    borderRadius: 5,
+    borderRadius: 6,
     color: TEXT_SECONDARY,
     fontWeight: 500,
-    fontSize: 11,
+    fontSize: 12,
     cursor: "pointer",
     fontFamily: "inherit",
-    padding: "4px 10px",
+    padding: "6px 14px",
     ...extra,
   };
 }
@@ -905,8 +905,8 @@ export default function BenchmarkingPage() {
                       }
                     }}
                     style={{
-                      background: isSelected ? "#0a1a0a" : "#1a1a1a",
-                      border: `1px solid ${isSelected ? "#4ade80" : "#242424"}`,
+                      background: isSelected ? "#0a1a0a" : CARD,
+                      border: `1px solid ${isSelected ? "#4ade80" : BORDER}`,
                       borderRadius: 6,
                       padding: "12px 14px",
                       cursor: addingSelected || progress ? "default" : "pointer",
@@ -1031,11 +1031,11 @@ export default function BenchmarkingPage() {
             <div
               key={entry.id}
               style={{
-                background: entry.isMe ? "#0a1a0a" : "#1a1a1a",
-                border: `1px solid ${entry.isMe ? "#4ade80" : "#242424"}`,
+                background: entry.isMe ? "#0a1a0a" : CARD,
+                border: `1px solid ${entry.isMe ? "#4ade80" : BORDER}`,
                 borderLeft: entry.isMe
                   ? "3px solid #4ade80"
-                  : `1px solid #242424`,
+                  : `1px solid ${BORDER}`,
                 borderRadius: 6,
                 padding: "10px 14px",
                 minWidth: 150,
@@ -1256,7 +1256,7 @@ export default function BenchmarkingPage() {
                     style={{
                       width: `${(entry.avg_rating / 5) * 100}%`,
                       height: "100%",
-                      background: entry.isMe ? "#6366f1" : ratingColor(entry.avg_rating),
+                      background: entry.isMe ? "#4ade80" : ratingColor(entry.avg_rating),
                       borderRadius: 3,
                     }}
                   />
@@ -1317,7 +1317,7 @@ export default function BenchmarkingPage() {
                   style={{
                     width: `${((entry.total_reviews ?? 0) / maxReviews) * 100}%`,
                     height: "100%",
-                    background: entry.isMe ? "#6366f1" : "#2a2a2a",
+                    background: entry.isMe ? "#4ade80" : "#2a2a2a",
                     borderRadius: 3,
                   }}
                 />
@@ -1391,7 +1391,7 @@ export default function BenchmarkingPage() {
         {/* Table header */}
         <div
           style={{
-            background: "#111111",
+            background: CARD,
             padding: "10px 18px",
             borderBottom: `1px solid ${BORDER}`,
             display: "grid",
@@ -1431,7 +1431,7 @@ export default function BenchmarkingPage() {
                 key={comp.id}
                 style={{
                   padding: "12px 18px",
-                  borderBottom: i < competitors.length - 1 ? "1px solid #111111" : "none",
+                  borderBottom: i < competitors.length - 1 ? `1px solid ${BORDER}` : "none",
                   display: "grid",
                   gridTemplateColumns: "2fr 1fr 1fr 1fr 130px",
                   gap: 8,

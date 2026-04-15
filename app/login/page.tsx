@@ -27,8 +27,8 @@ function LoginPageFallback() {
           maxWidth: "100%",
           height: "320px",
           borderRadius: "8px",
-          background: "var(--bg-card)",
-          border: "1px solid var(--border)",
+          background: "#141414",
+          border: "1px solid #1e1e1e",
           animation: "pulse 1.2s ease-in-out infinite",
         }}
       />

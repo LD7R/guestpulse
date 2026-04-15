@@ -9,8 +9,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { CSSProperties } from "react";
 
 const glassCard: CSSProperties = {
-  background: "var(--bg-secondary)",
-  border: "1px solid var(--border)",
+  background: "#141414",
+  border: "1px solid #1e1e1e",
   borderRadius: "8px",
   width: "380px",
   maxWidth: "100%",
@@ -19,11 +19,11 @@ const glassCard: CSSProperties = {
 
 const glassInput: CSSProperties = {
   width: "100%",
-  background: "var(--bg-secondary)",
-  border: "1px solid var(--border)",
+  background: "#111111",
+  border: "1px solid #2a2a2a",
   borderRadius: "6px",
   padding: "10px 14px",
-  color: "var(--input-text)",
+  color: "#f0f0f0",
   fontSize: "13px",
   outline: "none",
   boxSizing: "border-box",
@@ -32,14 +32,13 @@ const glassInput: CSSProperties = {
 const primaryBtn: CSSProperties = {
   width: "100%",
   height: "48px",
-  background: "var(--text-primary)",
+  background: "#f0f0f0",
   border: "none",
   borderRadius: "6px",
-  color: "var(--bg-primary)",
+  color: "#0d0d0d",
   fontWeight: 600,
   fontSize: "13px",
   cursor: "pointer",
-  transition: "background 0.15s ease",
 };
 
 export function LoginForm() {
@@ -81,13 +80,12 @@ export function LoginForm() {
   return (
     <div
       style={{
-        position: "relative",
+        background: "#0d0d0d",
         minHeight: "100vh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: "24px",
-        overflow: "hidden",
       }}
     >
       <div style={glassCard}>
@@ -96,18 +94,30 @@ export function LoginForm() {
             textAlign: "center",
             fontSize: "18px",
             fontWeight: 700,
-            color: "var(--logo-text)",
+            color: "#f0f0f0",
             letterSpacing: "-0.02em",
             marginBottom: "8px",
           }}
         >
           GuestPulse
         </div>
+        <h1
+          style={{
+            textAlign: "center",
+            fontSize: "22px",
+            fontWeight: 700,
+            color: "#f0f0f0",
+            marginBottom: "4px",
+            letterSpacing: "-0.5px",
+          }}
+        >
+          Sign in
+        </h1>
         <p
           style={{
             textAlign: "center",
             fontSize: "14px",
-            color: "var(--text-secondary)",
+            color: "#888888",
             marginBottom: "36px",
           }}
         >
@@ -121,7 +131,7 @@ export function LoginForm() {
               style={{
                 display: "block",
                 fontSize: "13px",
-                color: "var(--text-secondary)",
+                color: "#888888",
                 marginBottom: "6px",
               }}
             >
@@ -137,10 +147,10 @@ export function LoginForm() {
               placeholder="you@company.com"
               style={glassInput}
               onFocus={(e) => {
-                e.target.style.borderColor = "var(--focus-ring)";
+                e.target.style.borderColor = "#3a3a3a";
               }}
               onBlur={(e) => {
-                e.target.style.borderColor = "var(--glass-input-border)";
+                e.target.style.borderColor = "#2a2a2a";
               }}
             />
           </div>
@@ -151,7 +161,7 @@ export function LoginForm() {
               style={{
                 display: "block",
                 fontSize: "13px",
-                color: "var(--text-secondary)",
+                color: "#888888",
                 marginBottom: "6px",
               }}
             >
@@ -167,10 +177,10 @@ export function LoginForm() {
               placeholder="••••••••"
               style={glassInput}
               onFocus={(e) => {
-                e.target.style.borderColor = "var(--focus-ring)";
+                e.target.style.borderColor = "#3a3a3a";
               }}
               onBlur={(e) => {
-                e.target.style.borderColor = "var(--glass-input-border)";
+                e.target.style.borderColor = "#2a2a2a";
               }}
             />
           </div>
@@ -179,7 +189,7 @@ export function LoginForm() {
             <p
               style={{
                 fontSize: "13px",
-                color: "var(--error)",
+                color: "#f87171",
                 marginTop: "12px",
                 marginBottom: "8px",
               }}
@@ -203,7 +213,7 @@ export function LoginForm() {
               }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "var(--text-primary)";
+              e.currentTarget.style.background = "#f0f0f0";
             }}
           >
             {isPending ? "Signing in…" : "Sign in"}
@@ -215,13 +225,15 @@ export function LoginForm() {
             marginTop: "24px",
             textAlign: "center",
             fontSize: "14px",
-            color: "var(--text-secondary)",
+            color: "#888888",
           }}
         >
           Don’t have an account?{" "}
           <Link
             href="/signup"
-            style={{ color: "var(--accent)", fontWeight: 500, textDecoration: "none" }}
+            style={{ color: "#888888", fontWeight: 500, textDecoration: "none" }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "#f0f0f0"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "#888888"; }}
           >
             Sign up
           </Link>

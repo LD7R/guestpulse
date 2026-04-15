@@ -93,7 +93,7 @@ function secondaryBtn(extra: CSSProperties = {}): CSSProperties {
   return {
     background: "transparent",
     border: `1px solid ${C.borderSub}`,
-    borderRadius: 5,
+    borderRadius: 6,
     color: C.textSecondary,
     fontSize: 12,
     fontWeight: 500,
@@ -899,7 +899,7 @@ export default function ReviewsInboxPage() {
           <div style={{ display: "flex", gap: 4 }}>
             <Pill active={platformFilter === "all"} onClick={() => setPlatformFilter("all")}>All</Pill>
             <Pill active={platformFilter === "tripadvisor"} onClick={() => setPlatformFilter("tripadvisor")}>
-              <span style={{ color: "#2dd4bf" }}>●</span> TripAdvisor
+              <span style={{ color: "#4ade80" }}>●</span> TripAdvisor
             </Pill>
             <Pill active={platformFilter === "google"} onClick={() => setPlatformFilter("google")}>
               <span style={{ color: "#60a5fa" }}>●</span> Google
@@ -1228,7 +1228,7 @@ export default function ReviewsInboxPage() {
                   <div
                     style={{
                       marginTop: 12,
-                      background: C.inputBg,
+                      background: "#1a1a1a",
                       border: `1px solid ${C.borderSub}`,
                       borderTop: `2px solid ${C.green}`,
                       borderRadius: "0 0 8px 8px",
