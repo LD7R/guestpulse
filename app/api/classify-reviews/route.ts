@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       .select("id, review_text, rating, platform")
       .eq("hotel_id", hotel_id)
       .or("sentiment.is.null,complaint_topic.is.null,topic_type.is.null")
-      .limit(50);
+      .limit(500);
 
     if (fetchError) {
       return NextResponse.json(

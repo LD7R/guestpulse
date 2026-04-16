@@ -44,6 +44,8 @@ type Hotel = {
   address?: string | null;
   city?: string | null;
   country?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 type Competitor = {
@@ -328,7 +330,7 @@ export default function BenchmarkingPage() {
 
     const { data: hotels, error: hotelsError } = await sb
       .from("hotels")
-      .select("id, name, google_url, tripadvisor_url, booking_url, address, city, country")
+      .select("id, name, google_url, tripadvisor_url, booking_url, address, city, country, latitude, longitude")
       .eq("user_id", user.id)
       .limit(1);
 
@@ -356,7 +358,7 @@ export default function BenchmarkingPage() {
 
     const myAvg =
       myRatings.length > 0
-        ? myRatings.reduce((a, b) => a + b, 0) / myRatings.length
+        ? Math.round((myRatings.reduce((a, b) => a + b, 0) / myRatings.length) * 10) / 10
         : null;
     const myTotal = myRatings.length;
 
@@ -367,7 +369,8 @@ export default function BenchmarkingPage() {
     const { data: compsData, error: compsError } = await sb
       .from("competitors")
       .select(COMP_SELECT)
-      .eq("hotel_id", hotelData.id);
+      .eq("hotel_id", hotelData.id)
+      .order("avg_rating", { ascending: false });
 
     if (compsError) throw compsError;
 
@@ -676,7 +679,12 @@ export default function BenchmarkingPage() {
   }
 
   // ── Derived state ─────────────────────────────────────────────────────────
-  const myHotelCoords = useMemo(() => extractCoords(hotel?.google_url), [hotel?.google_url]);
+  const myHotelCoords = useMemo((): { lat: number; lng: number } | null => {
+    if (hotel?.latitude != null && hotel?.longitude != null && !Number.isNaN(hotel.latitude) && !Number.isNaN(hotel.longitude)) {
+      return { lat: hotel.latitude, lng: hotel.longitude };
+    }
+    return extractCoords(hotel?.google_url) ?? null;
+  }, [hotel]);
 
   const mapCenter = useMemo((): [number, number] => {
     return myHotelCoords ? [myHotelCoords.lat, myHotelCoords.lng] : [-7.7900488, 110.3620332];

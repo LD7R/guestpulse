@@ -73,6 +73,16 @@ const labelStyle: CSSProperties = {
   color: C.textMuted,
 };
 
+function hasText(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const cleaned = text.trim();
+  if (cleaned === "") return false;
+  if (cleaned === "—") return false;
+  if (cleaned === "-") return false;
+  if (cleaned.length < 5) return false;
+  return true;
+}
+
 function primaryBtn(disabled = false): CSSProperties {
   return {
     background: C.textPrimary,
@@ -352,10 +362,9 @@ export default function ReviewsInboxPage() {
     if (reviewType !== "all") {
       list = list.filter((r) => {
         const raw = r.review_text ?? r.body ?? r.text ?? null;
-        const s = raw == null ? "" : String(raw).trim();
-        const hasText = s !== "" && s !== "—";
-        if (reviewType === "with-text") return hasText;
-        if (reviewType === "star-only") return !hasText;
+        const textVal = raw == null ? null : String(raw);
+        if (reviewType === "with-text") return hasText(textVal);
+        if (reviewType === "star-only") return !hasText(textVal);
         return true;
       });
     }

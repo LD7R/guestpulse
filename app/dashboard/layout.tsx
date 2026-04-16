@@ -29,6 +29,16 @@ const navItemBase: CSSProperties = {
   textDecoration: "none",
 };
 
+type HotelSync = {
+  id: string;
+  name: string | null;
+  tripadvisor_url: string | null;
+  google_url: string | null;
+  booking_url: string | null;
+  first_sync_completed: boolean | null;
+  last_sync_at: string | null;
+};
+
 function computeInitials(fullName: string | null | undefined, email: string | null | undefined): string {
   const n = fullName?.trim();
   if (n) {
@@ -39,6 +49,16 @@ function computeInitials(fullName: string | null | undefined, email: string | nu
   const e = email?.trim();
   if (e) return e.slice(0, 2).toUpperCase();
   return "?";
+}
+
+function formatSyncTime(iso: string | null | undefined): string {
+  if (!iso) return "Never synced";
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  if (diffHours < 1) return "Last sync: just now";
+  if (diffHours < 24) return `Last sync: ${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `Last sync: ${diffDays}d ago`;
 }
 
 export default function DashboardLayout({
@@ -52,7 +72,8 @@ export default function DashboardLayout({
   const [email, setEmail] = useState<string | null>(null);
   const [initials, setInitials] = useState<string>("?");
   const [inboxUnrespondedCount, setInboxUnrespondedCount] = useState(0);
-  const [hotels, setHotels] = useState<{ id: string; name: string | null }[]>([]);
+  const [primaryHotel, setPrimaryHotel] = useState<HotelSync | null>(null);
+  const [autoSyncing, setAutoSyncing] = useState(false);
 
   useEffect(() => {
     async function loadUser() {
@@ -75,7 +96,7 @@ export default function DashboardLayout({
   }, []);
 
   useEffect(() => {
-    async function loadHotels() {
+    async function loadHotel() {
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -84,13 +105,17 @@ export default function DashboardLayout({
         data: { user },
       } = await supabase.auth.getUser();
       if (!user?.id) {
-        setHotels([]);
+        setPrimaryHotel(null);
         return;
       }
-      const { data } = await supabase.from("hotels").select("id, name").eq("user_id", user.id);
-      setHotels((data ?? []) as { id: string; name: string | null }[]);
+      const { data } = await supabase
+        .from("hotels")
+        .select("id, name, tripadvisor_url, google_url, booking_url, first_sync_completed, last_sync_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      setPrimaryHotel((data as HotelSync | null) ?? null);
     }
-    void loadHotels();
+    void loadHotel();
   }, [pathname]);
 
   useEffect(() => {
@@ -106,16 +131,19 @@ export default function DashboardLayout({
         setInboxUnrespondedCount(0);
         return;
       }
-      const { data: hotelRows } = await supabase.from("hotels").select("id").eq("user_id", user.id);
-      const hotelIds = (hotelRows ?? []).map((h: { id: string }) => h.id).filter(Boolean);
-      if (hotelIds.length === 0) {
+      const { data: hotel } = await supabase
+        .from("hotels")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
+      if (!hotel?.id) {
         setInboxUnrespondedCount(0);
         return;
       }
       const { count, error } = await supabase
         .from("reviews")
-        .select("id", { count: "exact", head: true })
-        .in("hotel_id", hotelIds)
+        .select("*", { count: "exact", head: true })
+        .eq("hotel_id", hotel.id)
         .eq("responded", false);
       if (error) {
         setInboxUnrespondedCount(0);
@@ -125,6 +153,79 @@ export default function DashboardLayout({
     }
     void loadInboxBadge();
   }, [pathname]);
+
+  // Auto-sync when hotel is first loaded or hotel changes
+  useEffect(() => {
+    if (!primaryHotel?.id) return;
+    const hasUrl = primaryHotel.google_url || primaryHotel.tripadvisor_url || primaryHotel.booking_url;
+    if (!hasUrl) return;
+    void autoSync(primaryHotel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryHotel?.id]);
+
+  async function autoSync(hotel: HotelSync) {
+    const now = new Date();
+    const lastSync = hotel.last_sync_at ? new Date(hotel.last_sync_at) : null;
+    const hoursSinceSync = lastSync
+      ? (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60)
+      : Infinity;
+
+    if (hoursSinceSync < 6) return;
+
+    const isFirstSync = !hotel.first_sync_completed;
+    const syncType = isFirstSync ? "initial" : "incremental";
+
+    setAutoSyncing(true);
+
+    const platforms = [
+      { platform: "tripadvisor", url: hotel.tripadvisor_url },
+      { platform: "google", url: hotel.google_url },
+      { platform: "booking", url: hotel.booking_url },
+    ].filter((p): p is { platform: string; url: string } => Boolean(p.url));
+
+    for (const p of platforms) {
+      try {
+        await fetch("/api/scrape-reviews", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hotel_id: hotel.id,
+            url: p.url,
+            platform: p.platform,
+            sync_type: syncType,
+          }),
+        });
+      } catch (e) {
+        console.error("Auto-sync failed for", p.platform, e);
+      }
+    }
+
+    setAutoSyncing(false);
+
+    if (isFirstSync) {
+      try {
+        await fetch("/api/classify-reviews", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hotel_id: hotel.id }),
+        });
+      } catch (e) {
+        console.error("Auto-classify after first sync failed", e);
+      }
+    }
+
+    // Refresh hotel state to get updated last_sync_at
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+    const { data } = await supabase
+      .from("hotels")
+      .select("id, name, tripadvisor_url, google_url, booking_url, first_sync_completed, last_sync_at")
+      .eq("id", hotel.id)
+      .maybeSingle();
+    if (data) setPrimaryHotel(data as HotelSync);
+  }
 
   async function onLogout() {
     const supabase = createBrowserClient(
@@ -144,10 +245,20 @@ export default function DashboardLayout({
   }
 
   const currentHotelLabel = useMemo(() => {
-    if (hotels.length === 0) return "No property";
-    if (hotels.length === 1) return hotels[0]?.name?.trim() || "Your hotel";
-    return `${hotels.length} properties`;
-  }, [hotels]);
+    if (!primaryHotel) return "No property";
+    return primaryHotel.name?.trim() || "Your hotel";
+  }, [primaryHotel]);
+
+  const syncIndicator = useMemo(() => {
+    if (autoSyncing) {
+      return { text: "● Syncing reviews...", color: "#4ade80", pulse: true };
+    }
+    if (!primaryHotel) return null;
+    if (!primaryHotel.last_sync_at) {
+      return { text: "Not yet synced", color: "#fbbf24", pulse: false };
+    }
+    return { text: formatSyncTime(primaryHotel.last_sync_at), color: "#444444", pulse: false };
+  }, [autoSyncing, primaryHotel]);
 
   const NavLink = ({
     href,
@@ -265,6 +376,18 @@ export default function DashboardLayout({
         </Link>
 
         <div style={{ marginTop: "auto", padding: "16px" }}>
+          {syncIndicator && (
+            <div
+              style={{
+                fontSize: 11,
+                color: syncIndicator.color,
+                marginBottom: 8,
+                animation: syncIndicator.pulse ? "sync-pulse 1.4s ease-in-out infinite" : "none",
+              }}
+            >
+              {syncIndicator.text}
+            </div>
+          )}
           <div
             style={{
               fontSize: 12,
@@ -391,6 +514,10 @@ export default function DashboardLayout({
       <style
         dangerouslySetInnerHTML={{
           __html: `
+            @keyframes sync-pulse {
+              0%, 100% { opacity: 0.5; }
+              50% { opacity: 1; }
+            }
             .main-content {
               margin-left: 220px;
               margin-top: 52px;

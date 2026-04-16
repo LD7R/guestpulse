@@ -1,3 +1,12 @@
+/**
+ * Run in Supabase to add sync tracking columns:
+ * alter table public.hotels
+ *   add column if not exists first_sync_completed boolean default false,
+ *   add column if not exists last_sync_at timestamp with time zone,
+ *   add column if not exists historical_avg_rating numeric,
+ *   add column if not exists historical_review_count integer,
+ *   add column if not exists historical_period_end timestamp with time zone;
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -97,8 +106,10 @@ export async function POST(request: NextRequest) {
       hotel_id?: string;
       url?: string;
       platform?: "tripadvisor" | "google" | "booking";
+      sync_type?: "initial" | "incremental" | "full";
     };
     const { hotel_id, url } = body;
+    const sync_type = body.sync_type ?? "incremental";
     const platform =
       body.platform === "google"
         ? "google"
@@ -139,6 +150,17 @@ export async function POST(request: NextRequest) {
       auth: { persistSession: false },
     });
 
+    // For incremental sync, fetch hotel's last_sync_at to filter old reviews
+    let lastSyncAt: string | null = null;
+    if (sync_type === "incremental") {
+      const { data: hotelRow } = await supabase
+        .from("hotels")
+        .select("last_sync_at")
+        .eq("id", hotel_id)
+        .maybeSingle();
+      lastSyncAt = (hotelRow as { last_sync_at?: string | null } | null)?.last_sync_at ?? null;
+    }
+
     // 2. Start Apify actor run
     const actorId = ACTOR_IDS[platform];
     if (!actorId) {
@@ -147,24 +169,25 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+    const maxReviews = sync_type === "incremental" ? 20 : 100;
     const actorInput =
       platform === "google"
         ? {
             startUrls: [{ url }],
-            maxReviews: 20,
+            maxReviews,
             language: "en",
             personalData: true,
           }
         : platform === "booking"
           ? {
-              maxReviewsPerHotel: 20,
+              maxReviewsPerHotel: maxReviews,
               reviewScores: ["ALL"],
               sortReviewsBy: "f_recent_desc",
               startUrls: [{ url }],
             }
         : {
             startUrls: [{ url }],
-            maxReviews: 20,
+            maxReviews,
             language: "en",
           };
 
@@ -287,6 +310,7 @@ export async function POST(request: NextRequest) {
     console.log("[scrape-reviews] Apify items returned:", Array.isArray(items) ? items.length : 0);
 
     if (!Array.isArray(items) || items.length === 0) {
+      await supabase.from("hotels").update({ last_sync_at: new Date().toISOString(), first_sync_completed: true }).eq("id", hotel_id);
       return NextResponse.json({ success: true, count: 0 });
     }
 
@@ -323,6 +347,13 @@ export async function POST(request: NextRequest) {
               (item.reviewDate as string | null | undefined) ??
               null
           : item.publishedDate ?? null;
+      // For incremental sync, skip reviews older than last sync
+      if (sync_type === "incremental" && lastSyncAt && reviewDate) {
+        if (new Date(reviewDate) < new Date(lastSyncAt)) {
+          continue;
+        }
+      }
+
       const rating =
         platform === "google"
           ? normalizeRating(item.stars || item.rating || null)
@@ -400,6 +431,7 @@ export async function POST(request: NextRequest) {
     if (rowsToInsert.length === 0) {
       console.log("[scrape-reviews] Duplicates skipped:", skippedDuplicates);
       console.log("[scrape-reviews] Inserted reviews:", 0);
+      await supabase.from("hotels").update({ last_sync_at: new Date().toISOString(), first_sync_completed: true }).eq("id", hotel_id);
       return NextResponse.json({ success: true, count: 0 });
     }
 
@@ -423,6 +455,8 @@ export async function POST(request: NextRequest) {
 
     console.log("[scrape-reviews] Duplicates skipped:", skippedDuplicates);
     console.log("[scrape-reviews] Inserted reviews:", rowsToInsert.length);
+
+    await supabase.from("hotels").update({ last_sync_at: new Date().toISOString(), first_sync_completed: true }).eq("id", hotel_id);
 
     return NextResponse.json({
       success: true,

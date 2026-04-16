@@ -21,6 +21,10 @@ type Hotel = {
   google_url?: string | null;
   booking_url?: string | null;
   response_signature?: string | null;
+  first_sync_completed?: boolean | null;
+  last_sync_at?: string | null;
+  historical_avg_rating?: number | null;
+  historical_review_count?: number | null;
 };
 
 type ReviewRow = {
@@ -283,6 +287,9 @@ export default function DashboardOverviewPage() {
   const [competitors, setCompetitors] = useState<CompetitorSnapshotRow[]>([]);
   const [reviewsTimeSeries, setReviewsTimeSeries] = useState<TimeSeriesReview[]>([]);
 
+  const [weightedTotalCount, setWeightedTotalCount] = useState<number | null>(null);
+  const [weightedHistoricalCount, setWeightedHistoricalCount] = useState<number | null>(null);
+
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -318,7 +325,7 @@ export default function DashboardOverviewPage() {
 
     const { data: hotels, error: hotelsError } = await supabase
       .from("hotels")
-      .select("id, name, tripadvisor_url, google_url, booking_url, response_signature")
+      .select("id, name, tripadvisor_url, google_url, booking_url, response_signature, first_sync_completed, last_sync_at, historical_avg_rating, historical_review_count")
       .eq("user_id", user.id);
 
     if (hotelsError) throw hotelsError;
@@ -355,6 +362,8 @@ export default function DashboardOverviewPage() {
       setTrendWeek(neutral);
       setRatingMonthTrend({ text: "—", color: "#555555" });
       setResponseRatePct(null);
+      setWeightedTotalCount(null);
+      setWeightedHistoricalCount(null);
       return;
     }
 
@@ -409,10 +418,26 @@ export default function DashboardOverviewPage() {
       })
       .filter((n: number | null): n is number => n !== null);
 
-    const avg =
-      numericRatings.length === 0
-        ? null
-        : numericRatings.reduce((a, b) => a + b, 0) / numericRatings.length;
+    const recentCount = numericRatings.length;
+    const recentAvg = recentCount === 0 ? null : numericRatings.reduce((a, b) => a + b, 0) / recentCount;
+
+    const firstHotel = (hotels ?? [])[0] as Hotel | undefined;
+    const historicalAvg = firstHotel?.historical_avg_rating ?? null;
+    const historicalCount = firstHotel?.historical_review_count ?? null;
+
+    let avg: number | null = recentAvg;
+    let weightedTotalForLabel = recentCount > 0 ? recentCount : null;
+    let historicalForLabel: number | null = null;
+
+    if (historicalAvg != null && historicalCount != null && historicalCount > 0 && recentAvg != null && recentCount > 0) {
+      const totalCount = recentCount + historicalCount;
+      avg = (recentAvg * recentCount + historicalAvg * historicalCount) / totalCount;
+      weightedTotalForLabel = totalCount;
+      historicalForLabel = historicalCount;
+    }
+
+    setWeightedTotalCount(weightedTotalForLabel);
+    setWeightedHistoricalCount(historicalForLabel);
 
     const { count: needingCount, error: needingError } = await supabase
       .from("reviews")
@@ -1220,6 +1245,26 @@ export default function DashboardOverviewPage() {
         </div>
       ) : (
         <>
+          {!primaryHotel?.first_sync_completed &&
+            (primaryHotel?.google_url || primaryHotel?.tripadvisor_url || primaryHotel?.booking_url) && (
+              <div
+                style={{
+                  background: "#0a1a0a",
+                  border: "1px solid #1a3a1a",
+                  borderRadius: 6,
+                  padding: "12px 16px",
+                  marginBottom: 16,
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#4ade80", marginBottom: 4 }}>
+                  Setting up your review history...
+                </div>
+                <div style={{ fontSize: 12, color: "#888888" }}>
+                  Syncing your last 2 years of reviews. This may take a few minutes.
+                </div>
+              </div>
+            )}
+
           <div
             style={{
               display: "grid",
@@ -1246,24 +1291,32 @@ export default function DashboardOverviewPage() {
                 label: "Total reviews",
                 value: String(totalReviews),
                 trend: trendTotal,
+                subLabel: null as string | null,
                 urgent: false,
               },
               {
                 label: "Average rating",
                 value: avgRating === null ? "—" : avgRating.toFixed(1),
                 trend: { text: ratingMonthTrend.text, color: ratingMonthTrend.color },
+                subLabel: weightedHistoricalCount != null && weightedTotalCount != null
+                  ? `Based on ${weightedTotalCount} total (${weightedTotalCount - weightedHistoricalCount} recent + ${weightedHistoricalCount} historical)`
+                  : weightedTotalCount != null
+                    ? `Based on ${weightedTotalCount} reviews`
+                    : null,
                 urgent: false,
               },
               {
                 label: "Needing response",
                 value: String(needingResponse),
                 trend: trendNeeding,
+                subLabel: null as string | null,
                 urgent: false,
               },
               {
                 label: "Urgent",
                 value: String(urgentCount),
                 trend: { text: "needs response now", color: "rgba(239,68,68,0.7)" },
+                subLabel: null as string | null,
                 urgent: true,
               },
             ].map((card) => (
@@ -1300,6 +1353,9 @@ export default function DashboardOverviewPage() {
                 >
                   {card.value}
                 </div>
+                {card.subLabel ? (
+                  <div style={{ fontSize: 11, color: "#444444", marginBottom: 4 }}>{card.subLabel}</div>
+                ) : null}
                 <div style={{ fontSize: 11, fontWeight: 500, color: card.trend.color }}>{card.trend.text}</div>
               </div>
             ))}
