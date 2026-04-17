@@ -20,6 +20,9 @@ type Hotel = {
   tripadvisor_url?: string | null;
   google_url?: string | null;
   booking_url?: string | null;
+  trip_url?: string | null;
+  expedia_url?: string | null;
+  yelp_url?: string | null;
   response_signature?: string | null;
   first_sync_completed?: boolean | null;
   last_sync_at?: string | null;
@@ -75,11 +78,7 @@ type SyncResult = {
   totalReviews: number;
 };
 
-type SyncProgress = {
-  tripadvisor: "idle" | "syncing" | "done" | "error";
-  google: "idle" | "syncing" | "done" | "error";
-  booking: "idle" | "syncing" | "done" | "error";
-};
+type SyncProgress = Record<string, "idle" | "syncing" | "done" | "error">;
 
 function normalizeRating(value: unknown): number | null {
   if (value === null || value === undefined) return null;
@@ -234,6 +233,12 @@ function urgentPlatformBadge(p: string | null | undefined) {
     return <span style={{ ...base, background: "#172554", color: "#60a5fa" }}>Google</span>;
   if (raw === "booking")
     return <span style={{ ...base, background: "#1e1b4b", color: "#a78bfa" }}>Booking</span>;
+  if (raw === "trip")
+    return <span style={{ ...base, background: "#1e1b4b", color: "#60a5fa" }}>Trip.com</span>;
+  if (raw === "expedia")
+    return <span style={{ ...base, background: "#1a0a2e", color: "#a78bfa" }}>Expedia</span>;
+  if (raw === "yelp")
+    return <span style={{ ...base, background: "#2d0a0a", color: "#f87171" }}>Yelp</span>;
   return (
     <span style={{ ...base, background: "#1e1e1e", color: "#888888" }}>{p || "Platform"}</span>
   );
@@ -305,7 +310,7 @@ export default function DashboardOverviewPage() {
 
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
-  const [syncProgress, setSyncProgress] = useState<SyncProgress>({ tripadvisor: "idle", google: "idle", booking: "idle" });
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>({ tripadvisor: "idle", google: "idle", booking: "idle", trip: "idle", expedia: "idle", yelp: "idle" });
   const [activeSyncPlatforms, setActiveSyncPlatforms] = useState<string[]>([]);
 
   const [urgentReviewsList, setUrgentReviewsList] = useState<ReviewRow[]>([]);
@@ -334,7 +339,7 @@ export default function DashboardOverviewPage() {
 
     const { data: hotels, error: hotelsError } = await supabase
       .from("hotels")
-      .select("id, name, tripadvisor_url, google_url, booking_url, response_signature, first_sync_completed, last_sync_at, historical_avg_rating, historical_review_count")
+      .select("id, name, tripadvisor_url, google_url, booking_url, trip_url, expedia_url, yelp_url, response_signature, first_sync_completed, last_sync_at, historical_avg_rating, historical_review_count")
       .eq("user_id", user.id);
 
     if (hotelsError) throw hotelsError;
@@ -668,7 +673,7 @@ export default function DashboardOverviewPage() {
   }, [loadDashboard]);
 
   async function syncPlatform(
-    platform: "tripadvisor" | "google" | "booking",
+    platform: "tripadvisor" | "google" | "booking" | "trip" | "expedia" | "yelp",
     url: string,
     hotelId: string,
   ) {
@@ -690,10 +695,13 @@ export default function DashboardOverviewPage() {
     setSyncResult(null);
     if (!primaryHotel?.id) return;
 
-    const platformsToSync: Array<{ platform: "tripadvisor" | "google" | "booking"; url: string }> = [];
+    const platformsToSync: Array<{ platform: "tripadvisor" | "google" | "booking" | "trip" | "expedia" | "yelp"; url: string }> = [];
     if (primaryHotel.tripadvisor_url?.trim()) platformsToSync.push({ platform: "tripadvisor", url: primaryHotel.tripadvisor_url.trim() });
     if (primaryHotel.google_url?.trim()) platformsToSync.push({ platform: "google", url: primaryHotel.google_url.trim() });
     if (primaryHotel.booking_url?.trim()) platformsToSync.push({ platform: "booking", url: primaryHotel.booking_url.trim() });
+    if (primaryHotel.trip_url?.trim()) platformsToSync.push({ platform: "trip", url: primaryHotel.trip_url.trim() });
+    if (primaryHotel.expedia_url?.trim()) platformsToSync.push({ platform: "expedia", url: primaryHotel.expedia_url.trim() });
+    if (primaryHotel.yelp_url?.trim()) platformsToSync.push({ platform: "yelp", url: primaryHotel.yelp_url.trim() });
 
     if (platformsToSync.length === 0) {
       setSyncResult({ timestamp: new Date(), platforms: [], totalNew: 0, totalReviews: totalReviews });
@@ -701,7 +709,7 @@ export default function DashboardOverviewPage() {
     }
 
     setActiveSyncPlatforms(platformsToSync.map((p) => p.platform));
-    const progressInit: SyncProgress = { tripadvisor: "idle", google: "idle", booking: "idle" };
+    const progressInit: SyncProgress = { tripadvisor: "idle", google: "idle", booking: "idle", trip: "idle", expedia: "idle", yelp: "idle" };
     for (const { platform } of platformsToSync) progressInit[platform] = "syncing";
     setSyncProgress(progressInit);
 
@@ -1112,10 +1120,10 @@ export default function DashboardOverviewPage() {
           <div style={{ fontSize: 13, color: "#888888", marginBottom: 10 }}>Syncing reviews...</div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             {activeSyncPlatforms.map((platform) => {
-              const status = syncProgress[platform as keyof SyncProgress];
+              const status = syncProgress[platform];
               if (status === "idle") return null;
-              const platformLabel = platform === "tripadvisor" ? "TripAdvisor" : platform === "google" ? "Google" : "Booking";
-              const platformColor = platform === "tripadvisor" ? "#4ade80" : platform === "google" ? "#60a5fa" : "#a78bfa";
+              const platformLabel = platform === "tripadvisor" ? "TripAdvisor" : platform === "google" ? "Google" : platform === "booking" ? "Booking" : platform === "trip" ? "Trip.com" : platform === "expedia" ? "Expedia" : platform === "yelp" ? "Yelp" : platform;
+              const platformColor = platform === "tripadvisor" ? "#4ade80" : platform === "google" ? "#60a5fa" : platform === "booking" ? "#a78bfa" : platform === "trip" ? "#60a5fa" : platform === "expedia" ? "#a78bfa" : "#f87171";
               return (
                 <div key={platform} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   {status === "syncing" ? (
@@ -1170,8 +1178,16 @@ export default function DashboardOverviewPage() {
                     ? { background: "#052e16", color: "#4ade80" }
                     : p.platform === "google"
                       ? { background: "#172554", color: "#60a5fa" }
-                      : { background: "#1e1b4b", color: "#a78bfa" };
-                  const label = p.platform === "tripadvisor" ? "TripAdvisor" : p.platform === "google" ? "Google" : "Booking";
+                      : p.platform === "booking"
+                        ? { background: "#1e1b4b", color: "#a78bfa" }
+                        : p.platform === "trip"
+                          ? { background: "#1e1b4b", color: "#60a5fa" }
+                          : p.platform === "expedia"
+                            ? { background: "#1a0a2e", color: "#a78bfa" }
+                            : p.platform === "yelp"
+                              ? { background: "#2d0a0a", color: "#f87171" }
+                              : { background: "#1e1e1e", color: "#888888" };
+                  const label = p.platform === "tripadvisor" ? "TripAdvisor" : p.platform === "google" ? "Google" : p.platform === "booking" ? "Booking" : p.platform === "trip" ? "Trip.com" : p.platform === "expedia" ? "Expedia" : p.platform === "yelp" ? "Yelp" : p.platform;
                   return (
                     <div key={p.platform} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ ...badgeStyle, borderRadius: 3, padding: "2px 7px", fontSize: 11, fontWeight: 600 }}>{label}</span>
@@ -1317,7 +1333,7 @@ export default function DashboardOverviewPage() {
       ) : (
         <>
           {!primaryHotel?.first_sync_completed &&
-            (primaryHotel?.google_url || primaryHotel?.tripadvisor_url || primaryHotel?.booking_url) && (
+            (primaryHotel?.google_url || primaryHotel?.tripadvisor_url || primaryHotel?.booking_url || primaryHotel?.trip_url || primaryHotel?.expedia_url || primaryHotel?.yelp_url) && (
               <div
                 style={{
                   background: "#0a1a0a",

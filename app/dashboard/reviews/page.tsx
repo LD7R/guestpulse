@@ -12,6 +12,9 @@ type Hotel = {
   tripadvisor_url?: string | null;
   google_url?: string | null;
   booking_url?: string | null;
+  trip_url?: string | null;
+  expedia_url?: string | null;
+  yelp_url?: string | null;
 };
 
 type SyncResult = {
@@ -21,11 +24,7 @@ type SyncResult = {
   totalReviews: number;
 };
 
-type SyncProgress = {
-  tripadvisor: "idle" | "syncing" | "done" | "error";
-  google: "idle" | "syncing" | "done" | "error";
-  booking: "idle" | "syncing" | "done" | "error";
-};
+type SyncProgress = Record<string, "idle" | "syncing" | "done" | "error">;
 
 type Review = {
   id?: string;
@@ -179,6 +178,9 @@ function platformLinkColor(platform: string | null | undefined): string {
   if (p === "tripadvisor") return C.green;
   if (p === "google") return "#60a5fa";
   if (p === "booking") return "#a78bfa";
+  if (p === "trip") return "#60a5fa";
+  if (p === "expedia") return "#a78bfa";
+  if (p === "yelp") return "#f87171";
   return C.textSecondary;
 }
 
@@ -187,6 +189,9 @@ function platformLabel(platform: string | null | undefined): string {
   if (p === "tripadvisor") return "TripAdvisor";
   if (p === "google") return "Google";
   if (p === "booking") return "Booking.com";
+  if (p === "trip") return "Trip.com";
+  if (p === "expedia") return "Expedia";
+  if (p === "yelp") return "Yelp";
   const raw = (platform ?? "Platform").trim();
   return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "Platform";
 }
@@ -236,6 +241,12 @@ function PlatformBadge({ platform }: { platform: string | null | undefined }) {
     return <span style={{ ...base, background: "#172554", color: "#60a5fa" }}>Google</span>;
   if (p === "booking")
     return <span style={{ ...base, background: "#1e1b4b", color: "#a78bfa" }}>Booking</span>;
+  if (p === "trip")
+    return <span style={{ ...base, background: "#1e1b4b", color: "#60a5fa" }}>Trip.com</span>;
+  if (p === "expedia")
+    return <span style={{ ...base, background: "#1a0a2e", color: "#a78bfa" }}>Expedia</span>;
+  if (p === "yelp")
+    return <span style={{ ...base, background: "#2d0a0a", color: "#f87171" }}>Yelp</span>;
   return (
     <span style={{ ...base, background: "#1e1e1e", color: C.textSecondary }}>
       {platform || "Platform"}
@@ -317,7 +328,7 @@ export default function ReviewsInboxPage() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
-  const [syncProgress, setSyncProgress] = useState<SyncProgress>({ tripadvisor: "idle", google: "idle", booking: "idle" });
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>({ tripadvisor: "idle", google: "idle", booking: "idle", trip: "idle", expedia: "idle", yelp: "idle" });
   const [activeSyncPlatforms, setActiveSyncPlatforms] = useState<string[]>([]);
 
   const [platformFilter, setPlatformFilter] = useState("all");
@@ -562,7 +573,7 @@ export default function ReviewsInboxPage() {
     await supabase.from("reviews").update({ internal_note: trimmed || null }).eq("id", reviewId);
   }
 
-  async function syncPlatform(platform: "tripadvisor" | "google" | "booking", url: string, hotelId: string) {
+  async function syncPlatform(platform: "tripadvisor" | "google" | "booking" | "trip" | "expedia" | "yelp", url: string, hotelId: string) {
     try {
       const res = await fetch("/api/scrape-reviews", {
         method: "POST",
@@ -593,7 +604,7 @@ export default function ReviewsInboxPage() {
 
       const { data: hotel, error: hotelError } = await supabase
         .from("hotels")
-        .select("id, tripadvisor_url, google_url, booking_url")
+        .select("id, tripadvisor_url, google_url, booking_url, trip_url, expedia_url, yelp_url")
         .eq("user_id", user.id)
         .limit(1)
         .maybeSingle();
@@ -601,10 +612,13 @@ export default function ReviewsInboxPage() {
       if (hotelError) throw new Error(hotelError.message);
       if (!hotel?.id) throw new Error("No hotel found. Add one in Settings first.");
 
-      const platformsToSync: Array<{ platform: "tripadvisor" | "google" | "booking"; url: string }> = [];
+      const platformsToSync: Array<{ platform: "tripadvisor" | "google" | "booking" | "trip" | "expedia" | "yelp"; url: string }> = [];
       if (hotel.tripadvisor_url) platformsToSync.push({ platform: "tripadvisor", url: hotel.tripadvisor_url });
       if (hotel.google_url) platformsToSync.push({ platform: "google", url: hotel.google_url });
       if (hotel.booking_url) platformsToSync.push({ platform: "booking", url: hotel.booking_url });
+      if (hotel.trip_url) platformsToSync.push({ platform: "trip", url: hotel.trip_url });
+      if (hotel.expedia_url) platformsToSync.push({ platform: "expedia", url: hotel.expedia_url });
+      if (hotel.yelp_url) platformsToSync.push({ platform: "yelp", url: hotel.yelp_url });
 
       if (platformsToSync.length === 0) {
         setSyncResult({ timestamp: new Date(), platforms: [], totalNew: 0, totalReviews: reviews.length });
@@ -612,7 +626,7 @@ export default function ReviewsInboxPage() {
       }
 
       setActiveSyncPlatforms(platformsToSync.map((p) => p.platform));
-      const progressInit: SyncProgress = { tripadvisor: "idle", google: "idle", booking: "idle" };
+      const progressInit: SyncProgress = { tripadvisor: "idle", google: "idle", booking: "idle", trip: "idle", expedia: "idle", yelp: "idle" };
       for (const { platform } of platformsToSync) progressInit[platform] = "syncing";
       setSyncProgress(progressInit);
 
@@ -828,7 +842,7 @@ export default function ReviewsInboxPage() {
           <div style={{ fontSize: 13, color: C.textSecondary, marginBottom: 10 }}>Syncing reviews...</div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             {activeSyncPlatforms.map((platform) => {
-              const status = syncProgress[platform as keyof SyncProgress];
+              const status = syncProgress[platform];
               if (status === "idle") return null;
               return (
                 <div key={platform} style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1016,7 +1030,7 @@ export default function ReviewsInboxPage() {
           </select>
 
           {/* Platform */}
-          <div style={{ display: "flex", gap: 4 }}>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             <Pill active={platformFilter === "all"} onClick={() => setPlatformFilter("all")}>All</Pill>
             <Pill active={platformFilter === "tripadvisor"} onClick={() => setPlatformFilter("tripadvisor")}>
               <span style={{ color: "#4ade80" }}>●</span> TripAdvisor
@@ -1026,6 +1040,15 @@ export default function ReviewsInboxPage() {
             </Pill>
             <Pill active={platformFilter === "booking"} onClick={() => setPlatformFilter("booking")}>
               <span style={{ color: "#a78bfa" }}>●</span> Booking
+            </Pill>
+            <Pill active={platformFilter === "trip"} onClick={() => setPlatformFilter("trip")}>
+              <span style={{ color: "#60a5fa" }}>●</span> Trip.com
+            </Pill>
+            <Pill active={platformFilter === "expedia"} onClick={() => setPlatformFilter("expedia")}>
+              <span style={{ color: "#a78bfa" }}>●</span> Expedia
+            </Pill>
+            <Pill active={platformFilter === "yelp"} onClick={() => setPlatformFilter("yelp")}>
+              <span style={{ color: "#f87171" }}>●</span> Yelp
             </Pill>
           </div>
 

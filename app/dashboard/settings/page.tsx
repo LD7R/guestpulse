@@ -24,6 +24,9 @@ type HotelRow = {
   tripadvisor_url: string | null;
   google_url: string | null;
   booking_url: string | null;
+  trip_url: string | null;
+  expedia_url: string | null;
+  yelp_url: string | null;
   address: string | null;
   city: string | null;
   country: string | null;
@@ -198,6 +201,9 @@ export default function SettingsPage() {
   const [tripadvisorUrl, setTripadvisorUrl] = useState("");
   const [googleUrl, setGoogleUrl] = useState("");
   const [bookingUrl, setBookingUrl] = useState("");
+  const [tripUrl, setTripUrl] = useState("");
+  const [expediaUrl, setExpediaUrl] = useState("");
+  const [yelpUrl, setYelpUrl] = useState("");
 
   const [savingAccount, setSavingAccount] = useState(false);
   const [savingHotel, setSavingHotel] = useState(false);
@@ -270,6 +276,9 @@ export default function SettingsPage() {
             setTripadvisorUrl(h.tripadvisor_url || "");
             setGoogleUrl(h.google_url || "");
             setBookingUrl(h.booking_url || "");
+            setTripUrl(h.trip_url || "");
+            setExpediaUrl(h.expedia_url || "");
+            setYelpUrl(h.yelp_url || "");
             setResponseSignature(h.response_signature?.trim() || "The Management Team");
           }
         }
@@ -371,6 +380,9 @@ export default function SettingsPage() {
         tripadvisor_url: tripadvisorUrl.trim() || null,
         google_url: googleUrl.trim() || null,
         booking_url: bookingUrl.trim() || null,
+        trip_url: tripUrl.trim() || null,
+        expedia_url: expediaUrl.trim() || null,
+        yelp_url: yelpUrl.trim() || null,
         address: address.trim() || null,
         city: city.trim() || null,
         country: country.trim() || null,
@@ -1074,6 +1086,117 @@ export default function SettingsPage() {
                     value={bookingUrl}
                     onChange={(e) => setBookingUrl(e.target.value)}
                     placeholder="https://booking.com/hotel/..."
+                    style={{ ...glassInput, flex: 1 }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = "#3a3a3a";
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = "#2a2a2a";
+                    }}
+                  />
+                </div>
+              </div>
+              <div style={{ marginTop: "16px" }}>
+                <label htmlFor="h-trip" style={labelStyle}>
+                  Trip.com URL
+                </label>
+                <div style={{ display: "flex", alignItems: "stretch", gap: "10px" }}>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minWidth: "40px",
+                      borderRadius: "6px",
+                      background: "#1e1b4b",
+                      color: "#60a5fa",
+                      border: "1px solid rgba(96,165,250,0.25)",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    TC
+                  </span>
+                  <input
+                    id="h-trip"
+                    type="url"
+                    value={tripUrl}
+                    onChange={(e) => setTripUrl(e.target.value)}
+                    placeholder="https://trip.com/hotels/..."
+                    style={{ ...glassInput, flex: 1 }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = "#3a3a3a";
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = "#2a2a2a";
+                    }}
+                  />
+                </div>
+              </div>
+              <div style={{ marginTop: "16px" }}>
+                <label htmlFor="h-expedia" style={labelStyle}>
+                  Expedia URL
+                </label>
+                <div style={{ display: "flex", alignItems: "stretch", gap: "10px" }}>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minWidth: "40px",
+                      borderRadius: "6px",
+                      background: "#1a0a2e",
+                      color: "#a78bfa",
+                      border: "1px solid rgba(167,139,250,0.25)",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    EX
+                  </span>
+                  <input
+                    id="h-expedia"
+                    type="url"
+                    value={expediaUrl}
+                    onChange={(e) => setExpediaUrl(e.target.value)}
+                    placeholder="https://expedia.com/hotels/..."
+                    style={{ ...glassInput, flex: 1 }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = "#3a3a3a";
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = "#2a2a2a";
+                    }}
+                  />
+                </div>
+              </div>
+              <div style={{ marginTop: "16px" }}>
+                <label htmlFor="h-yelp" style={labelStyle}>
+                  Yelp URL
+                </label>
+                <div style={{ display: "flex", alignItems: "stretch", gap: "10px" }}>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minWidth: "40px",
+                      borderRadius: "6px",
+                      background: "#2d0a0a",
+                      color: "#f87171",
+                      border: "1px solid rgba(248,113,113,0.25)",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    YP
+                  </span>
+                  <input
+                    id="h-yelp"
+                    type="url"
+                    value={yelpUrl}
+                    onChange={(e) => setYelpUrl(e.target.value)}
+                    placeholder="https://yelp.com/biz/..."
                     style={{ ...glassInput, flex: 1 }}
                     onFocus={(e) => {
                       e.target.style.borderColor = "#3a3a3a";

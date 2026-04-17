@@ -6,6 +6,12 @@
  *   add column if not exists historical_avg_rating numeric,
  *   add column if not exists historical_review_count integer,
  *   add column if not exists historical_period_end timestamp with time zone;
+ *
+ * Run in Supabase to add new platform URL columns:
+ * alter table public.hotels
+ *   add column if not exists trip_url text,
+ *   add column if not exists expedia_url text,
+ *   add column if not exists yelp_url text;
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -14,15 +20,23 @@ type ApifyReviewItem = {
   user?: { username?: string; name?: string };
   author?: string;
   reviewer?: string | { name?: string };
+  reviewerName?: string;
+  userName?: string;
+  displayName?: string;
   rating?: number | string;
   stars?: number | string;
   text?: string;
   snippet?: string;
+  reviewText?: string;
+  content?: string;
+  summary?: string;
   publishedDate?: string;
   publishedAtDate?: string;
+  submissionDate?: string;
   date?: string;
   ownerResponse?: unknown;
   responseFromOwnerText?: unknown;
+  businessResponse?: unknown;
   name?: string;
   positive?: string;
   /** Booking.com: nested pros/cons; may also be a string in some actors */
@@ -45,6 +59,9 @@ const ACTOR_IDS = {
   tripadvisor: "Hvp4YfFGyLM635Q2F",
   google: "Xb8osYTtOjlsgI6k9",
   booking: "PbMHke3jW25J6hSOA",
+  trip: "Y60CBfEPblopOe9P3",
+  expedia: "6I1hBKNMgBNHeYxuL",
+  yelp: "gTYnt7Xc2Qjw8eljO",
 } as const;
 
 export const runtime = "nodejs";
@@ -105,7 +122,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as {
       hotel_id?: string;
       url?: string;
-      platform?: "tripadvisor" | "google" | "booking";
+      platform?: "tripadvisor" | "google" | "booking" | "trip" | "expedia" | "yelp";
       sync_type?: "initial" | "incremental" | "full";
     };
     const { hotel_id, url } = body;
@@ -115,7 +132,13 @@ export async function POST(request: NextRequest) {
         ? "google"
         : body.platform === "booking"
           ? "booking"
-          : "tripadvisor";
+          : body.platform === "trip"
+            ? "trip"
+            : body.platform === "expedia"
+              ? "expedia"
+              : body.platform === "yelp"
+                ? "yelp"
+                : "tripadvisor";
 
     if (!hotel_id || !url) {
       return NextResponse.json(
@@ -185,11 +208,27 @@ export async function POST(request: NextRequest) {
               sortReviewsBy: "f_recent_desc",
               startUrls: [{ url }],
             }
-        : {
-            startUrls: [{ url }],
-            maxReviews,
-            language: "en",
-          };
+          : platform === "trip"
+            ? {
+                startUrls: [{ url }],
+                maxReviews,
+                language: "en",
+              }
+            : platform === "expedia"
+              ? {
+                  startUrls: [{ url }],
+                  maxReviews,
+                }
+              : platform === "yelp"
+                ? {
+                    startUrls: [{ url }],
+                    maxReviews,
+                  }
+              : {
+                  startUrls: [{ url }],
+                  maxReviews,
+                  language: "en",
+                };
 
     const startRunRes = await fetch(
       `${APIFY_BASE_URL}/acts/${encodeURIComponent(actorId)}/runs`,
@@ -322,7 +361,13 @@ export async function POST(request: NextRequest) {
           ? String(
               reviewerNameFromField(item.reviewer) || item.name || "Anonymous",
             )
-        : item.user?.name ?? item.user?.username ?? "Anonymous";
+          : platform === "trip"
+            ? String(item.reviewerName || item.name || reviewerNameFromField(item.reviewer) || "Anonymous")
+            : platform === "expedia"
+              ? String(item.reviewerName || item.displayName || item.name || "Anonymous")
+              : platform === "yelp"
+                ? String(item.reviewerName || item.userName || item.name || "Anonymous")
+              : item.user?.name ?? item.user?.username ?? "Anonymous";
 
     const rowsToInsert: Array<{
       hotel_id: string;
@@ -346,7 +391,21 @@ export async function POST(request: NextRequest) {
             ? (item.date as string | null | undefined) ??
               (item.reviewDate as string | null | undefined) ??
               null
-          : item.publishedDate ?? null;
+            : platform === "trip"
+              ? (item.reviewDate as string | null | undefined) ??
+                (item.publishedDate as string | null | undefined) ??
+                (item.date as string | null | undefined) ??
+                null
+              : platform === "expedia"
+                ? (item.submissionDate as string | null | undefined) ??
+                  (item.reviewDate as string | null | undefined) ??
+                  (item.date as string | null | undefined) ??
+                  null
+                : platform === "yelp"
+                  ? (item.date as string | null | undefined) ??
+                    (item.publishedDate as string | null | undefined) ??
+                    null
+              : item.publishedDate ?? null;
       // For incremental sync, skip reviews older than last sync
       if (sync_type === "incremental" && lastSyncAt && reviewDate) {
         if (new Date(reviewDate) < new Date(lastSyncAt)) {
@@ -359,6 +418,15 @@ export async function POST(request: NextRequest) {
           ? normalizeRating(item.stars || item.rating || null)
           : platform === "booking"
             ? bookingRatingFromItem(item)
+            : platform === "expedia"
+              ? (() => {
+                  // Expedia uses 1–10 scale → divide by 2 for 1–5
+                  const raw = item.rating;
+                  if (raw === null || raw === undefined || raw === "") return null;
+                  const v = parseFloat(String(raw));
+                  if (Number.isNaN(v)) return null;
+                  return Math.max(1, Math.min(5, Math.round(v / 2)));
+                })()
           : normalizeRating(item.rating);
       const reviewText =
         platform === "google"
@@ -373,12 +441,20 @@ export async function POST(request: NextRequest) {
                     : undefined;
                 return nested || item.text || item.positive || null;
               })()
+            : platform === "trip"
+              ? item.text ?? item.reviewText ?? item.content ?? null
+              : platform === "expedia"
+                ? item.reviewText ?? item.text ?? item.summary ?? null
+                : platform === "yelp"
+                  ? item.text ?? item.reviewText ?? item.content ?? null
           : item.text ?? null;
       const responded =
         platform === "google"
           ? Boolean(item.responseFromOwnerText)
           : platform === "booking"
             ? Boolean(item.ownerResponse)
+            : platform === "yelp"
+              ? Boolean(item.businessResponse)
           : Boolean(item.ownerResponse);
 
       const reviewUrl = (item.url || item.reviewUrl || null) as string | null;
