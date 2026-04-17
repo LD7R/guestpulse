@@ -2,325 +2,718 @@
 
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState, useTransition } from "react";
+import { useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 
-const glassCard: CSSProperties = {
-  background: "var(--bg-card)",
-  border: "1px solid var(--border)",
-  borderRadius: "8px",
+/* ─── tokens ─────────────────────────────────────────────── */
+const BG = "#0d0d0d";
+const CARD = "#141414";
+const BORDER = "#1e1e1e";
+const TEXT = "#f0f0f0";
+const MUTED = "#888888";
+const GREEN = "#4ade80";
+const DANGER = "#f87171";
+
+/* ─── shared styles ──────────────────────────────────────── */
+const card: CSSProperties = {
+  background: CARD,
+  border: `1px solid ${BORDER}`,
+  borderRadius: 10,
   width: "100%",
-  maxWidth: "640px",
+  maxWidth: 560,
   padding: "40px 40px",
   boxSizing: "border-box",
 };
 
-const glassInput: CSSProperties = {
+const input: CSSProperties = {
   width: "100%",
-  background: "var(--bg-secondary)",
-  border: "1px solid var(--border)",
-  borderRadius: "6px",
+  background: "#0d0d0d",
+  border: `1px solid ${BORDER}`,
+  borderRadius: 6,
   padding: "10px 14px",
-  color: "var(--text-primary)",
-  fontSize: "13px",
+  color: TEXT,
+  fontSize: 13,
   outline: "none",
   boxSizing: "border-box",
 };
 
-const primaryBtn: CSSProperties = {
-  width: "100%",
-  height: "48px",
-  background: "var(--text-primary)",
+const btn: CSSProperties = {
+  height: 44,
+  borderRadius: 6,
   border: "none",
-  borderRadius: "6px",
-  color: "var(--bg-primary)",
   fontWeight: 600,
-  fontSize: "13px",
+  fontSize: 13,
   cursor: "pointer",
-  transition: "background 0.15s ease",
+};
+
+const primaryBtn: CSSProperties = {
+  ...btn,
+  background: TEXT,
+  color: BG,
+  padding: "0 24px",
+};
+
+const ghostBtn: CSSProperties = {
+  ...btn,
+  background: "transparent",
+  border: `1px solid ${BORDER}`,
+  color: MUTED,
+  padding: "0 20px",
 };
 
 const labelStyle: CSSProperties = {
   display: "block",
-  fontSize: "13px",
-  color: "rgba(255, 255, 255, 0.6)",
-  marginBottom: "6px",
+  fontSize: 12,
+  color: MUTED,
+  marginBottom: 6,
+  fontWeight: 500,
 };
 
-export default function HotelOnboardingPage() {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+/* ─── badge component helpers ────────────────────────────── */
+function Badge({ label, color }: { label: string; color: string }) {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "2px 6px",
+        borderRadius: 4,
+        fontSize: 10,
+        fontWeight: 700,
+        color: BG,
+        background: color,
+        marginRight: 4,
+        letterSpacing: "0.03em",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
 
-  const [name, setName] = useState("");
-  const [tripadvisorUrl, setTripadvisorUrl] = useState("");
-  const [googleUrl, setGoogleUrl] = useState("");
-  const [bookingUrl, setBookingUrl] = useState("");
-  const [error, setError] = useState<string | null>(null);
+/* ─── progress indicator ─────────────────────────────────── */
+function StepIndicator({ step, total }: { step: number; total: number }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        justifyContent: "center",
+        marginBottom: 32,
+      }}
+    >
+      {Array.from({ length: total }, (_, i) => {
+        const idx = i + 1;
+        const done = idx < step;
+        const active = idx === step;
+        return (
+          <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 12,
+                fontWeight: 700,
+                background: done ? GREEN : active ? TEXT : "#2a2a2a",
+                color: done || active ? BG : "#555555",
+                border: done ? "none" : active ? "none" : `1px solid #333333`,
+                transition: "all 0.2s",
+              }}
+            >
+              {done ? "✓" : idx}
+            </div>
+            {i < total - 1 && (
+              <div
+                style={{
+                  width: 32,
+                  height: 2,
+                  background: done ? GREEN : "#2a2a2a",
+                  borderRadius: 1,
+                  transition: "background 0.3s",
+                }}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
+/* ─── platform rows for step 3 ──────────────────────────── */
+type SyncStatus = "idle" | "syncing" | "done" | "error";
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+function platformLabel(p: string): string {
+  const map: Record<string, string> = {
+    tripadvisor: "TripAdvisor",
+    google: "Google",
+    booking: "Booking.com",
+    trip: "Trip.com",
+    expedia: "Expedia",
+    yelp: "Yelp",
+  };
+  return map[p] ?? p;
+}
 
-    if (!url || !anonKey) {
-      setError("Supabase is not configured in the environment.");
-      return;
-    }
+function platformColor(p: string): string {
+  const map: Record<string, string> = {
+    tripadvisor: GREEN,
+    google: "#60a5fa",
+    booking: "#a78bfa",
+    trip: "#60a5fa",
+    expedia: "#a78bfa",
+    yelp: DANGER,
+  };
+  return map[p] ?? "#888888";
+}
 
-    const supabase = createBrowserClient(url, anonKey);
+function SyncRow({
+  platform,
+  status,
+  count,
+}: {
+  platform: string;
+  status: SyncStatus;
+  count?: number;
+}) {
+  const color = platformColor(platform);
+  const label = platformLabel(platform);
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      setError(userError?.message ?? "You must be signed in to continue.");
-      return;
-    }
-
-    const { error: insertError } = await supabase.from("hotels").insert({
-      name,
-      tripadvisor_url: tripadvisorUrl || null,
-      google_url: googleUrl || null,
-      booking_url: bookingUrl || null,
-      user_id: user.id,
-    });
-
-    if (insertError) {
-      setError(insertError.message);
-      return;
-    }
-
-    startTransition(() => {
-      router.replace("/dashboard");
-      router.refresh();
-    });
+  let statusText = "Waiting";
+  let statusColor = "#555555";
+  if (status === "syncing") {
+    statusText = "Syncing…";
+    statusColor = "#fbbf24";
+  } else if (status === "done") {
+    statusText = count !== undefined ? `${count} reviews` : "Done";
+    statusColor = GREEN;
+  } else if (status === "error") {
+    statusText = "Failed";
+    statusColor = DANGER;
   }
-
-  const isSubmitting = isPending;
-
-  const inputFocus = (el: React.FocusEvent<HTMLInputElement>) => {
-    el.target.style.borderColor = "#4a4a4a";
-  };
-  const inputBlur = (el: React.FocusEvent<HTMLInputElement>) => {
-    el.target.style.borderColor = "var(--border)";
-  };
 
   return (
     <div
-      className="onboarding-page"
       style={{
-        position: "relative",
-        width: "100%",
-        minHeight: "100vh",
         display: "flex",
         alignItems: "center",
-        justifyContent: "center",
-        padding: "40px 48px",
-        overflow: "hidden",
+        gap: 12,
+        padding: "10px 0",
+        borderBottom: `1px solid ${BORDER}`,
+      }}
+    >
+      <div
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          background: status === "idle" ? "#333333" : color,
+          flexShrink: 0,
+        }}
+      />
+      <span style={{ fontSize: 13, color: TEXT, flex: 1 }}>{label}</span>
+      <span style={{ fontSize: 12, color: statusColor, fontWeight: 500 }}>{statusText}</span>
+    </div>
+  );
+}
+
+/* ─── main page ──────────────────────────────────────────── */
+export default function OnboardingPage() {
+  const router = useRouter();
+  const [step, setStep] = useState(1);
+
+  /* step 2 state */
+  const [hotelName, setHotelName] = useState("");
+  const [tripadvisorUrl, setTripadvisorUrl] = useState("");
+  const [googleUrl, setGoogleUrl] = useState("");
+  const [bookingUrl, setBookingUrl] = useState("");
+  const [tripUrl, setTripUrl] = useState("");
+  const [expediaUrl, setExpediaUrl] = useState("");
+  const [yelpUrl, setYelpUrl] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedHotelId, setSavedHotelId] = useState<string | null>(null);
+
+  /* step 3 state */
+  const [syncStatus, setSyncStatus] = useState<Record<string, SyncStatus>>({});
+  const [syncCounts, setSyncCounts] = useState<Record<string, number>>({});
+  const [syncStarted, setSyncStarted] = useState(false);
+  const [syncDone, setSyncDone] = useState(false);
+  const [totalSynced, setTotalSynced] = useState(0);
+
+  /* ── step 2: save hotel ─────────────────────────────────── */
+  async function saveHotel() {
+    if (!hotelName.trim()) {
+      setSaveError("Hotel name is required.");
+      return;
+    }
+    const hasUrl =
+      tripadvisorUrl.trim() ||
+      googleUrl.trim() ||
+      bookingUrl.trim() ||
+      tripUrl.trim() ||
+      expediaUrl.trim() ||
+      yelpUrl.trim();
+    if (!hasUrl) {
+      setSaveError("Add at least one platform URL so we can fetch your reviews.");
+      return;
+    }
+
+    setSaving(true);
+    setSaveError(null);
+
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser();
+    if (userErr || !user) {
+      setSaveError(userErr?.message ?? "Not signed in.");
+      setSaving(false);
+      return;
+    }
+
+    const hotelData: Record<string, unknown> = {
+      name: hotelName.trim(),
+      tripadvisor_url: tripadvisorUrl.trim() || null,
+      google_url: googleUrl.trim() || null,
+      booking_url: bookingUrl.trim() || null,
+      trip_url: tripUrl.trim() || null,
+      expedia_url: expediaUrl.trim() || null,
+      yelp_url: yelpUrl.trim() || null,
+    };
+
+    /* extract coords from Google Maps URL */
+    const coordMatch = googleUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (coordMatch) {
+      hotelData.latitude = parseFloat(coordMatch[1]!);
+      hotelData.longitude = parseFloat(coordMatch[2]!);
+    }
+
+    const { data: existing } = await supabase
+      .from("hotels")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    let hotelId: string | null = null;
+    if (existing?.id) {
+      const { error } = await supabase
+        .from("hotels")
+        .update(hotelData)
+        .eq("user_id", user.id);
+      if (error) {
+        setSaveError(error.message);
+        setSaving(false);
+        return;
+      }
+      hotelId = existing.id as string;
+    } else {
+      const { data: inserted, error } = await supabase
+        .from("hotels")
+        .insert({ ...hotelData, user_id: user.id })
+        .select("id")
+        .single();
+      if (error) {
+        setSaveError(error.message);
+        setSaving(false);
+        return;
+      }
+      hotelId = (inserted as { id: string }).id;
+    }
+
+    setSavedHotelId(hotelId);
+    setSaving(false);
+
+    /* initialise sync status rows for the platforms that have URLs */
+    const initial: Record<string, SyncStatus> = {};
+    if (tripadvisorUrl.trim()) initial.tripadvisor = "idle";
+    if (googleUrl.trim()) initial.google = "idle";
+    if (bookingUrl.trim()) initial.booking = "idle";
+    if (tripUrl.trim()) initial.trip = "idle";
+    if (expediaUrl.trim()) initial.expedia = "idle";
+    if (yelpUrl.trim()) initial.yelp = "idle";
+    setSyncStatus(initial);
+
+    setStep(3);
+  }
+
+  /* ── step 3: sync reviews ───────────────────────────────── */
+  async function startSync() {
+    if (!savedHotelId) return;
+    setSyncStarted(true);
+
+    const platformUrlMap: Record<string, string> = {};
+    if (tripadvisorUrl.trim()) platformUrlMap.tripadvisor = tripadvisorUrl.trim();
+    if (googleUrl.trim()) platformUrlMap.google = googleUrl.trim();
+    if (bookingUrl.trim()) platformUrlMap.booking = bookingUrl.trim();
+    if (tripUrl.trim()) platformUrlMap.trip = tripUrl.trim();
+    if (expediaUrl.trim()) platformUrlMap.expedia = expediaUrl.trim();
+    if (yelpUrl.trim()) platformUrlMap.yelp = yelpUrl.trim();
+
+    const platforms = Object.entries(platformUrlMap);
+    let grandTotal = 0;
+
+    await Promise.allSettled(
+      platforms.map(async ([platform, url]) => {
+        setSyncStatus((prev) => ({ ...prev, [platform]: "syncing" }));
+        try {
+          const res = await fetch("/api/scrape-reviews", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              hotel_id: savedHotelId,
+              url,
+              platform,
+              sync_type: "initial",
+            }),
+          });
+          const json = (await res.json()) as { count?: number; error?: string };
+          const count = json.count ?? 0;
+          grandTotal += count;
+          setSyncCounts((prev) => ({ ...prev, [platform]: count }));
+          setSyncStatus((prev) => ({ ...prev, [platform]: "done" }));
+        } catch {
+          setSyncStatus((prev) => ({ ...prev, [platform]: "error" }));
+        }
+      }),
+    );
+
+    setTotalSynced(grandTotal);
+    setSyncDone(true);
+
+    /* background classify */
+    void fetch("/api/classify-reviews", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hotel_id: savedHotelId }),
+    });
+  }
+
+  /* ─── render ──────────────────────────────────────────── */
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: BG,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
         boxSizing: "border-box",
       }}
     >
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-            @keyframes ob-spin { to { transform: rotate(360deg) } }
-            @media (max-width: 768px) {
-              .onboarding-page {
-                padding: 20px 16px 100px !important;
-              }
-            }
-          `,
+      {/* top bar */}
+      <div
+        style={{
+          width: "100%",
+          height: 52,
+          borderBottom: `1px solid ${BORDER}`,
+          display: "flex",
+          alignItems: "center",
+          padding: "0 24px",
+          flexShrink: 0,
         }}
-      />
-      <div style={glassCard}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "10px",
-            marginBottom: "8px",
-          }}
-        >
-          <span
-            style={{
-              width: "8px",
-              height: "8px",
-              borderRadius: "50%",
-              background: "#6366f1",
-              boxShadow: "0 0 12px rgba(99, 102, 241, 0.8)",
-            }}
-          />
-          <span
-            style={{
-              fontSize: "20px",
-              fontWeight: 700,
-              color: "#ffffff",
-              letterSpacing: "-0.03em",
-            }}
-          >
-            GuestPulse
-          </span>
-        </div>
-        <h1
-          style={{
-            textAlign: "center",
-            fontSize: "26px",
-            fontWeight: 700,
-            letterSpacing: "-0.5px",
-            color: "rgba(255, 255, 255, 0.92)",
-            marginBottom: "4px",
-          }}
-        >
-          Hotel onboarding
-        </h1>
-        <p
-          style={{
-            textAlign: "center",
-            fontSize: "14px",
-            color: "rgba(255, 255, 255, 0.4)",
-            marginBottom: "36px",
-            lineHeight: 1.6,
-          }}
-        >
-          Add your hotel details to get started.
-        </p>
+      >
+        <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>GuestPulse</span>
+      </div>
 
-        <form onSubmit={onSubmit}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: "16px",
-              marginBottom: "16px",
-            }}
-          >
-            <div>
-              <label htmlFor="name" style={labelStyle}>
-                Hotel name
-              </label>
-              <input
-                id="name"
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="My Boutique Hotel"
-                style={glassInput}
-                onFocus={inputFocus}
-                onBlur={inputBlur}
-              />
-            </div>
-            <div>
-              <label htmlFor="tripadvisor" style={labelStyle}>
-                TripAdvisor URL
-              </label>
-              <input
-                id="tripadvisor"
-                type="url"
-                value={tripadvisorUrl}
-                onChange={(e) => setTripadvisorUrl(e.target.value)}
-                placeholder="https://tripadvisor.com/hotel/..."
-                style={glassInput}
-                onFocus={inputFocus}
-                onBlur={inputBlur}
-              />
-            </div>
-          </div>
-
-          <div style={{ marginBottom: "16px" }}>
-            <label htmlFor="google" style={labelStyle}>
-              Google Maps URL
-            </label>
-            <input
-              id="google"
-              type="url"
-              value={googleUrl}
-              onChange={(e) => setGoogleUrl(e.target.value)}
-              placeholder="https://maps.google.com/..."
-              style={glassInput}
-              onFocus={inputFocus}
-              onBlur={inputBlur}
-            />
-          </div>
-
-          <div style={{ marginBottom: "16px" }}>
-            <label htmlFor="booking" style={labelStyle}>
-              Booking.com URL
-            </label>
-            <input
-              id="booking"
-              type="url"
-              value={bookingUrl}
-              onChange={(e) => setBookingUrl(e.target.value)}
-              placeholder="https://booking.com/hotel/..."
-              style={glassInput}
-              onFocus={inputFocus}
-              onBlur={inputBlur}
-            />
-          </div>
-
-          {error ? (
-            <div
+      {/* content */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "100%",
+          padding: "40px 24px",
+          boxSizing: "border-box",
+        }}
+      >
+        {step === 1 && (
+          <div style={card}>
+            <StepIndicator step={1} total={3} />
+            <h1
               style={{
-                borderRadius: "12px",
-                padding: "12px 14px",
-                marginBottom: "16px",
-                fontSize: "13px",
-                color: "rgba(239, 68, 68, 0.95)",
-                background: "rgba(239, 68, 68, 0.08)",
-                border: "1px solid rgba(239, 68, 68, 0.2)",
+                fontSize: 24,
+                fontWeight: 700,
+                color: TEXT,
+                margin: "0 0 8px",
+                letterSpacing: "-0.4px",
               }}
             >
-              {error}
-            </div>
-          ) : null}
+              Welcome to GuestPulse
+            </h1>
+            <p style={{ fontSize: 14, color: MUTED, margin: "0 0 28px", lineHeight: 1.6 }}>
+              Your AI-powered review intelligence platform. Set up in 2 minutes.
+            </p>
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            style={{
-              ...primaryBtn,
-              opacity: isSubmitting ? 0.65 : 1,
-              cursor: isSubmitting ? "not-allowed" : "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "10px",
-            }}
-            onMouseEnter={(e) => {
-              if (!isSubmitting) {
-                e.currentTarget.style.background = "rgba(99, 102, 241, 1)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "rgba(99, 102, 241, 0.8)";
-            }}
-          >
-            {isSubmitting ? (
-              <>
-                <span
+            <div style={{ marginBottom: 32 }}>
+              {[
+                "Aggregate reviews from TripAdvisor, Google, Booking.com, and more",
+                "AI sentiment analysis across all languages",
+                "Identify your top complaint topics and strengths",
+                "Track how you compare against local competitors",
+                "Auto-sync keeps reviews fresh — no manual work",
+              ].map((feat) => (
+                <div
+                  key={feat}
                   style={{
-                    width: "18px",
-                    height: "18px",
-                    borderRadius: "50%",
-                    border: "2px solid rgba(255,255,255,0.25)",
-                    borderTopColor: "#ffffff",
-                    animation: "ob-spin 0.7s linear infinite",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 10,
+                    marginBottom: 12,
                   }}
+                >
+                  <span style={{ color: GREEN, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>
+                    ✓
+                  </span>
+                  <span style={{ fontSize: 13, color: "#cccccc", lineHeight: 1.5 }}>{feat}</span>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              style={{ ...primaryBtn, width: "100%", height: 48 }}
+            >
+              Get started →
+            </button>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div style={card}>
+            <StepIndicator step={2} total={3} />
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: TEXT, margin: "0 0 6px" }}>
+              Set up your hotel
+            </h2>
+            <p style={{ fontSize: 13, color: MUTED, margin: "0 0 28px", lineHeight: 1.5 }}>
+              Add your hotel name and paste your listing URLs.
+            </p>
+
+            {/* Hotel name */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={labelStyle} htmlFor="ob-name">
+                Hotel name <span style={{ color: DANGER }}>*</span>
+              </label>
+              <input
+                id="ob-name"
+                type="text"
+                placeholder="The Grand Hotel"
+                value={hotelName}
+                onChange={(e) => setHotelName(e.target.value)}
+                style={input}
+              />
+            </div>
+
+            {/* Platform URLs */}
+            {[
+              { id: "ob-ta", label: "TripAdvisor URL", badge: "TA", color: GREEN, value: tripadvisorUrl, set: setTripadvisorUrl, placeholder: "https://tripadvisor.com/Hotel_Review-..." },
+              { id: "ob-go", label: "Google Maps URL", badge: "GO", color: "#60a5fa", value: googleUrl, set: setGoogleUrl, placeholder: "https://maps.google.com/..." },
+              { id: "ob-bk", label: "Booking.com URL", badge: "BK", color: "#a78bfa", value: bookingUrl, set: setBookingUrl, placeholder: "https://booking.com/hotel/..." },
+              { id: "ob-tc", label: "Trip.com URL", badge: "TC", color: "#60a5fa", value: tripUrl, set: setTripUrl, placeholder: "https://trip.com/hotels/..." },
+              { id: "ob-ex", label: "Expedia URL", badge: "EX", color: "#a78bfa", value: expediaUrl, set: setExpediaUrl, placeholder: "https://expedia.com/..." },
+              { id: "ob-yp", label: "Yelp URL", badge: "YP", color: DANGER, value: yelpUrl, set: setYelpUrl, placeholder: "https://yelp.com/biz/..." },
+            ].map(({ id, label, badge, color, value, set, placeholder }) => (
+              <div key={id} style={{ marginBottom: 12 }}>
+                <label style={labelStyle} htmlFor={id}>
+                  <Badge label={badge} color={color} />
+                  {label}
+                </label>
+                <input
+                  id={id}
+                  type="url"
+                  placeholder={placeholder}
+                  value={value}
+                  onChange={(e) => set(e.target.value)}
+                  style={input}
                 />
-                Saving…
-              </>
-            ) : (
-              "Save hotel"
+              </div>
+            ))}
+
+            {saveError && (
+              <div
+                style={{
+                  background: "rgba(248,113,113,0.08)",
+                  border: "1px solid rgba(248,113,113,0.2)",
+                  borderRadius: 6,
+                  padding: "10px 14px",
+                  fontSize: 13,
+                  color: DANGER,
+                  marginBottom: 16,
+                }}
+              >
+                {saveError}
+              </div>
             )}
-          </button>
-        </form>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                style={ghostBtn}
+              >
+                ← Back
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveHotel()}
+                disabled={saving}
+                style={{
+                  ...primaryBtn,
+                  flex: 1,
+                  opacity: saving ? 0.65 : 1,
+                  cursor: saving ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                }}
+              >
+                {saving ? (
+                  <>
+                    <span
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: "50%",
+                        border: "2px solid rgba(0,0,0,0.25)",
+                        borderTopColor: BG,
+                        display: "inline-block",
+                        animation: "ob-spin 0.7s linear infinite",
+                      }}
+                    />
+                    Saving…
+                  </>
+                ) : (
+                  "Continue →"
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div style={card}>
+            <StepIndicator step={3} total={3} />
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: TEXT, margin: "0 0 6px" }}>
+              Sync your first reviews
+            </h2>
+            <p style={{ fontSize: 13, color: MUTED, margin: "0 0 24px", lineHeight: 1.5 }}>
+              We'll pull your existing reviews from each platform. This may take a few minutes.
+            </p>
+
+            {/* Platform status rows */}
+            <div style={{ marginBottom: 24 }}>
+              {Object.keys(syncStatus).map((platform) => (
+                <SyncRow
+                  key={platform}
+                  platform={platform}
+                  status={syncStatus[platform]!}
+                  count={syncCounts[platform]}
+                />
+              ))}
+            </div>
+
+            {/* Sync result summary */}
+            {syncDone && (
+              <div
+                style={{
+                  background: "rgba(74,222,128,0.06)",
+                  border: `1px solid rgba(74,222,128,0.2)`,
+                  borderRadius: 8,
+                  padding: "14px 16px",
+                  marginBottom: 20,
+                  fontSize: 13,
+                  color: GREEN,
+                  fontWeight: 500,
+                }}
+              >
+                ✓ Synced {totalSynced} review{totalSynced !== 1 ? "s" : ""} across{" "}
+                {Object.keys(syncStatus).length} platform
+                {Object.keys(syncStatus).length !== 1 ? "s" : ""}. AI classification is running in
+                the background.
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 10 }}>
+              {!syncStarted && (
+                <button
+                  type="button"
+                  onClick={() => void startSync()}
+                  style={{ ...primaryBtn, flex: 1, height: 48 }}
+                >
+                  Sync all reviews now
+                </button>
+              )}
+
+              {syncStarted && !syncDone && (
+                <div
+                  style={{
+                    flex: 1,
+                    height: 48,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 10,
+                    fontSize: 13,
+                    color: "#fbbf24",
+                    fontWeight: 500,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: "50%",
+                      border: "2px solid rgba(251,191,36,0.3)",
+                      borderTopColor: "#fbbf24",
+                      display: "inline-block",
+                      animation: "ob-spin 0.7s linear infinite",
+                    }}
+                  />
+                  Syncing reviews…
+                </div>
+              )}
+
+              {syncDone && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard")}
+                  style={{ ...primaryBtn, flex: 1, height: 48 }}
+                >
+                  Go to dashboard →
+                </button>
+              )}
+
+              {!syncDone && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard")}
+                  style={{ ...ghostBtn, flexShrink: 0 }}
+                >
+                  Skip for now
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
+
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `@keyframes ob-spin { to { transform: rotate(360deg); } }`,
+        }}
+      />
     </div>
   );
 }

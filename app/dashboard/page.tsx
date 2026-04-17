@@ -356,28 +356,7 @@ export default function DashboardOverviewPage() {
 
     const hotelIds = (hotels ?? []).map((h: Hotel) => h.id);
     if (hotelIds.length === 0) {
-      setHasHotel(false);
-      setPrimaryHotel(null);
-      setTotalReviews(0);
-      setAvgRating(null);
-      setNeedingResponse(0);
-      setWeekNew(0);
-      setAnalyticsRows([]);
-      setUrgentCount(0);
-      setPlatformHealth([]);
-      setCompetitors([]);
-      setReviewsTimeSeries([]);
-      setUrgentReviewsList([]);
-      setCompetitorReviewsForTrend([]);
-      const neutral = { text: "— same as last week", color: "#555555" };
-      setTrendTotal(neutral);
-      setTrendAvg(neutral);
-      setTrendNeeding(neutral);
-      setTrendWeek(neutral);
-      setRatingMonthTrend({ text: "—", color: "#555555" });
-      setResponseRatePct(null);
-      setWeightedTotalCount(null);
-      setWeightedHistoricalCount(null);
+      router.push("/dashboard/onboarding");
       return;
     }
 

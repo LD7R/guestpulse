@@ -69,6 +69,8 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
 
+  const isOnboarding = pathname === "/dashboard/onboarding";
+
   const [email, setEmail] = useState<string | null>(null);
   const [initials, setInitials] = useState<string>("?");
   const [inboxUnrespondedCount, setInboxUnrespondedCount] = useState(0);
@@ -306,6 +308,8 @@ export default function DashboardLayout({
       </Link>
     );
   };
+
+  if (isOnboarding) return <>{children}</>;
 
   return (
     <div style={{ minHeight: "100vh" }}>
