@@ -36,6 +36,36 @@ type HotelRow = {
   room_count: number | null;
   latitude: number | null;
   longitude: number | null;
+  active_platforms: unknown;
+};
+
+type ActivePlatforms = {
+  tripadvisor: boolean;
+  google: boolean;
+  booking: boolean;
+  trip: boolean;
+  expedia: boolean;
+  yelp: boolean;
+};
+
+type HotelSearchResult = {
+  name: string;
+  address: string | null;
+  city: string | null;
+  country: string | null;
+  website: string | null;
+  phone: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  google_url: string | null;
+  avg_rating: number | null;
+  total_reviews: number | null;
+  tripadvisor_url: string | null;
+  booking_url: string | null;
+  yelp_url: string | null;
+  trip_url: string | null;
+  expedia_url: string | null;
+  confidence: Record<string, "high" | "medium" | "low">;
 };
 
 const glass: CSSProperties = {
@@ -204,6 +234,26 @@ export default function SettingsPage() {
   const [expediaUrl, setExpediaUrl] = useState("");
   const [yelpUrl, setYelpUrl] = useState("");
 
+  // Hotel search state
+  const [searchName, setSearchName] = useState("");
+  const [searchCity, setSearchCity] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchStep, setSearchStep] = useState(0);
+  const [searchResult, setSearchResult] = useState<HotelSearchResult | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [editingUrls, setEditingUrls] = useState<Record<string, boolean>>({});
+  const [editedUrls, setEditedUrls] = useState<Record<string, string>>({});
+
+  // Active platforms
+  const [activePlatforms, setActivePlatforms] = useState<ActivePlatforms>({
+    tripadvisor: true,
+    google: true,
+    booking: true,
+    trip: false,
+    expedia: false,
+    yelp: false,
+  });
+
   const [savingAccount, setSavingAccount] = useState(false);
   const [savingHotel, setSavingHotel] = useState(false);
   const [savingNotifications, setSavingNotifications] = useState(false);
@@ -279,6 +329,17 @@ export default function SettingsPage() {
             setExpediaUrl(h.expedia_url || "");
             setYelpUrl(h.yelp_url || "");
             setResponseSignature(h.response_signature?.trim() || "The Management Team");
+            if (h.active_platforms) {
+              try {
+                const ap =
+                  typeof h.active_platforms === "string"
+                    ? (JSON.parse(h.active_platforms) as ActivePlatforms)
+                    : (h.active_platforms as ActivePlatforms);
+                setActivePlatforms((prev) => ({ ...prev, ...ap }));
+              } catch {
+                // keep defaults
+              }
+            }
           }
         }
       } catch (e) {
@@ -392,6 +453,7 @@ export default function SettingsPage() {
         website: website.trim() || null,
         response_signature: responseSignature.trim() || "The Management Team",
         room_count,
+        active_platforms: activePlatforms,
       };
 
       const coordMatch = googleUrl?.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
@@ -422,6 +484,88 @@ export default function SettingsPage() {
     } finally {
       setSavingHotel(false);
     }
+  }
+
+  async function runHotelSearch() {
+    if (!searchName.trim()) return;
+    setSearching(true);
+    setSearchStep(0);
+    setSearchResult(null);
+    setSearchError(null);
+
+    const stepTimer = window.setInterval(() => {
+      setSearchStep((s) => Math.min(s + 1, 2));
+    }, 1200);
+
+    try {
+      const res = await fetch("/api/search-hotel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hotel_name: searchName.trim(),
+          city: searchCity.trim() || undefined,
+        }),
+      });
+      const data = (await res.json()) as
+        | { success: true; hotel: HotelSearchResult }
+        | { success: false; error: string };
+
+      if (data.success) {
+        setSearchResult(data.hotel);
+        setEditedUrls({
+          tripadvisor: data.hotel.tripadvisor_url ?? "",
+          google: data.hotel.google_url ?? "",
+          booking: data.hotel.booking_url ?? "",
+          trip: data.hotel.trip_url ?? "",
+          expedia: data.hotel.expedia_url ?? "",
+          yelp: data.hotel.yelp_url ?? "",
+        });
+      } else {
+        setSearchError(data.error);
+      }
+    } catch {
+      setSearchError("Search failed. Please try again.");
+    } finally {
+      window.clearInterval(stepTimer);
+      setSearching(false);
+    }
+  }
+
+  function applyAllUrls() {
+    if (!searchResult) return;
+    const r = searchResult;
+    const eu = editedUrls;
+    let applied = 0;
+    if (eu.tripadvisor ?? r.tripadvisor_url) {
+      setTripadvisorUrl(eu.tripadvisor || r.tripadvisor_url || "");
+      applied++;
+    }
+    if (eu.google ?? r.google_url) {
+      setGoogleUrl(eu.google || r.google_url || "");
+      applied++;
+    }
+    if (eu.booking ?? r.booking_url) {
+      setBookingUrl(eu.booking || r.booking_url || "");
+      applied++;
+    }
+    if (eu.trip ?? r.trip_url) {
+      setTripUrl(eu.trip || r.trip_url || "");
+      applied++;
+    }
+    if (eu.expedia ?? r.expedia_url) {
+      setExpediaUrl(eu.expedia || r.expedia_url || "");
+      applied++;
+    }
+    if (eu.yelp ?? r.yelp_url) {
+      setYelpUrl(eu.yelp || r.yelp_url || "");
+      applied++;
+    }
+    if (r.city && !city) setCity(r.city);
+    if (r.country && !country) setCountry(r.country);
+    if (r.address && !address) setAddress(r.address);
+    if (r.phone && !phone) setPhone(r.phone);
+    if (r.website && !website) setWebsite(r.website);
+    showToast("success", `✓ ${applied} URLs applied`);
   }
 
   function onSaveNotifications(e: FormEvent<HTMLFormElement>) {
@@ -740,6 +884,360 @@ export default function SettingsPage() {
               Property details, location, and review platform links
             </p>
           </header>
+
+          {/* ── Hotel auto-search ───────────────────────────────── */}
+          <div
+            style={{
+              background: "#141414",
+              border: "1px solid #1e1e1e",
+              borderRadius: 8,
+              padding: "20px 24px",
+              marginBottom: 20,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "#555555",
+                marginBottom: 12,
+              }}
+            >
+              Find your hotel
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input
+                type="text"
+                placeholder="Hotel name e.g. The Grand Hotel"
+                value={searchName}
+                onChange={(e) => setSearchName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void runHotelSearch(); }}
+                style={{
+                  flex: 2,
+                  minWidth: 160,
+                  background: "#111111",
+                  border: "1px solid #2a2a2a",
+                  borderRadius: 6,
+                  padding: "10px 14px",
+                  color: "#f0f0f0",
+                  fontSize: 13,
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+              <input
+                type="text"
+                placeholder="City (optional)"
+                value={searchCity}
+                onChange={(e) => setSearchCity(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void runHotelSearch(); }}
+                style={{
+                  flex: 1,
+                  minWidth: 100,
+                  background: "#111111",
+                  border: "1px solid #2a2a2a",
+                  borderRadius: 6,
+                  padding: "10px 14px",
+                  color: "#f0f0f0",
+                  fontSize: 13,
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+              <button
+                type="button"
+                disabled={searching || !searchName.trim()}
+                onClick={() => void runHotelSearch()}
+                style={{
+                  background: "#f0f0f0",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "10px 20px",
+                  color: "#0d0d0d",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: searching || !searchName.trim() ? "not-allowed" : "pointer",
+                  opacity: searching || !searchName.trim() ? 0.55 : 1,
+                  flexShrink: 0,
+                  fontFamily: "inherit",
+                }}
+              >
+                {searching ? "Searching…" : "Find hotel"}
+              </button>
+            </div>
+
+            {/* Loading steps */}
+            {searching && (
+              <div
+                style={{
+                  marginTop: 12,
+                  background: "#111111",
+                  borderRadius: 6,
+                  padding: 14,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                {[
+                  "⟳ Searching Google Maps…",
+                  "⟳ Finding platform profiles…",
+                  "⟳ Verifying URLs…",
+                ].map((msg, i) =>
+                  searchStep >= i ? (
+                    <div
+                      key={i}
+                      style={{
+                        fontSize: 13,
+                        color: "#888888",
+                        animation: "step-fade-in 0.4s ease",
+                      }}
+                    >
+                      {msg}
+                    </div>
+                  ) : null,
+                )}
+              </div>
+            )}
+
+            {/* Error */}
+            {searchError && !searching && (
+              <div style={{ marginTop: 12, fontSize: 13, color: "#f87171" }}>{searchError}</div>
+            )}
+
+            {/* Results */}
+            {searchResult && !searching && (
+              <div
+                style={{
+                  marginTop: 12,
+                  background: "#0a1a0a",
+                  border: "1px solid #1a3a1a",
+                  borderRadius: 8,
+                  padding: "16px 20px",
+                }}
+              >
+                <div style={{ fontSize: 15, fontWeight: 600, color: "#f0f0f0", marginBottom: 4 }}>
+                  {searchResult.name}
+                </div>
+                {searchResult.address && (
+                  <div style={{ fontSize: 12, color: "#555555", marginBottom: 4 }}>
+                    {searchResult.address}
+                  </div>
+                )}
+                {searchResult.avg_rating && (
+                  <div style={{ fontSize: 12, color: "#888888", marginBottom: 12 }}>
+                    ⭐ {searchResult.avg_rating.toFixed(1)}
+                    {searchResult.total_reviews
+                      ? ` (${searchResult.total_reviews.toLocaleString()} reviews)`
+                      : ""}
+                  </div>
+                )}
+
+                {(
+                  [
+                    { key: "tripadvisor", label: "TripAdvisor", badge: "TA", color: "#4ade80" },
+                    { key: "google", label: "Google", badge: "GO", color: "#60a5fa" },
+                    { key: "booking", label: "Booking.com", badge: "BK", color: "#a78bfa" },
+                    { key: "trip", label: "Trip.com", badge: "TC", color: "#60a5fa" },
+                    { key: "expedia", label: "Expedia", badge: "EX", color: "#a78bfa" },
+                    { key: "yelp", label: "Yelp", badge: "YP", color: "#f87171" },
+                  ] as const
+                ).map(({ key, label, badge, color }) => {
+                  const urlKey = key === "google" ? "google_url" : key === "tripadvisor" ? "tripadvisor_url" : key === "booking" ? "booking_url" : key === "trip" ? "trip_url" : key === "expedia" ? "expedia_url" : "yelp_url";
+                  const foundUrl = searchResult[urlKey as keyof HotelSearchResult] as string | null;
+                  const conf = searchResult.confidence?.[key] as "high" | "medium" | "low" | undefined;
+                  const isEditing = editingUrls[key];
+                  const currentVal = editedUrls[key] ?? foundUrl ?? "";
+
+                  const confStyle =
+                    conf === "high"
+                      ? { bg: "#052e16", color: "#4ade80", label: "High confidence" }
+                      : conf === "medium"
+                        ? { bg: "#1a1200", color: "#fbbf24", label: "Check URL" }
+                        : { bg: "#1a1a1a", color: "#555555", label: "Verify manually" };
+
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 10,
+                        padding: "8px 0",
+                        borderBottom: "1px solid #1a2a1a",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          minWidth: 32,
+                          height: 22,
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: "#0d0d0d",
+                          background: color,
+                          flexShrink: 0,
+                          marginTop: 2,
+                        }}
+                      >
+                        {badge}
+                      </span>
+
+                      {foundUrl || currentVal ? (
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {isEditing ? (
+                            <input
+                              type="url"
+                              value={currentVal}
+                              onChange={(e) =>
+                                setEditedUrls((prev) => ({ ...prev, [key]: e.target.value }))
+                              }
+                              style={{
+                                width: "100%",
+                                background: "#111111",
+                                border: "1px solid #2a2a2a",
+                                borderRadius: 4,
+                                padding: "6px 10px",
+                                color: "#f0f0f0",
+                                fontSize: 12,
+                                outline: "none",
+                                boxSizing: "border-box",
+                              }}
+                            />
+                          ) : (
+                            <span style={{ fontSize: 12, color: "#888888", wordBreak: "break-all" }}>
+                              {currentVal.length > 48
+                                ? `${currentVal.slice(0, 48)}…`
+                                : currentVal}
+                            </span>
+                          )}
+                          {conf && (
+                            <span
+                              style={{
+                                display: "inline-block",
+                                marginLeft: 6,
+                                padding: "1px 6px",
+                                borderRadius: 3,
+                                fontSize: 10,
+                                fontWeight: 600,
+                                background: confStyle.bg,
+                                color: confStyle.color,
+                              }}
+                            >
+                              {confStyle.label}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontSize: 12, color: "#444444" }}>
+                            Not found — add manually
+                          </span>
+                          <input
+                            type="url"
+                            placeholder={`https://...`}
+                            value={editedUrls[key] ?? ""}
+                            onChange={(e) =>
+                              setEditedUrls((prev) => ({ ...prev, [key]: e.target.value }))
+                            }
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              marginTop: 4,
+                              background: "#111111",
+                              border: "1px solid #2a2a2a",
+                              borderRadius: 4,
+                              padding: "6px 10px",
+                              color: "#f0f0f0",
+                              fontSize: 12,
+                              outline: "none",
+                              boxSizing: "border-box",
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                        {(foundUrl || currentVal) && !isEditing && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const val = currentVal || foundUrl || "";
+                              if (key === "tripadvisor") setTripadvisorUrl(val);
+                              else if (key === "google") setGoogleUrl(val);
+                              else if (key === "booking") setBookingUrl(val);
+                              else if (key === "trip") setTripUrl(val);
+                              else if (key === "expedia") setExpediaUrl(val);
+                              else if (key === "yelp") setYelpUrl(val);
+                              showToast("success", `✓ ${label} URL applied`);
+                            }}
+                            style={{
+                              background: "#f0f0f0",
+                              border: "none",
+                              borderRadius: 4,
+                              padding: "4px 10px",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: "#0d0d0d",
+                              cursor: "pointer",
+                              fontFamily: "inherit",
+                            }}
+                          >
+                            ✓ Use
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditingUrls((prev) => ({ ...prev, [key]: !prev[key] }))
+                          }
+                          style={{
+                            background: "transparent",
+                            border: "1px solid #2a2a2a",
+                            borderRadius: 4,
+                            padding: "4px 10px",
+                            fontSize: 11,
+                            fontWeight: 500,
+                            color: "#888888",
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          {isEditing ? "Done" : "Edit"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={applyAllUrls}
+                  style={{
+                    marginTop: 16,
+                    width: "100%",
+                    background: "#f0f0f0",
+                    border: "none",
+                    borderRadius: 6,
+                    padding: "10px 0",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#0d0d0d",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  Apply all URLs →
+                </button>
+              </div>
+            )}
+          </div>
 
           <form onSubmit={onSaveHotel}>
             <div style={{ ...glass, padding: "28px", marginBottom: "20px" }}>
@@ -1189,6 +1687,102 @@ export default function SettingsPage() {
               </div>
             </div>
 
+            {/* Active platforms */}
+            <div style={{ ...glass, padding: "28px", marginBottom: "24px", marginTop: "20px" }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  color: "#555555",
+                  marginBottom: 4,
+                }}
+              >
+                Active platforms
+              </div>
+              <p style={{ fontSize: 12, color: "#444444", margin: "0 0 16px 0" }}>
+                Choose which platforms to sync reviews from
+              </p>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                  gap: 10,
+                }}
+              >
+                {(
+                  [
+                    { key: "tripadvisor" as const, label: "TripAdvisor", badge: "TA", color: "#4ade80", hasUrl: !!tripadvisorUrl.trim() },
+                    { key: "google" as const, label: "Google", badge: "GO", color: "#60a5fa", hasUrl: !!googleUrl.trim() },
+                    { key: "booking" as const, label: "Booking.com", badge: "BK", color: "#a78bfa", hasUrl: !!bookingUrl.trim() },
+                    { key: "trip" as const, label: "Trip.com", badge: "TC", color: "#60a5fa", hasUrl: !!tripUrl.trim() },
+                    { key: "expedia" as const, label: "Expedia", badge: "EX", color: "#a78bfa", hasUrl: !!expediaUrl.trim() },
+                    { key: "yelp" as const, label: "Yelp", badge: "YP", color: "#f87171", hasUrl: !!yelpUrl.trim() },
+                  ] as const
+                ).map(({ key, label, badge, color, hasUrl }) => {
+                  const active = activePlatforms[key];
+                  return (
+                    <div
+                      key={key}
+                      title={!hasUrl ? "Add a URL above to enable this platform" : undefined}
+                      onClick={() => {
+                        if (!hasUrl) return;
+                        setActivePlatforms((prev) => ({ ...prev, [key]: !prev[key] }));
+                      }}
+                      style={{
+                        background: "#111111",
+                        border: `1px solid ${active && hasUrl ? "#4ade80" : "#2a2a2a"}`,
+                        borderRadius: 6,
+                        padding: "10px 14px",
+                        cursor: hasUrl ? "pointer" : "not-allowed",
+                        opacity: hasUrl ? 1 : 0.4,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        userSelect: "none",
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          minWidth: 28,
+                          height: 18,
+                          borderRadius: 3,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: "#0d0d0d",
+                          background: color,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {badge}
+                      </span>
+                      <span style={{ fontSize: 13, color: "#f0f0f0", flex: 1, minWidth: 0 }}>
+                        {label}
+                      </span>
+                      {active && hasUrl ? (
+                        <span style={{ color: "#4ade80", fontSize: 13, flexShrink: 0 }}>✓</span>
+                      ) : (
+                        <span
+                          style={{
+                            width: 14,
+                            height: 14,
+                            borderRadius: "50%",
+                            border: "1px solid #2a2a2a",
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button
                 type="submit"
@@ -1469,14 +2063,12 @@ export default function SettingsPage() {
         dangerouslySetInnerHTML={{
           __html: `
             @keyframes settings-toast-in {
-              from {
-                opacity: 0;
-                transform: translateY(20px);
-              }
-              to {
-                opacity: 1;
-                transform: translateY(0);
-              }
+              from { opacity: 0; transform: translateY(20px); }
+              to { opacity: 1; transform: translateY(0); }
+            }
+            @keyframes step-fade-in {
+              from { opacity: 0; transform: translateX(-6px); }
+              to { opacity: 1; transform: translateX(0); }
             }
             @media (max-width: 768px) {
               .settings-page .settings-form-grid {

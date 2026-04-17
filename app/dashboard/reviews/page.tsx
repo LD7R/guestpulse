@@ -15,6 +15,7 @@ type Hotel = {
   trip_url?: string | null;
   expedia_url?: string | null;
   yelp_url?: string | null;
+  active_platforms?: unknown;
 };
 
 type SyncResult = {
@@ -606,7 +607,7 @@ export default function ReviewsInboxPage() {
 
       const { data: hotel, error: hotelError } = await supabase
         .from("hotels")
-        .select("id, tripadvisor_url, google_url, booking_url, trip_url, expedia_url, yelp_url")
+        .select("id, tripadvisor_url, google_url, booking_url, trip_url, expedia_url, yelp_url, active_platforms")
         .eq("user_id", user.id)
         .limit(1)
         .maybeSingle();
@@ -614,13 +615,19 @@ export default function ReviewsInboxPage() {
       if (hotelError) throw new Error(hotelError.message);
       if (!hotel?.id) throw new Error("No hotel found. Add one in Settings first.");
 
+      const activePlatforms = hotel.active_platforms
+        ? typeof hotel.active_platforms === "string"
+          ? (JSON.parse(hotel.active_platforms) as Record<string, boolean>)
+          : (hotel.active_platforms as Record<string, boolean>)
+        : { tripadvisor: true, google: true, booking: true, trip: false, expedia: false, yelp: false };
+
       const platformsToSync: Array<{ platform: "tripadvisor" | "google" | "booking" | "trip" | "expedia" | "yelp"; url: string }> = [];
-      if (hotel.tripadvisor_url) platformsToSync.push({ platform: "tripadvisor", url: hotel.tripadvisor_url });
-      if (hotel.google_url) platformsToSync.push({ platform: "google", url: hotel.google_url });
-      if (hotel.booking_url) platformsToSync.push({ platform: "booking", url: hotel.booking_url });
-      if (hotel.trip_url) platformsToSync.push({ platform: "trip", url: hotel.trip_url });
-      if (hotel.expedia_url) platformsToSync.push({ platform: "expedia", url: hotel.expedia_url });
-      if (hotel.yelp_url) platformsToSync.push({ platform: "yelp", url: hotel.yelp_url });
+      if (hotel.tripadvisor_url?.trim() && activePlatforms.tripadvisor !== false) platformsToSync.push({ platform: "tripadvisor", url: hotel.tripadvisor_url });
+      if (hotel.google_url?.trim() && activePlatforms.google !== false) platformsToSync.push({ platform: "google", url: hotel.google_url });
+      if (hotel.booking_url?.trim() && activePlatforms.booking !== false) platformsToSync.push({ platform: "booking", url: hotel.booking_url });
+      if (hotel.trip_url?.trim() && activePlatforms.trip !== false) platformsToSync.push({ platform: "trip", url: hotel.trip_url });
+      if (hotel.expedia_url?.trim() && activePlatforms.expedia !== false) platformsToSync.push({ platform: "expedia", url: hotel.expedia_url });
+      if (hotel.yelp_url?.trim() && activePlatforms.yelp !== false) platformsToSync.push({ platform: "yelp", url: hotel.yelp_url });
 
       if (platformsToSync.length === 0) {
         setSyncResult({ timestamp: new Date(), platforms: [], totalNew: 0, totalReviews: reviews.length });

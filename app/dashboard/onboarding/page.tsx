@@ -238,12 +238,73 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [savedHotelId, setSavedHotelId] = useState<string | null>(null);
 
+  /* hotel search state */
+  const [searchCity, setSearchCity] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchStep, setSearchStep] = useState(0);
+  const [searchFound, setSearchFound] = useState<string | null>(null);
+  const [searchErr, setSearchErr] = useState<string | null>(null);
+
   /* step 3 state */
   const [syncStatus, setSyncStatus] = useState<Record<string, SyncStatus>>({});
   const [syncCounts, setSyncCounts] = useState<Record<string, number>>({});
   const [syncStarted, setSyncStarted] = useState(false);
   const [syncDone, setSyncDone] = useState(false);
   const [totalSynced, setTotalSynced] = useState(0);
+
+  /* ── hotel search ───────────────────────────────────────── */
+  async function searchHotel() {
+    if (!hotelName.trim()) return;
+    setSearching(true);
+    setSearchStep(0);
+    setSearchFound(null);
+    setSearchErr(null);
+
+    const timer = window.setInterval(() => setSearchStep((s) => Math.min(s + 1, 2)), 1200);
+
+    try {
+      const res = await fetch("/api/search-hotel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hotel_name: hotelName.trim(),
+          city: searchCity.trim() || undefined,
+        }),
+      });
+      const data = (await res.json()) as
+        | {
+            success: true;
+            hotel: {
+              name: string;
+              google_url: string | null;
+              tripadvisor_url: string | null;
+              booking_url: string | null;
+              trip_url: string | null;
+              expedia_url: string | null;
+              yelp_url: string | null;
+            };
+          }
+        | { success: false; error: string };
+
+      if (data.success) {
+        const h = data.hotel;
+        if (h.google_url) setGoogleUrl(h.google_url);
+        if (h.tripadvisor_url) setTripadvisorUrl(h.tripadvisor_url);
+        if (h.booking_url) setBookingUrl(h.booking_url);
+        if (h.trip_url) setTripUrl(h.trip_url);
+        if (h.expedia_url) setExpediaUrl(h.expedia_url);
+        if (h.yelp_url) setYelpUrl(h.yelp_url);
+        setSearchFound(`✓ Found "${h.name}". Review the URLs below.`);
+      } else {
+        setSearchErr(data.error);
+      }
+    } catch {
+      setSearchErr("Search failed. Please try again.");
+    } finally {
+      window.clearInterval(timer);
+      setSearching(false);
+    }
+  }
 
   /* ── step 2: save hotel ─────────────────────────────────── */
   async function saveHotel() {
@@ -499,6 +560,81 @@ export default function OnboardingPage() {
             <p style={{ fontSize: 13, color: MUTED, margin: "0 0 28px", lineHeight: 1.5 }}>
               Add your hotel name and paste your listing URLs.
             </p>
+
+            {/* Auto-search */}
+            <div
+              style={{
+                background: "#111111",
+                border: `1px solid ${BORDER}`,
+                borderRadius: 8,
+                padding: "16px",
+                marginBottom: 20,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  color: MUTED,
+                  marginBottom: 10,
+                }}
+              >
+                Find your hotel automatically
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input
+                  type="text"
+                  placeholder="Hotel name"
+                  value={hotelName}
+                  onChange={(e) => setHotelName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") void searchHotel(); }}
+                  style={{ ...input, flex: 2, minWidth: 140 }}
+                />
+                <input
+                  type="text"
+                  placeholder="City (optional)"
+                  value={searchCity}
+                  onChange={(e) => setSearchCity(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") void searchHotel(); }}
+                  style={{ ...input, flex: 1, minWidth: 100 }}
+                />
+                <button
+                  type="button"
+                  disabled={searching || !hotelName.trim()}
+                  onClick={() => void searchHotel()}
+                  style={{
+                    ...primaryBtn,
+                    flexShrink: 0,
+                    opacity: searching || !hotelName.trim() ? 0.55 : 1,
+                    cursor: searching || !hotelName.trim() ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {searching ? "Searching…" : "Find →"}
+                </button>
+              </div>
+
+              {searching && (
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {["⟳ Searching Google Maps…", "⟳ Finding platform profiles…", "⟳ Verifying URLs…"].map(
+                    (msg, i) =>
+                      searchStep >= i ? (
+                        <div key={i} style={{ fontSize: 12, color: MUTED }}>{msg}</div>
+                      ) : null,
+                  )}
+                </div>
+              )}
+
+              {searchFound && !searching && (
+                <div style={{ marginTop: 8, fontSize: 12, color: GREEN, fontWeight: 500 }}>
+                  {searchFound}
+                </div>
+              )}
+              {searchErr && !searching && (
+                <div style={{ marginTop: 8, fontSize: 12, color: DANGER }}>{searchErr}</div>
+              )}
+            </div>
 
             {/* Hotel name */}
             <div style={{ marginBottom: 16 }}>
