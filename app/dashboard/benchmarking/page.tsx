@@ -328,28 +328,27 @@ export default function BenchmarkingPage() {
     if (userError) throw userError;
     if (!user) throw new Error("You must be signed in.");
 
-    const { data: hotels, error: hotelsError } = await sb
+    const { data: hotelData, error: hotelsError } = await sb
       .from("hotels")
       .select("id, name, google_url, tripadvisor_url, booking_url, address, city, country, latitude, longitude")
       .eq("user_id", user.id)
-      .limit(1);
+      .maybeSingle();
 
     if (hotelsError) throw hotelsError;
 
-    const hotelData = ((hotels ?? []) as Hotel[])[0] ?? null;
     if (!hotelData) {
       setHotel(null);
       setCompetitors([]);
       return { hotel: null, myAvg: null, myTotal: 0, comps: [] as Competitor[] };
     }
 
-    setHotel(hotelData);
+    setHotel(hotelData as Hotel);
 
     // Fetch my reviews for avg rating calculation
     const { data: reviewsData } = await sb
       .from("reviews")
       .select("rating")
-      .eq("hotel_id", hotelData.id)
+      .eq("hotel_id", (hotelData as Hotel).id)
       .not("rating", "is", null);
 
     const myRatings = ((reviewsData ?? []) as { rating: unknown }[])
@@ -369,7 +368,7 @@ export default function BenchmarkingPage() {
     const { data: compsData, error: compsError } = await sb
       .from("competitors")
       .select(COMP_SELECT)
-      .eq("hotel_id", hotelData.id)
+      .eq("hotel_id", (hotelData as Hotel).id)
       .order("avg_rating", { ascending: false });
 
     if (compsError) throw compsError;
@@ -377,7 +376,7 @@ export default function BenchmarkingPage() {
     const comps = (compsData ?? []) as unknown as Competitor[];
     setCompetitors(comps);
 
-    return { hotel: hotelData, myAvg, myTotal, comps };
+    return { hotel: hotelData as Hotel, myAvg, myTotal, comps };
   }, []);
 
   useEffect(() => {

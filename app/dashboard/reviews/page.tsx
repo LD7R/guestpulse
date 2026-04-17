@@ -91,6 +91,7 @@ function hasText(text: string | null | undefined): boolean {
   if (cleaned === "") return false;
   if (cleaned === "—") return false;
   if (cleaned === "-") return false;
+  if (cleaned === "null") return false;
   if (cleaned.length < 5) return false;
   return true;
 }
@@ -325,6 +326,7 @@ export default function ReviewsInboxPage() {
 
   const [syncing, setSyncing] = useState(false);
   const [classifying, setClassifying] = useState(false);
+  const [classifyRemaining, setClassifyRemaining] = useState(0);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
@@ -665,6 +667,7 @@ export default function ReviewsInboxPage() {
     setSyncError(null);
     setSyncMessage(null);
     setSyncResult(null);
+    setClassifyRemaining(0);
     try {
       setClassifying(true);
       const supabase = createBrowserClient(
@@ -690,14 +693,16 @@ export default function ReviewsInboxPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hotel_id: hotel.id }),
       });
-      const json = (await res.json()) as { success?: boolean; classified?: number; total?: number; error?: string };
+      const json = (await res.json()) as { success?: boolean; classified?: number; total?: number; remaining?: number; error?: string };
       if (!res.ok || json.success !== true) throw new Error(json.error ?? "Classification failed");
 
       const total = json.total ?? 0;
+      const remaining = json.remaining ?? 0;
+      setClassifyRemaining(remaining);
       setSyncMessage(
         total === 0
           ? "No reviews needed classification."
-          : `Classified ${json.classified ?? 0} of ${total} review${total === 1 ? "" : "s"}.`,
+          : `Classified ${json.classified ?? 0} of ${total} review${total === 1 ? "" : "s"}${remaining > 0 ? ` · ${remaining} remaining` : ""}.`,
       );
       setRefreshKey((k) => k + 1);
     } catch (err) {
@@ -825,6 +830,16 @@ export default function ReviewsInboxPage() {
           >
             {classifying ? "Classifying…" : "✦ Auto-classify"}
           </button>
+          {classifyRemaining > 0 && !classifying && (
+            <button
+              type="button"
+              disabled={classifying || syncing}
+              onClick={() => void handleAutoClassify()}
+              style={secondaryBtn({ opacity: syncing ? 0.5 : 1, cursor: syncing ? "not-allowed" : "pointer" })}
+            >
+              {classifyRemaining} remaining →
+            </button>
+          )}
           <button
             type="button"
             disabled={syncing || classifying}

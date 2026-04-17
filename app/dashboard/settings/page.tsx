@@ -5,7 +5,6 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
-import { extractCoordsFromGoogleMapsUrl } from "@/lib/extract-google-maps-coords";
 
 type ProfileRow = {
   id: string;
@@ -363,19 +362,21 @@ export default function SettingsPage() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       );
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
       if (!hotelName.trim()) throw new Error("Hotel name is required.");
 
-      const roomsParsed = roomCount.trim() === "" ? null : parseInt(roomCount, 10);
-      const room_count =
-        roomsParsed !== null && !Number.isNaN(roomsParsed) ? roomsParsed : null;
+      const { data: existing } = await supabase
+        .from("hotels")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-      const coords = extractCoordsFromGoogleMapsUrl(googleUrl);
-      const fields = {
+      const roomsParsed = roomCount.trim() === "" ? null : parseInt(roomCount, 10);
+      const room_count = roomsParsed !== null && !Number.isNaN(roomsParsed) ? roomsParsed : null;
+
+      const hotelData: Record<string, unknown> = {
         name: hotelName.trim(),
         tripadvisor_url: tripadvisorUrl.trim() || null,
         google_url: googleUrl.trim() || null,
@@ -391,53 +392,32 @@ export default function SettingsPage() {
         website: website.trim() || null,
         response_signature: responseSignature.trim() || "The Management Team",
         room_count,
-        ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : {}),
       };
 
-      const { data: existing, error: existingError } = await supabase
-        .from("hotels")
-        .select("id")
-        .eq("user_id", user.id)
-        .single();
-
-      if (existingError) {
-        console.error("Full error:", JSON.stringify(existingError, null, 2));
-        if (existingError.code !== "PGRST116") {
-          throw existingError;
-        }
+      const coordMatch = googleUrl?.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+      if (coordMatch) {
+        hotelData.latitude = parseFloat(coordMatch[1]!);
+        hotelData.longitude = parseFloat(coordMatch[2]!);
       }
 
+      let saveError;
       if (existing?.id) {
-        const { error } = await supabase.from("hotels").update(fields).eq("user_id", user.id);
-        if (error) {
-          console.error("Full error:", JSON.stringify(error, null, 2));
-          throw error;
-        }
-        setHotel((prev) =>
-          prev ? { ...prev, ...fields, id: existing.id, user_id: user.id } : prev,
-        );
-        setHotelId(existing.id);
+        const result = await supabase.from("hotels").update(hotelData).eq("user_id", user.id);
+        saveError = result.error;
       } else {
-        const { data: inserted, error } = await supabase
-          .from("hotels")
-          .insert({
-            ...fields,
-            user_id: user.id,
-          })
-          .select("*")
-          .single();
-        if (error) {
-          console.error("Full error:", JSON.stringify(error, null, 2));
-          throw error;
-        }
-        const insertedHotel = inserted as HotelRow;
-        setHotelId(insertedHotel.id);
-        setHotel(insertedHotel);
+        const result = await supabase.from("hotels").insert({ ...hotelData, user_id: user.id });
+        saveError = result.error;
+      }
+
+      if (saveError) {
+        console.error("Hotel save error:", JSON.stringify(saveError));
+        showToast("error", "Failed to save hotel: " + saveError.message);
+        return;
       }
 
       showToast("success", "✓ Settings saved");
     } catch (err) {
-      console.error("Full error:", JSON.stringify(err, null, 2));
+      console.error("Hotel save error:", JSON.stringify(err, null, 2));
       showToast("error", err instanceof Error ? err.message : "Failed to save hotel.");
     } finally {
       setSavingHotel(false);

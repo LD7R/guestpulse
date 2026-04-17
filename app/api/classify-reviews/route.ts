@@ -80,12 +80,25 @@ export async function POST(request: NextRequest) {
       auth: { persistSession: false },
     });
 
+    // Count total unclassified for the `remaining` field in the response
+    const { count: totalUnclassified } = await supabase
+      .from("reviews")
+      .select("*", { count: "exact", head: true })
+      .eq("hotel_id", hotel_id)
+      .or("sentiment.is.null,complaint_topic.is.null")
+      .not("review_text", "is", null)
+      .neq("review_text", "")
+      .neq("review_text", "—");
+
     const { data: reviews, error: fetchError } = await supabase
       .from("reviews")
       .select("id, review_text, rating, platform")
       .eq("hotel_id", hotel_id)
       .or("sentiment.is.null,complaint_topic.is.null,topic_type.is.null")
-      .limit(500);
+      .not("review_text", "is", null)
+      .neq("review_text", "")
+      .neq("review_text", "—")
+      .limit(200);
 
     if (fetchError) {
       return NextResponse.json(
@@ -95,7 +108,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!reviews || reviews.length === 0) {
-      return NextResponse.json({ success: true, classified: 0, total: 0 });
+      return NextResponse.json({ success: true, classified: 0, total: 0, remaining: 0 });
     }
 
     const rows = reviews as ReviewRow[];
@@ -260,6 +273,7 @@ Respond with ONLY this JSON, no other text:
       success: true,
       classified,
       total: rows.length,
+      remaining: Math.max(0, (totalUnclassified ?? 0) - classified),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

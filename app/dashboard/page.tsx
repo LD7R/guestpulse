@@ -611,21 +611,21 @@ export default function DashboardOverviewPage() {
       .select("*")
       .in("hotel_id", hotelIds)
       .eq("responded", false)
+      .or("rating.lte.2,sentiment.eq.negative")
       .not("review_text", "is", null)
       .neq("review_text", "")
-      .neq("review_text", "—");
+      .neq("review_text", "—")
+      .order("rating", { ascending: true })
+      .limit(5);
 
     if (unrespErr) throw unrespErr;
 
-    const urgentFiltered = (unrespondedRows ?? []).filter((r) => isUrgentReview(r as ReviewRow));
-    const filteredUrgent = (urgentFiltered || []).filter((review) =>
-      passesUrgentReviewTextFilter(review as ReviewRow),
-    );
+    const filteredUrgent = (unrespondedRows ?? []).filter((r) => {
+      const text = (r as ReviewRow).review_text?.trim();
+      return text && text !== "—" && text !== "-" && text !== "null" && text.length >= 5;
+    });
     setUrgentCount(filteredUrgent.length);
-    const sortedUrgent = [...filteredUrgent].sort((a, b) =>
-      sortUrgentReviews(a as ReviewRow, b as ReviewRow),
-    );
-    setUrgentReviewsList(sortedUrgent.slice(0, 5) as ReviewRow[]);
+    setUrgentReviewsList(filteredUrgent as ReviewRow[]);
 
     const { data: platRows } = await supabase
       .from("reviews")
