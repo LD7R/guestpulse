@@ -590,15 +590,37 @@ export default function SettingsPage() {
         | { success: false; error: string };
 
       if (data.success) {
-        setSearchResult(data.hotel);
+        const h = data.hotel;
+        setSearchResult(h);
         setEditedUrls({
-          tripadvisor: data.hotel.tripadvisor_url ?? "",
-          google: data.hotel.google_url ?? "",
-          booking: data.hotel.booking_url ?? "",
-          trip: data.hotel.trip_url ?? "",
-          expedia: data.hotel.expedia_url ?? "",
-          yelp: data.hotel.yelp_url ?? "",
+          tripadvisor: h.tripadvisor_url ?? "",
+          google: h.google_url ?? "",
+          booking: h.booking_url ?? "",
+          trip: h.trip_url ?? "",
+          expedia: h.expedia_url ?? "",
+          yelp: h.yelp_url ?? "",
         });
+
+        // Immediately auto-fill all form fields
+        if (!isLocked) {
+          if (h.name) setHotelName(h.name);
+          setTripadvisorUrl(h.tripadvisor_url ?? "");
+          setGoogleUrl(h.google_url ?? "");
+          setBookingUrl(h.booking_url ?? "");
+          setTripUrl(h.trip_url ?? "");
+          setExpediaUrl(h.expedia_url ?? "");
+          setYelpUrl(h.yelp_url ?? "");
+        }
+        // Always fill address/contact details
+        setAddress(h.address ?? "");
+        setCity(h.city ?? "");
+        setCountry(h.country ?? "");
+        setPostalCode(h.postal_code ?? "");
+        setPhone(h.phone ?? "");
+        setWebsite(h.website ?? "");
+
+        setAutoFillMsg("✓ Hotel details auto-filled — review and save");
+        window.setTimeout(() => setAutoFillMsg(null), 3000);
       } else {
         setSearchError(data.error);
       }
@@ -613,49 +635,29 @@ export default function SettingsPage() {
   function applyAllUrls() {
     if (!searchResult) return;
     const r = searchResult;
+    // Use editedUrls if the user has manually edited a field in the results panel,
+    // otherwise fall back to what the API returned.
     const eu = editedUrls;
-    let applied = 0;
 
-    // Auto-fill hotel identity fields (only if not locked)
     if (!isLocked) {
-      if (r.name && !hotelName) setHotelName(r.name);
-      if (eu.tripadvisor || r.tripadvisor_url) {
-        setTripadvisorUrl(eu.tripadvisor || r.tripadvisor_url || "");
-        applied++;
-      }
-      if (eu.google || r.google_url) {
-        setGoogleUrl(eu.google || r.google_url || "");
-        applied++;
-      }
-      if (eu.booking || r.booking_url) {
-        setBookingUrl(eu.booking || r.booking_url || "");
-        applied++;
-      }
-      if (eu.trip || r.trip_url) {
-        setTripUrl(eu.trip || r.trip_url || "");
-        applied++;
-      }
-      if (eu.expedia || r.expedia_url) {
-        setExpediaUrl(eu.expedia || r.expedia_url || "");
-        applied++;
-      }
-      if (eu.yelp || r.yelp_url) {
-        setYelpUrl(eu.yelp || r.yelp_url || "");
-        applied++;
-      }
+      if (r.name) setHotelName(r.name);
+      setTripadvisorUrl(eu.tripadvisor || r.tripadvisor_url || "");
+      setGoogleUrl(eu.google || r.google_url || "");
+      setBookingUrl(eu.booking || r.booking_url || "");
+      setTripUrl(eu.trip || r.trip_url || "");
+      setExpediaUrl(eu.expedia || r.expedia_url || "");
+      setYelpUrl(eu.yelp || r.yelp_url || "");
     }
 
-    // Always fill location/contact details
-    if (r.city) setCity(r.city);
-    if (r.country) setCountry(r.country);
-    if (r.address) setAddress(r.address);
-    if (r.postal_code) setPostalCode(r.postal_code);
-    if (r.phone) setPhone(r.phone);
-    if (r.website) setWebsite(r.website);
+    setAddress(r.address ?? "");
+    setCity(r.city ?? "");
+    setCountry(r.country ?? "");
+    setPostalCode(r.postal_code ?? "");
+    setPhone(r.phone ?? "");
+    setWebsite(r.website ?? "");
 
-    setAutoFillMsg("✓ Hotel details auto-filled from Google Maps");
+    setAutoFillMsg("✓ Hotel details auto-filled — review and save");
     window.setTimeout(() => setAutoFillMsg(null), 3000);
-    if (applied > 0) showToast("success", `✓ ${applied} URLs applied`);
   }
 
   function onSaveNotifications(e: FormEvent<HTMLFormElement>) {
@@ -1347,22 +1349,6 @@ export default function SettingsPage() {
                   );
                 })}
 
-                {autoFillMsg && (
-                  <div
-                    style={{
-                      marginTop: 12,
-                      background: "#0a1a0a",
-                      border: "1px solid #1a3a1a",
-                      borderRadius: 6,
-                      padding: "10px 14px",
-                      fontSize: 12,
-                      color: "#4ade80",
-                    }}
-                  >
-                    {autoFillMsg}
-                  </div>
-                )}
-
                 <button
                   type="button"
                   onClick={applyAllUrls}
@@ -1385,6 +1371,22 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
+
+          {autoFillMsg && (
+            <div
+              style={{
+                background: "#0a1a0a",
+                border: "1px solid #1a3a1a",
+                borderRadius: 6,
+                padding: "10px 14px",
+                fontSize: 12,
+                color: "#4ade80",
+                marginBottom: 16,
+              }}
+            >
+              {autoFillMsg}
+            </div>
+          )}
 
           <form onSubmit={onSaveHotel}>
             <div style={{ ...glass, padding: "28px", marginBottom: "20px" }}>

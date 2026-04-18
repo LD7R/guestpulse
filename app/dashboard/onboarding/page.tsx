@@ -300,17 +300,18 @@ export default function OnboardingPage() {
       if (data.success) {
         const h = data.hotel;
         if (h.name) setHotelName(h.name);
-        if (h.google_url) setGoogleUrl(h.google_url);
-        if (h.tripadvisor_url) setTripadvisorUrl(h.tripadvisor_url);
-        if (h.booking_url) setBookingUrl(h.booking_url);
-        if (h.trip_url) setTripUrl(h.trip_url);
-        if (h.expedia_url) setExpediaUrl(h.expedia_url);
-        if (h.yelp_url) setYelpUrl(h.yelp_url);
-        if (h.address) setObAddress(h.address);
-        if (h.city) { setObCity(h.city); setSearchCity(h.city); }
-        if (h.country) setObCountry(h.country);
-        if (h.phone) setObPhone(h.phone);
-        if (h.website) setObWebsite(h.website);
+        setGoogleUrl(h.google_url ?? "");
+        setTripadvisorUrl(h.tripadvisor_url ?? "");
+        setBookingUrl(h.booking_url ?? "");
+        setTripUrl(h.trip_url ?? "");
+        setExpediaUrl(h.expedia_url ?? "");
+        setYelpUrl(h.yelp_url ?? "");
+        setObAddress(h.address ?? "");
+        setObCity(h.city ?? "");
+        if (h.city) setSearchCity(h.city);
+        setObCountry(h.country ?? "");
+        setObPhone(h.phone ?? "");
+        setObWebsite(h.website ?? "");
         setSearchFound("✓ Details found automatically — review and confirm");
         setShowDetails(true);
       } else {
