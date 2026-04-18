@@ -234,6 +234,12 @@ export default function OnboardingPage() {
   const [tripUrl, setTripUrl] = useState("");
   const [expediaUrl, setExpediaUrl] = useState("");
   const [yelpUrl, setYelpUrl] = useState("");
+  const [obAddress, setObAddress] = useState("");
+  const [obCity, setObCity] = useState("");
+  const [obCountry, setObCountry] = useState("");
+  const [obPhone, setObPhone] = useState("");
+  const [obWebsite, setObWebsite] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedHotelId, setSavedHotelId] = useState<string | null>(null);
@@ -282,19 +288,31 @@ export default function OnboardingPage() {
               trip_url: string | null;
               expedia_url: string | null;
               yelp_url: string | null;
+              address: string | null;
+              city: string | null;
+              country: string | null;
+              phone: string | null;
+              website: string | null;
             };
           }
         | { success: false; error: string };
 
       if (data.success) {
         const h = data.hotel;
+        if (h.name) setHotelName(h.name);
         if (h.google_url) setGoogleUrl(h.google_url);
         if (h.tripadvisor_url) setTripadvisorUrl(h.tripadvisor_url);
         if (h.booking_url) setBookingUrl(h.booking_url);
         if (h.trip_url) setTripUrl(h.trip_url);
         if (h.expedia_url) setExpediaUrl(h.expedia_url);
         if (h.yelp_url) setYelpUrl(h.yelp_url);
-        setSearchFound(`✓ Found "${h.name}". Review the URLs below.`);
+        if (h.address) setObAddress(h.address);
+        if (h.city) { setObCity(h.city); setSearchCity(h.city); }
+        if (h.country) setObCountry(h.country);
+        if (h.phone) setObPhone(h.phone);
+        if (h.website) setObWebsite(h.website);
+        setSearchFound("✓ Details found automatically — review and confirm");
+        setShowDetails(true);
       } else {
         setSearchErr(data.error);
       }
@@ -350,6 +368,11 @@ export default function OnboardingPage() {
       trip_url: tripUrl.trim() || null,
       expedia_url: expediaUrl.trim() || null,
       yelp_url: yelpUrl.trim() || null,
+      address: obAddress.trim() || null,
+      city: obCity.trim() || null,
+      country: obCountry.trim() || null,
+      phone: obPhone.trim() || null,
+      website: obWebsite.trim() || null,
     };
 
     /* extract coords from Google Maps URL */
@@ -675,6 +698,102 @@ export default function OnboardingPage() {
                 />
               </div>
             ))}
+
+            {/* Collapsible hotel details */}
+            <div style={{ marginBottom: 12 }}>
+              <button
+                type="button"
+                onClick={() => setShowDetails((v) => !v)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: "6px 0",
+                  fontSize: 12,
+                  color: MUTED,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <span>Hotel details (auto-filled)</span>
+                <span>{showDetails ? "↑" : "↓"}</span>
+              </button>
+
+              {showDetails && (
+                <div
+                  style={{
+                    borderTop: `1px solid ${BORDER}`,
+                    paddingTop: 14,
+                    marginTop: 4,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                  <div>
+                    <label style={labelStyle} htmlFor="ob-addr">Address</label>
+                    <input
+                      id="ob-addr"
+                      type="text"
+                      placeholder="Street address"
+                      value={obAddress}
+                      onChange={(e) => setObAddress(e.target.value)}
+                      style={input}
+                    />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div>
+                      <label style={labelStyle} htmlFor="ob-city">City</label>
+                      <input
+                        id="ob-city"
+                        type="text"
+                        placeholder="City"
+                        value={obCity}
+                        onChange={(e) => setObCity(e.target.value)}
+                        style={input}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle} htmlFor="ob-country">Country</label>
+                      <input
+                        id="ob-country"
+                        type="text"
+                        placeholder="Country"
+                        value={obCountry}
+                        onChange={(e) => setObCountry(e.target.value)}
+                        style={input}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div>
+                      <label style={labelStyle} htmlFor="ob-phone">Phone</label>
+                      <input
+                        id="ob-phone"
+                        type="tel"
+                        placeholder="+1 555 000 0000"
+                        value={obPhone}
+                        onChange={(e) => setObPhone(e.target.value)}
+                        style={input}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle} htmlFor="ob-web">Website</label>
+                      <input
+                        id="ob-web"
+                        type="url"
+                        placeholder="https://"
+                        value={obWebsite}
+                        onChange={(e) => setObWebsite(e.target.value)}
+                        style={input}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {saveError && (
               <div

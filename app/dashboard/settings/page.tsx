@@ -1,3 +1,12 @@
+// Run in Supabase:
+// alter table public.hotels
+// add column if not exists locked_until timestamp with time zone,
+// add column if not exists lock_started_at timestamp with time zone;
+//
+// alter table public.hotels
+// add column if not exists active_platforms jsonb
+//   default '{"tripadvisor":true,"google":true,"booking":true,"trip":false,"expedia":false,"yelp":false}';
+
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
@@ -37,6 +46,8 @@ type HotelRow = {
   latitude: number | null;
   longitude: number | null;
   active_platforms: unknown;
+  locked_until: string | null;
+  lock_started_at: string | null;
 };
 
 type ActivePlatforms = {
@@ -53,6 +64,7 @@ type HotelSearchResult = {
   address: string | null;
   city: string | null;
   country: string | null;
+  postal_code: string | null;
   website: string | null;
   phone: string | null;
   latitude: number | null;
@@ -254,6 +266,8 @@ export default function SettingsPage() {
     yelp: false,
   });
 
+  const [autoFillMsg, setAutoFillMsg] = useState<string | null>(null);
+
   const [savingAccount, setSavingAccount] = useState(false);
   const [savingHotel, setSavingHotel] = useState(false);
   const [savingNotifications, setSavingNotifications] = useState(false);
@@ -272,6 +286,25 @@ export default function SettingsPage() {
     setToast({ type, message });
     window.setTimeout(() => setToast(null), type === "success" ? 3000 : 5000);
   }, []);
+
+  const isLocked = useMemo(() => {
+    return !!(hotel?.locked_until && new Date(hotel.locked_until) > new Date());
+  }, [hotel]);
+
+  const daysRemaining = useMemo(() => {
+    if (!hotel?.locked_until) return 0;
+    const diff = new Date(hotel.locked_until).getTime() - Date.now();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  }, [hotel]);
+
+  const lockedUntilFormatted = useMemo(() => {
+    if (!hotel?.locked_until) return "";
+    return new Date(hotel.locked_until).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }, [hotel]);
 
   useEffect(() => {
     async function load() {
@@ -430,21 +463,19 @@ export default function SettingsPage() {
 
       const { data: existing } = await supabase
         .from("hotels")
-        .select("id")
+        .select("id, locked_until")
         .eq("user_id", user.id)
         .maybeSingle();
 
       const roomsParsed = roomCount.trim() === "" ? null : parseInt(roomCount, 10);
       const room_count = roomsParsed !== null && !Number.isNaN(roomsParsed) ? roomsParsed : null;
 
-      const hotelData: Record<string, unknown> = {
-        name: hotelName.trim(),
-        tripadvisor_url: tripadvisorUrl.trim() || null,
-        google_url: googleUrl.trim() || null,
-        booking_url: bookingUrl.trim() || null,
-        trip_url: tripUrl.trim() || null,
-        expedia_url: expediaUrl.trim() || null,
-        yelp_url: yelpUrl.trim() || null,
+      const now = Date.now();
+      const lockUntil = new Date(now + 28 * 24 * 60 * 60 * 1000).toISOString();
+      const lockStartedAt = new Date(now).toISOString();
+
+      // Fields that are always editable
+      const alwaysEditable: Record<string, unknown> = {
         address: address.trim() || null,
         city: city.trim() || null,
         country: country.trim() || null,
@@ -452,23 +483,71 @@ export default function SettingsPage() {
         phone: phone.trim() || null,
         website: website.trim() || null,
         response_signature: responseSignature.trim() || "The Management Team",
-        room_count,
         active_platforms: activePlatforms,
+      };
+
+      // Fields locked after first save
+      const lockedFields: Record<string, unknown> = {
+        name: hotelName.trim(),
+        tripadvisor_url: tripadvisorUrl.trim() || null,
+        google_url: googleUrl.trim() || null,
+        booking_url: bookingUrl.trim() || null,
+        trip_url: tripUrl.trim() || null,
+        expedia_url: expediaUrl.trim() || null,
+        yelp_url: yelpUrl.trim() || null,
+        room_count,
       };
 
       const coordMatch = googleUrl?.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
       if (coordMatch) {
-        hotelData.latitude = parseFloat(coordMatch[1]!);
-        hotelData.longitude = parseFloat(coordMatch[2]!);
+        lockedFields.latitude = parseFloat(coordMatch[1]!);
+        lockedFields.longitude = parseFloat(coordMatch[2]!);
       }
 
+      let hotelData: Record<string, unknown>;
       let saveError;
-      if (existing?.id) {
-        const result = await supabase.from("hotels").update(hotelData).eq("user_id", user.id);
+
+      if (!existing?.id) {
+        // New hotel — full insert with lock
+        hotelData = {
+          ...alwaysEditable,
+          ...lockedFields,
+          user_id: user.id,
+          locked_until: lockUntil,
+          lock_started_at: lockStartedAt,
+        };
+        const result = await supabase.from("hotels").insert(hotelData);
         saveError = result.error;
       } else {
-        const result = await supabase.from("hotels").insert({ ...hotelData, user_id: user.id });
+        const existingLocked = !!(
+          existing.locked_until &&
+          new Date(existing.locked_until as string) > new Date()
+        );
+
+        if (existingLocked) {
+          // Only save unlocked fields
+          hotelData = { ...alwaysEditable };
+        } else {
+          // Lock expired — full update + new lock
+          hotelData = {
+            ...alwaysEditable,
+            ...lockedFields,
+            locked_until: lockUntil,
+            lock_started_at: lockStartedAt,
+          };
+        }
+        const result = await supabase.from("hotels").update(hotelData).eq("user_id", user.id);
         saveError = result.error;
+
+        // Refresh hotel state to reflect new locked_until
+        if (!saveError) {
+          const { data: refreshed } = await supabase
+            .from("hotels")
+            .select("*")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          if (refreshed) setHotel(refreshed as HotelRow);
+        }
       }
 
       if (saveError) {
@@ -536,36 +615,47 @@ export default function SettingsPage() {
     const r = searchResult;
     const eu = editedUrls;
     let applied = 0;
-    if (eu.tripadvisor ?? r.tripadvisor_url) {
-      setTripadvisorUrl(eu.tripadvisor || r.tripadvisor_url || "");
-      applied++;
+
+    // Auto-fill hotel identity fields (only if not locked)
+    if (!isLocked) {
+      if (r.name && !hotelName) setHotelName(r.name);
+      if (eu.tripadvisor || r.tripadvisor_url) {
+        setTripadvisorUrl(eu.tripadvisor || r.tripadvisor_url || "");
+        applied++;
+      }
+      if (eu.google || r.google_url) {
+        setGoogleUrl(eu.google || r.google_url || "");
+        applied++;
+      }
+      if (eu.booking || r.booking_url) {
+        setBookingUrl(eu.booking || r.booking_url || "");
+        applied++;
+      }
+      if (eu.trip || r.trip_url) {
+        setTripUrl(eu.trip || r.trip_url || "");
+        applied++;
+      }
+      if (eu.expedia || r.expedia_url) {
+        setExpediaUrl(eu.expedia || r.expedia_url || "");
+        applied++;
+      }
+      if (eu.yelp || r.yelp_url) {
+        setYelpUrl(eu.yelp || r.yelp_url || "");
+        applied++;
+      }
     }
-    if (eu.google ?? r.google_url) {
-      setGoogleUrl(eu.google || r.google_url || "");
-      applied++;
-    }
-    if (eu.booking ?? r.booking_url) {
-      setBookingUrl(eu.booking || r.booking_url || "");
-      applied++;
-    }
-    if (eu.trip ?? r.trip_url) {
-      setTripUrl(eu.trip || r.trip_url || "");
-      applied++;
-    }
-    if (eu.expedia ?? r.expedia_url) {
-      setExpediaUrl(eu.expedia || r.expedia_url || "");
-      applied++;
-    }
-    if (eu.yelp ?? r.yelp_url) {
-      setYelpUrl(eu.yelp || r.yelp_url || "");
-      applied++;
-    }
-    if (r.city && !city) setCity(r.city);
-    if (r.country && !country) setCountry(r.country);
-    if (r.address && !address) setAddress(r.address);
-    if (r.phone && !phone) setPhone(r.phone);
-    if (r.website && !website) setWebsite(r.website);
-    showToast("success", `✓ ${applied} URLs applied`);
+
+    // Always fill location/contact details
+    if (r.city) setCity(r.city);
+    if (r.country) setCountry(r.country);
+    if (r.address) setAddress(r.address);
+    if (r.postal_code) setPostalCode(r.postal_code);
+    if (r.phone) setPhone(r.phone);
+    if (r.website) setWebsite(r.website);
+
+    setAutoFillMsg("✓ Hotel details auto-filled from Google Maps");
+    window.setTimeout(() => setAutoFillMsg(null), 3000);
+    if (applied > 0) showToast("success", `✓ ${applied} URLs applied`);
   }
 
   function onSaveNotifications(e: FormEvent<HTMLFormElement>) {
@@ -885,6 +975,45 @@ export default function SettingsPage() {
             </p>
           </header>
 
+          {/* ── Lock banner ─────────────────────────────────────── */}
+          {isLocked && (
+            <div
+              style={{
+                background: "#1a1200",
+                border: "1px solid #2a2000",
+                borderRadius: 8,
+                padding: "14px 18px",
+                marginBottom: 16,
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 12,
+              }}
+            >
+              <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>🔒</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#fbbf24" }}>
+                  Hotel locked for editing
+                </div>
+                <div style={{ fontSize: 12, color: "#555555", marginTop: 2 }}>
+                  You can edit your hotel details again in {daysRemaining} day
+                  {daysRemaining !== 1 ? "s" : ""}
+                </div>
+                <div style={{ fontSize: 11, color: "#444444", marginTop: 4 }}>
+                  Locked until: {lockedUntilFormatted}
+                </div>
+                <div style={{ fontSize: 12, color: "#555555", marginTop: 8 }}>
+                  Need to change your hotel?{" "}
+                  <a
+                    href="mailto:support@guestpulse.app"
+                    style={{ color: "#888888", textDecoration: "underline" }}
+                  >
+                    Contact support →
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── Hotel auto-search ───────────────────────────────── */}
           <div
             style={{
@@ -893,6 +1022,8 @@ export default function SettingsPage() {
               borderRadius: 8,
               padding: "20px 24px",
               marginBottom: 20,
+              opacity: isLocked ? 0.5 : 1,
+              pointerEvents: isLocked ? "none" : undefined,
             }}
           >
             <div
@@ -1216,6 +1347,22 @@ export default function SettingsPage() {
                   );
                 })}
 
+                {autoFillMsg && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      background: "#0a1a0a",
+                      border: "1px solid #1a3a1a",
+                      borderRadius: 6,
+                      padding: "10px 14px",
+                      fontSize: 12,
+                      color: "#4ade80",
+                    }}
+                  >
+                    {autoFillMsg}
+                  </div>
+                )}
+
                 <button
                   type="button"
                   onClick={applyAllUrls}
@@ -1270,9 +1417,11 @@ export default function SettingsPage() {
                     value={hotelName}
                     onChange={(e) => setHotelName(e.target.value)}
                     placeholder="My Boutique Hotel"
-                    style={glassInput}
+                    disabled={isLocked}
+                    title={isLocked ? `Locked for ${daysRemaining} more days — contact support to unlock` : undefined}
+                    style={{ ...glassInput, opacity: isLocked ? 0.5 : 1, cursor: isLocked ? "not-allowed" : undefined }}
                     onFocus={(e) => {
-                      e.target.style.borderColor = "#3a3a3a";
+                      if (!isLocked) e.target.style.borderColor = "#3a3a3a";
                     }}
                     onBlur={(e) => {
                       e.target.style.borderColor = "#2a2a2a";
@@ -1490,13 +1639,11 @@ export default function SettingsPage() {
                     value={tripadvisorUrl}
                     onChange={(e) => setTripadvisorUrl(e.target.value)}
                     placeholder="https://tripadvisor.com/hotel/..."
-                    style={{ ...glassInput, flex: 1 }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "#3a3a3a";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "#2a2a2a";
-                    }}
+                    disabled={isLocked}
+                    title={isLocked ? `Locked for ${daysRemaining} more days — contact support to unlock` : undefined}
+                    style={{ ...glassInput, flex: 1, opacity: isLocked ? 0.5 : 1, cursor: isLocked ? "not-allowed" : undefined }}
+                    onFocus={(e) => { if (!isLocked) e.target.style.borderColor = "#3a3a3a"; }}
+                    onBlur={(e) => { e.target.style.borderColor = "#2a2a2a"; }}
                   />
                 </div>
               </div>
@@ -1527,13 +1674,11 @@ export default function SettingsPage() {
                     value={googleUrl}
                     onChange={(e) => setGoogleUrl(e.target.value)}
                     placeholder="https://www.google.com/maps/place/..."
-                    style={{ ...glassInput, flex: 1 }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "#3a3a3a";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "#2a2a2a";
-                    }}
+                    disabled={isLocked}
+                    title={isLocked ? `Locked for ${daysRemaining} more days — contact support to unlock` : undefined}
+                    style={{ ...glassInput, flex: 1, opacity: isLocked ? 0.5 : 1, cursor: isLocked ? "not-allowed" : undefined }}
+                    onFocus={(e) => { if (!isLocked) e.target.style.borderColor = "#3a3a3a"; }}
+                    onBlur={(e) => { e.target.style.borderColor = "#2a2a2a"; }}
                   />
                 </div>
               </div>
@@ -1564,13 +1709,11 @@ export default function SettingsPage() {
                     value={bookingUrl}
                     onChange={(e) => setBookingUrl(e.target.value)}
                     placeholder="https://booking.com/hotel/..."
-                    style={{ ...glassInput, flex: 1 }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "#3a3a3a";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "#2a2a2a";
-                    }}
+                    disabled={isLocked}
+                    title={isLocked ? `Locked for ${daysRemaining} more days — contact support to unlock` : undefined}
+                    style={{ ...glassInput, flex: 1, opacity: isLocked ? 0.5 : 1, cursor: isLocked ? "not-allowed" : undefined }}
+                    onFocus={(e) => { if (!isLocked) e.target.style.borderColor = "#3a3a3a"; }}
+                    onBlur={(e) => { e.target.style.borderColor = "#2a2a2a"; }}
                   />
                 </div>
               </div>
@@ -1601,13 +1744,11 @@ export default function SettingsPage() {
                     value={tripUrl}
                     onChange={(e) => setTripUrl(e.target.value)}
                     placeholder="https://trip.com/hotels/..."
-                    style={{ ...glassInput, flex: 1 }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "#3a3a3a";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "#2a2a2a";
-                    }}
+                    disabled={isLocked}
+                    title={isLocked ? `Locked for ${daysRemaining} more days — contact support to unlock` : undefined}
+                    style={{ ...glassInput, flex: 1, opacity: isLocked ? 0.5 : 1, cursor: isLocked ? "not-allowed" : undefined }}
+                    onFocus={(e) => { if (!isLocked) e.target.style.borderColor = "#3a3a3a"; }}
+                    onBlur={(e) => { e.target.style.borderColor = "#2a2a2a"; }}
                   />
                 </div>
               </div>
@@ -1638,13 +1779,11 @@ export default function SettingsPage() {
                     value={expediaUrl}
                     onChange={(e) => setExpediaUrl(e.target.value)}
                     placeholder="https://expedia.com/hotels/..."
-                    style={{ ...glassInput, flex: 1 }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "#3a3a3a";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "#2a2a2a";
-                    }}
+                    disabled={isLocked}
+                    title={isLocked ? `Locked for ${daysRemaining} more days — contact support to unlock` : undefined}
+                    style={{ ...glassInput, flex: 1, opacity: isLocked ? 0.5 : 1, cursor: isLocked ? "not-allowed" : undefined }}
+                    onFocus={(e) => { if (!isLocked) e.target.style.borderColor = "#3a3a3a"; }}
+                    onBlur={(e) => { e.target.style.borderColor = "#2a2a2a"; }}
                   />
                 </div>
               </div>
@@ -1675,13 +1814,11 @@ export default function SettingsPage() {
                     value={yelpUrl}
                     onChange={(e) => setYelpUrl(e.target.value)}
                     placeholder="https://yelp.com/biz/..."
-                    style={{ ...glassInput, flex: 1 }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "#3a3a3a";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "#2a2a2a";
-                    }}
+                    disabled={isLocked}
+                    title={isLocked ? `Locked for ${daysRemaining} more days — contact support to unlock` : undefined}
+                    style={{ ...glassInput, flex: 1, opacity: isLocked ? 0.5 : 1, cursor: isLocked ? "not-allowed" : undefined }}
+                    onFocus={(e) => { if (!isLocked) e.target.style.borderColor = "#3a3a3a"; }}
+                    onBlur={(e) => { e.target.style.borderColor = "#2a2a2a"; }}
                   />
                 </div>
               </div>

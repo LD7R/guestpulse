@@ -37,6 +37,7 @@ type HotelSync = {
   booking_url: string | null;
   first_sync_completed: boolean | null;
   last_sync_at: string | null;
+  locked_until: string | null;
 };
 
 function computeInitials(fullName: string | null | undefined, email: string | null | undefined): string {
@@ -112,7 +113,7 @@ export default function DashboardLayout({
       }
       const { data } = await supabase
         .from("hotels")
-        .select("id, name, tripadvisor_url, google_url, booking_url, first_sync_completed, last_sync_at")
+        .select("id, name, tripadvisor_url, google_url, booking_url, first_sync_completed, last_sync_at, locked_until")
         .eq("user_id", user.id)
         .maybeSingle();
       setPrimaryHotel((data as HotelSync | null) ?? null);
@@ -223,7 +224,7 @@ export default function DashboardLayout({
     );
     const { data } = await supabase
       .from("hotels")
-      .select("id, name, tripadvisor_url, google_url, booking_url, first_sync_completed, last_sync_at")
+      .select("id, name, tripadvisor_url, google_url, booking_url, first_sync_completed, last_sync_at, locked_until")
       .eq("id", hotel.id)
       .maybeSingle();
     if (data) setPrimaryHotel(data as HotelSync);
@@ -380,6 +381,29 @@ export default function DashboardLayout({
         </Link>
 
         <div style={{ marginTop: "auto", padding: "16px" }}>
+          {primaryHotel?.locked_until &&
+            new Date(primaryHotel.locked_until) > new Date() && (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#444444",
+                  marginBottom: 6,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                🔒 Hotel locked ·{" "}
+                {Math.max(
+                  0,
+                  Math.ceil(
+                    (new Date(primaryHotel.locked_until).getTime() - Date.now()) /
+                      (1000 * 60 * 60 * 24),
+                  ),
+                )}{" "}
+                days
+              </div>
+            )}
           {syncIndicator && (
             <div
               style={{

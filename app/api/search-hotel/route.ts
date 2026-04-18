@@ -93,9 +93,14 @@ export async function POST(request: NextRequest) {
     const address = (place.address as string | null) ?? null;
     const website = (place.website as string | null) ?? null;
     const phone = (place.phone as string | null) ?? null;
-    const addressParsed = place.addressParsed as { city?: string; country?: string } | null;
+    const addressParsed = place.addressParsed as {
+      city?: string;
+      country?: string;
+      postalCode?: string;
+    } | null;
     const city_found = (place.city as string | null) ?? addressParsed?.city ?? null;
     const country_found = (place.countryCode as string | null) ?? addressParsed?.country ?? null;
+    const postal_code = (place.postalCode as string | null) ?? addressParsed?.postalCode ?? null;
     const title = (place.title as string | null) ?? hotel_name;
 
     // Step 2: Use Claude AI to find platform URLs
@@ -186,6 +191,7 @@ Respond ONLY with this JSON, no other text:
         address,
         city: city_found ?? city ?? null,
         country: country_found ?? country ?? null,
+        postal_code,
         website,
         phone,
         latitude,
