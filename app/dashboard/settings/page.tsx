@@ -77,7 +77,7 @@ type HotelSearchResult = {
   yelp_url: string | null;
   trip_url: string | null;
   expedia_url: string | null;
-  confidence: Record<string, "high" | "medium" | "low">;
+  url_confidence: Record<string, "verified" | "search_page" | "not_found">;
 };
 
 const glass: CSSProperties = {
@@ -1180,16 +1180,26 @@ export default function SettingsPage() {
                 ).map(({ key, label, badge, color }) => {
                   const urlKey = key === "google" ? "google_url" : key === "tripadvisor" ? "tripadvisor_url" : key === "booking" ? "booking_url" : key === "trip" ? "trip_url" : key === "expedia" ? "expedia_url" : "yelp_url";
                   const foundUrl = searchResult[urlKey as keyof HotelSearchResult] as string | null;
-                  const conf = searchResult.confidence?.[key] as "high" | "medium" | "low" | undefined;
+                  const conf = searchResult.url_confidence?.[key] as
+                    | "verified"
+                    | "search_page"
+                    | "not_found"
+                    | undefined;
                   const isEditing = editingUrls[key];
                   const currentVal = editedUrls[key] ?? foundUrl ?? "";
 
                   const confStyle =
-                    conf === "high"
-                      ? { bg: "#052e16", color: "#4ade80", label: "High confidence" }
-                      : conf === "medium"
-                        ? { bg: "#1a1200", color: "#fbbf24", label: "Check URL" }
-                        : { bg: "#1a1a1a", color: "#555555", label: "Verify manually" };
+                    conf === "verified"
+                      ? { bg: "#052e16", color: "#4ade80", label: "✓ Verified", tooltip: undefined }
+                      : conf === "search_page"
+                        ? {
+                            bg: "#1a1200",
+                            color: "#fbbf24",
+                            label: "⚠ Search page — verify manually",
+                            tooltip:
+                              "This links to a search page. Find your hotel and update the URL manually.",
+                          }
+                        : { bg: "#1a1a1a", color: "#555555", label: "Verify manually", tooltip: undefined };
 
                   return (
                     <div
@@ -1250,8 +1260,9 @@ export default function SettingsPage() {
                                 : currentVal}
                             </span>
                           )}
-                          {conf && (
+                          {conf && conf !== "not_found" && (
                             <span
+                              title={confStyle.tooltip}
                               style={{
                                 display: "inline-block",
                                 marginLeft: 6,
@@ -1261,6 +1272,7 @@ export default function SettingsPage() {
                                 fontWeight: 600,
                                 background: confStyle.bg,
                                 color: confStyle.color,
+                                cursor: confStyle.tooltip ? "help" : undefined,
                               }}
                             >
                               {confStyle.label}
