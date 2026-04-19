@@ -348,7 +348,7 @@ export default function DashboardLayout({
         <NavLink href="/dashboard/reviews?view=drafts" icon="◷" label="Response drafts" />
 
         <div style={labelStyle}>Intelligence</div>
-        <NavLink href="/dashboard/analytics" icon="∿" label="Sentiment trends" />
+        <NavLink href="/dashboard/sentiment" icon="∿" label="Sentiment trends" />
         <NavLink href="/dashboard/benchmarking" icon="◎" label="Competitors" />
 
         <div style={labelStyle}>Settings</div>
