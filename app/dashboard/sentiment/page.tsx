@@ -87,6 +87,10 @@ const platformColor: Record<string, string> = {
   tripadvisor: "#4ade80", google: "#60a5fa", booking: "#a78bfa",
   trip: "#60a5fa", expedia: "#a78bfa", yelp: "#f87171",
 };
+const platformBg: Record<string, string> = {
+  tripadvisor: "#052e16", google: "#172554", booking: "#1e1b4b",
+  trip: "#1e1b4b", expedia: "#1a0a2e", yelp: "#2d0a0a",
+};
 
 /* ─── sub-components ─────────────────────────────────────── */
 const CARD: CSSProperties = {
@@ -323,6 +327,11 @@ export default function SentimentPage() {
   }, [filtered]);
 
   /* ── response impact ─────────────────────────────────── */
+  const responseRatePct = useMemo(() => {
+    if (!filtered.length) return 0;
+    return Math.round((filtered.filter((r) => r.responded).length / filtered.length) * 100);
+  }, [filtered]);
+
   const responseImpact = useMemo(() => {
     const responded = filtered.filter((r) => r.responded);
     const unresponded = filtered.filter((r) => !r.responded);
@@ -459,14 +468,29 @@ export default function SentimentPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: "28px", color: "#555555", fontSize: 13 }}>
-        Loading sentiment data…
+      <div style={{ padding: "28px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 20 }}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              style={{
+                background: "#161616",
+                border: "1px solid #1e1e1e",
+                borderRadius: 8,
+                padding: "16px 20px",
+                height: 90,
+                animation: "pulse 1.5s ease-in-out infinite",
+              }}
+            />
+          ))}
+        </div>
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: "28px 28px 120px", maxWidth: 1200 }}>
+    <div style={{ padding: "28px 28px 28px", maxWidth: 1200 }}>
       {/* ── header ─────────────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div>
@@ -499,7 +523,22 @@ export default function SentimentPage() {
 
       {reviews.length === 0 && (
         <div style={{ ...CARD, color: "#555555", fontSize: 13, textAlign: "center", padding: "40px" }}>
-          No reviews yet. Sync your platforms to start seeing sentiment data.
+          <p style={{ marginBottom: 16 }}>No reviews yet. Sync your platforms to start seeing sentiment data.</p>
+          <a
+            href="/dashboard/reviews"
+            style={{
+              display: "inline-block",
+              background: "#f0f0f0",
+              color: "#0d0d0d",
+              fontSize: 13,
+              fontWeight: 600,
+              borderRadius: 6,
+              padding: "8px 16px",
+              textDecoration: "none",
+            }}
+          >
+            Go to review inbox →
+          </a>
         </div>
       )}
 
@@ -606,7 +645,7 @@ export default function SentimentPage() {
                         <span style={{
                           display: "inline-flex", alignItems: "center", justifyContent: "center",
                           padding: "2px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700,
-                          color: "#0d0d0d", background: platformColor[p.platform] ?? "#555555",
+                          color: platformColor[p.platform] ?? "#f0f0f0", background: platformBg[p.platform] ?? "#1e1e1e",
                         }}>
                           {(platformLabel[p.platform] ?? p.platform).toUpperCase().slice(0, 3)}
                         </span>
@@ -682,7 +721,7 @@ export default function SentimentPage() {
                     </div>
                   ) : null}
                   <div style={{ fontSize: 12, color: "#444444", fontStyle: "italic", lineHeight: 1.5 }}>
-                    Hotels that respond to all reviews see an average 0.3 star rating improvement over 90 days
+                    Your response rate is {responseRatePct}% — responding to reviews builds guest trust
                   </div>
                 </div>
               )}

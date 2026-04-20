@@ -18,7 +18,7 @@ const DANGER = "#f87171";
 const card: CSSProperties = {
   background: CARD,
   border: `1px solid ${BORDER}`,
-  borderRadius: 10,
+  borderRadius: 8,
   width: "100%",
   maxWidth: 560,
   padding: "40px 40px",
@@ -27,7 +27,7 @@ const card: CSSProperties = {
 
 const input: CSSProperties = {
   width: "100%",
-  background: "#0d0d0d",
+  background: "#111111",
   border: `1px solid ${BORDER}`,
   borderRadius: 6,
   padding: "10px 14px",
@@ -331,15 +331,15 @@ export default function OnboardingPage() {
       setSaveError("Hotel name is required.");
       return;
     }
-    const hasUrl =
-      tripadvisorUrl.trim() ||
-      googleUrl.trim() ||
-      bookingUrl.trim() ||
-      tripUrl.trim() ||
-      expediaUrl.trim() ||
-      yelpUrl.trim();
+    const urlFields = [tripadvisorUrl, googleUrl, bookingUrl, tripUrl, expediaUrl, yelpUrl];
+    const hasUrl = urlFields.some((u) => u.trim());
     if (!hasUrl) {
       setSaveError("Add at least one platform URL so we can fetch your reviews.");
+      return;
+    }
+    const invalidUrl = urlFields.find((u) => u.trim() && !u.trim().startsWith("http"));
+    if (invalidUrl) {
+      setSaveError("Please enter a valid URL starting with https://");
       return;
     }
 
@@ -954,8 +954,9 @@ export default function OnboardingPage() {
               {!syncDone && (
                 <button
                   type="button"
+                  disabled={syncStarted}
                   onClick={() => router.push("/dashboard")}
-                  style={{ ...ghostBtn, flexShrink: 0 }}
+                  style={{ ...ghostBtn, flexShrink: 0, opacity: syncStarted ? 0.4 : 1, cursor: syncStarted ? "not-allowed" : "pointer" }}
                 >
                   Skip for now
                 </button>

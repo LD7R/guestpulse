@@ -15,6 +15,7 @@
 import { createBrowserClient } from "@supabase/ssr";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import { useRouter } from "next/navigation";
 
 type ProfileRow = {
   id: string;
@@ -25,6 +26,12 @@ type ProfileRow = {
   subscription_status: string | null;
   subscription_plan: string | null;
   stripe_customer_id: string | null;
+  notif_new_reviews: boolean | null;
+  notif_urgent_alerts: boolean | null;
+  notif_weekly_digest: boolean | null;
+  notif_monthly_report: boolean | null;
+  notif_sync_reminders: boolean | null;
+  notif_rating_drops: boolean | null;
 };
 
 type HotelRow = {
@@ -157,6 +164,7 @@ function SaveRow({ saving, label, disabled }: { saving: boolean; label: string; 
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
@@ -272,6 +280,16 @@ export default function SettingsPage() {
         setFullName(p?.full_name ?? "");
         setDisplayName(p?.display_name ?? "");
         setPreferredLanguage(p?.preferred_language ?? "English");
+        if (p) {
+          setNotifications({
+            newReviews: p.notif_new_reviews ?? true,
+            urgentAlerts: p.notif_urgent_alerts ?? true,
+            weeklyDigest: p.notif_weekly_digest ?? true,
+            monthlyReport: p.notif_monthly_report ?? false,
+            syncReminders: p.notif_sync_reminders ?? true,
+            ratingDropAlerts: p.notif_rating_drops ?? true,
+          });
+        }
 
         if (hotelRes.error && hotelRes.error.code !== "PGRST116") throw hotelRes.error;
         const h = hotelRes.data as HotelRow | null;
@@ -332,7 +350,7 @@ export default function SettingsPage() {
         if (error) throw error;
       }
 
-      setProfile(prev => ({ id: user.id, ...profileData, subscription_status: prev?.subscription_status ?? null, subscription_plan: prev?.subscription_plan ?? null, stripe_customer_id: prev?.stripe_customer_id ?? null }));
+      setProfile(prev => ({ id: user.id, ...profileData, subscription_status: prev?.subscription_status ?? null, subscription_plan: prev?.subscription_plan ?? null, stripe_customer_id: prev?.stripe_customer_id ?? null, notif_new_reviews: prev?.notif_new_reviews ?? null, notif_urgent_alerts: prev?.notif_urgent_alerts ?? null, notif_weekly_digest: prev?.notif_weekly_digest ?? null, notif_monthly_report: prev?.notif_monthly_report ?? null, notif_sync_reminders: prev?.notif_sync_reminders ?? null, notif_rating_drops: prev?.notif_rating_drops ?? null }));
 
       if (hotelId) {
         const { error } = await supabase.from("hotels").update({ response_signature: responseSignature.trim() || "The Management Team" }).eq("id", hotelId);
@@ -483,10 +501,34 @@ export default function SettingsPage() {
     window.setTimeout(() => setAutoFillMsg(null), 3000);
   }
 
-  function onSaveNotifications(e: FormEvent<HTMLFormElement>) {
+  async function onSaveNotifications(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!userId) return;
     setSavingNotifications(true);
-    window.setTimeout(() => { setSavingNotifications(false); showToast("success", "Notification preferences saved"); }, 200);
+    try {
+      const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+      const notifData = {
+        notif_new_reviews: notifications.newReviews,
+        notif_urgent_alerts: notifications.urgentAlerts,
+        notif_weekly_digest: notifications.weeklyDigest,
+        notif_monthly_report: notifications.monthlyReport,
+        notif_sync_reminders: notifications.syncReminders,
+        notif_rating_drops: notifications.ratingDropAlerts,
+      };
+      const { data: existing } = await supabase.from("profiles").select("id").eq("id", userId).maybeSingle();
+      if (existing) {
+        const { error } = await supabase.from("profiles").update(notifData).eq("id", userId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("profiles").insert({ id: userId, ...notifData });
+        if (error) throw error;
+      }
+      showToast("success", "Notification preferences saved");
+    } catch (err) {
+      showToast("error", err instanceof Error ? err.message : "Failed to save notifications");
+    } finally {
+      setSavingNotifications(false);
+    }
   }
 
   // ── Input helpers ──────────────────────────────────────────────────────────
@@ -549,7 +591,7 @@ export default function SettingsPage() {
     <div className="settings-page">
       {/* PAGE HEADER */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 500, color: "#f0f0f0", margin: "0 0 4px 0" }}>Settings</h1>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#f0f0f0", margin: "0 0 4px 0" }}>Settings</h1>
         <p style={{ fontSize: 12, color: "#555555", margin: 0 }}>Manage your account and hotel preferences</p>
       </div>
 
@@ -558,7 +600,7 @@ export default function SettingsPage() {
         {TABS.map(t => {
           const active = activeTab === t.id;
           return (
-            <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} style={{ padding: "8px 0", marginRight: 24, marginBottom: -1, fontSize: 13, fontWeight: 500, color: active ? "#f0f0f0" : "#555555", borderBottom: active ? "2px solid #f0f0f0" : "2px solid transparent", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+            <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} style={{ padding: "8px 0", marginRight: 24, marginBottom: -1, fontSize: 13, fontWeight: 500, color: active ? "#f0f0f0" : "#555555", borderBottom: active ? "2px solid #f0f0f0" : "2px solid transparent", background: "none", borderTop: "none", borderLeft: "none", borderRight: "none", outline: "none", cursor: "pointer", fontFamily: "inherit" }}>
               {t.label}
             </button>
           );
@@ -942,7 +984,7 @@ export default function SettingsPage() {
                   <span style={{ fontSize: 14, color: "#555555" }}>/mo</span>
                 </div>
                 <p style={{ fontSize: 12, color: "#444444", margin: "0 0 16px 0" }}>7-day free trial · No credit card required</p>
-                <button type="button" onClick={() => window.location.href = "/dashboard/pricing"}
+                <button type="button" onClick={() => router.push("/dashboard/pricing")}
                   style={{ ...primaryBtn, width: "100%", padding: "11px 0", fontSize: 14 }}
                   onMouseEnter={e => { e.currentTarget.style.background = "#e0e0e0"; }} onMouseLeave={e => { e.currentTarget.style.background = "#f0f0f0"; }}>
                   Start free trial
@@ -958,7 +1000,7 @@ export default function SettingsPage() {
                   {profile?.subscription_plan ? `${profile.subscription_plan.charAt(0).toUpperCase()}${profile.subscription_plan.slice(1)}` : "Professional"} — Trial
                 </div>
                 <p style={{ fontSize: 13, color: "#888888", margin: "0 0 16px 0" }}>Your trial is active. Upgrade before it ends to keep access.</p>
-                <button type="button" onClick={() => window.location.href = "/dashboard/pricing"}
+                <button type="button" onClick={() => router.push("/dashboard/pricing")}
                   style={{ ...primaryBtn }} onMouseEnter={e => { e.currentTarget.style.background = "#e0e0e0"; }} onMouseLeave={e => { e.currentTarget.style.background = "#f0f0f0"; }}>
                   Manage subscription
                 </button>
@@ -980,7 +1022,7 @@ export default function SettingsPage() {
                   <div style={{ fontSize: 18, fontWeight: 500, color: "#f0f0f0", marginBottom: 4 }}>You&apos;re on the {planLabel} plan</div>
                   <p style={{ fontSize: 13, color: "#4ade80", margin: "0 0 4px 0" }}>All features unlocked</p>
                   <p style={{ fontSize: 13, color: "#888888", margin: "0 0 16px 0" }}>Billing managed via Stripe</p>
-                  <button type="button" onClick={() => window.location.href = "/dashboard/pricing"}
+                  <button type="button" onClick={() => router.push("/dashboard/pricing")}
                     style={{ background: "transparent", border: "1px solid #2a2a2a", borderRadius: 6, padding: "7px 16px", color: "#888888", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = "#3a3a3a"; e.currentTarget.style.color = "#aaaaaa"; }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = "#2a2a2a"; e.currentTarget.style.color = "#888888"; }}>
@@ -995,7 +1037,16 @@ export default function SettingsPage() {
               <div style={{ background: "#111111", border: "1px solid #3a1a1a", borderRadius: 8, padding: 20 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "#f87171", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>Payment Failed</div>
                 <div style={{ fontSize: 18, fontWeight: 500, color: "#f0f0f0", marginBottom: 8 }}>Update billing to restore access</div>
-                <button type="button" style={{ ...primaryBtn }} onMouseEnter={e => { e.currentTarget.style.background = "#e0e0e0"; }} onMouseLeave={e => { e.currentTarget.style.background = "#f0f0f0"; }}>
+                <button type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/stripe-portal", { method: "POST" });
+                      const data = await res.json() as { url?: string; error?: string };
+                      if (data.url) { window.location.href = data.url; }
+                      else { showToast("error", data.error ?? "Could not open billing portal"); }
+                    } catch { showToast("error", "Could not open billing portal"); }
+                  }}
+                  style={{ ...primaryBtn }} onMouseEnter={e => { e.currentTarget.style.background = "#e0e0e0"; }} onMouseLeave={e => { e.currentTarget.style.background = "#f0f0f0"; }}>
                   Update billing
                 </button>
               </div>

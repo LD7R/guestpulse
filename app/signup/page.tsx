@@ -46,11 +46,19 @@ export default function SignupPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setConfirmError(null);
+
+    if (password !== confirmPassword) {
+      setConfirmError("Passwords do not match");
+      return;
+    }
 
     const supabase = createSupabaseBrowserClient();
     const { error: signUpError } = await supabase.auth.signUp({
@@ -81,18 +89,6 @@ export default function SignupPage() {
       }}
     >
       <div style={glassCard}>
-        <div
-          style={{
-            textAlign: "center",
-            fontSize: "18px",
-            fontWeight: 700,
-            color: "#f0f0f0",
-            letterSpacing: "-0.02em",
-            marginBottom: "8px",
-          }}
-        >
-          GuestPulse
-        </div>
         <h1
           style={{
             textAlign: "center",
@@ -147,7 +143,7 @@ export default function SignupPage() {
             />
           </div>
 
-          <div style={{ marginBottom: "16px" }}>
+          <div style={{ marginBottom: "4px" }}>
             <label
               htmlFor="password"
               style={{
@@ -176,6 +172,50 @@ export default function SignupPage() {
               }}
             />
           </div>
+          <p style={{ fontSize: "12px", color: "#555555", margin: "4px 0 16px 0" }}>
+            At least 8 characters
+          </p>
+
+          <div style={{ marginBottom: "16px" }}>
+            <label
+              htmlFor="confirm-password"
+              style={{
+                display: "block",
+                fontSize: "13px",
+                color: "#888888",
+                marginBottom: "6px",
+              }}
+            >
+              Confirm password
+            </label>
+            <input
+              id="confirm-password"
+              type="password"
+              autoComplete="new-password"
+              required
+              value={confirmPassword}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+                if (confirmError) setConfirmError(null);
+              }}
+              placeholder="••••••••"
+              style={{
+                ...glassInput,
+                borderColor: confirmError ? "#f87171" : "#2a2a2a",
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = confirmError ? "#f87171" : "#3a3a3a";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = confirmError ? "#f87171" : "#2a2a2a";
+              }}
+            />
+            {confirmError && (
+              <p style={{ fontSize: "12px", color: "#f87171", margin: "4px 0 0 0" }}>
+                {confirmError}
+              </p>
+            )}
+          </div>
 
           {error ? (
             <p
@@ -198,6 +238,10 @@ export default function SignupPage() {
               opacity: isPending ? 0.6 : 1,
               cursor: isPending ? "not-allowed" : "pointer",
               marginTop: error ? "8px" : "0",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
             }}
             onMouseEnter={(e) => {
               if (!isPending) {
@@ -208,8 +252,26 @@ export default function SignupPage() {
               e.currentTarget.style.background = "#f0f0f0";
             }}
           >
-            {isPending ? "Creating account…" : "Sign up"}
+            {isPending ? (
+              <>
+                <span
+                  style={{
+                    width: 14,
+                    height: 14,
+                    border: "2px solid #0d0d0d",
+                    borderTopColor: "transparent",
+                    borderRadius: "50%",
+                    display: "inline-block",
+                    animation: "spin 0.6s linear infinite",
+                  }}
+                />
+                Creating account…
+              </>
+            ) : (
+              "Sign up"
+            )}
           </button>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </form>
 
         <p

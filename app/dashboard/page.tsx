@@ -309,6 +309,7 @@ export default function DashboardOverviewPage() {
   const [weightedTotalCount, setWeightedTotalCount] = useState<number | null>(null);
   const [weightedHistoricalCount, setWeightedHistoricalCount] = useState<number | null>(null);
 
+  const [pdfToast, setPdfToast] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [syncProgress, setSyncProgress] = useState<SyncProgress>({ tripadvisor: "idle", google: "idle", booking: "idle", trip: "idle", expedia: "idle", yelp: "idle" });
@@ -997,7 +998,7 @@ export default function DashboardOverviewPage() {
   const tabActive = {
     overview: pathname === "/dashboard" || pathname === "/dashboard/",
     inbox: pathname?.startsWith("/dashboard/reviews"),
-    sentiment: pathname?.startsWith("/dashboard/analytics"),
+    sentiment: pathname?.startsWith("/dashboard/sentiment"),
     competitors: pathname?.startsWith("/dashboard/benchmarking"),
   };
 
@@ -1008,16 +1009,23 @@ export default function DashboardOverviewPage() {
 
   if (loading) {
     return (
-      <div
-        style={{
-          background: "#0d0d0d",
-          minHeight: "100vh",
-          padding: "24px 28px",
-          color: "#888",
-          fontSize: 13,
-        }}
-      >
-        Loading…
+      <div style={{ background: "#0d0d0d", minHeight: "100vh", padding: "24px 28px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              style={{
+                background: "#161616",
+                border: "1px solid #1e1e1e",
+                borderRadius: 10,
+                padding: "20px 24px",
+                height: 110,
+                animation: "pulse 1.5s ease-in-out infinite",
+              }}
+            />
+          ))}
+        </div>
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
       </div>
     );
   }
@@ -1025,7 +1033,22 @@ export default function DashboardOverviewPage() {
   if (error) {
     return (
       <div style={{ background: "#0d0d0d", minHeight: "100vh", padding: "24px 28px", color: "#f87171" }}>
-        {error}
+        <p style={{ marginBottom: 12 }}>{error}</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          style={{
+            background: "#1e1e1e",
+            border: "1px solid #2a2a2a",
+            borderRadius: 6,
+            padding: "7px 14px",
+            fontSize: 12,
+            color: "#f0f0f0",
+            cursor: "pointer",
+          }}
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -1048,9 +1071,32 @@ export default function DashboardOverviewPage() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
           <div style={{ display: "flex", gap: 8 }}>
+            {pdfToast && (
+              <div
+                style={{
+                  position: "fixed",
+                  bottom: 24,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  background: "#1e1e1e",
+                  border: "1px solid #2a2a2a",
+                  borderRadius: 8,
+                  padding: "10px 18px",
+                  fontSize: 13,
+                  color: "#f0f0f0",
+                  zIndex: 9999,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                PDF export coming soon — use Ctrl+P / Cmd+P to print for now
+              </div>
+            )}
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={() => {
+                setPdfToast(true);
+                setTimeout(() => setPdfToast(false), 3500);
+              }}
               style={{
                 background: "transparent",
                 border: "1px solid #2a2a2a",
@@ -1250,7 +1296,7 @@ export default function DashboardOverviewPage() {
           [
             { id: "overview", label: "Overview", onClick: () => router.push("/dashboard") },
             { id: "inbox", label: "Review inbox", onClick: () => router.push("/dashboard/reviews") },
-            { id: "sentiment", label: "Sentiment", onClick: () => router.push("/dashboard") },
+            { id: "sentiment", label: "Sentiment", onClick: () => router.push("/dashboard/sentiment") },
             {
               id: "competitors",
               label: "Competitors",

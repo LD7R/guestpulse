@@ -138,7 +138,7 @@ export default function DashboardLayout({
         .from("hotels")
         .select("id")
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
       if (!hotel?.id) {
         setInboxUnrespondedCount(0);
         return;
@@ -345,7 +345,7 @@ export default function DashboardLayout({
 
         <div style={labelStyle}>Reviews</div>
         <NavLink href="/dashboard/reviews" icon="☰" label="Review inbox" badge={inboxUnrespondedCount} />
-        <NavLink href="/dashboard/reviews?view=drafts" icon="◷" label="Response drafts" />
+        <NavLink href="/dashboard/reviews" icon="◷" label="Response drafts" />
 
         <div style={labelStyle}>Intelligence</div>
         <NavLink href="/dashboard/sentiment" icon="∿" label="Sentiment trends" />
@@ -354,31 +354,7 @@ export default function DashboardLayout({
         <div style={labelStyle}>Settings</div>
         <NavLink href="/dashboard/settings" icon="⚙" label="Settings" />
         <NavLink href="/dashboard/pricing" icon="◈" label="Pricing" />
-        <Link
-          href="/dashboard/settings"
-          style={{
-            ...navItemBase,
-            background: "transparent",
-            color: "#888888",
-          }}
-        >
-          <span style={{ width: 18, textAlign: "center" }} aria-hidden>
-            ✉
-          </span>
-          <span style={{ flex: 1 }}>Email digest</span>
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              padding: "2px 6px",
-              borderRadius: 3,
-              background: "#052e16",
-              color: "#4ade80",
-            }}
-          >
-            ON
-          </span>
-        </Link>
+        <NavLink href="/dashboard/settings" icon="✉" label="Notifications" />
 
         <div style={{ marginTop: "auto", padding: "16px" }}>
           {primaryHotel?.locked_until &&
@@ -478,13 +454,11 @@ export default function DashboardLayout({
             alignItems: "center",
             justifyContent: "space-between",
             gap: 8,
+            cursor: "default",
           }}
         >
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {currentHotelLabel}
-          </span>
-          <span style={{ color: "#555555", flexShrink: 0 }} aria-hidden>
-            ▾
           </span>
         </div>
         <div
@@ -512,7 +486,8 @@ export default function DashboardLayout({
         {[
           { href: "/dashboard", label: "Home", icon: "▦" },
           { href: "/dashboard/reviews", label: "Inbox", icon: "☰" },
-          { href: "/dashboard/benchmarking", label: "Rank", icon: "◎" },
+          { href: "/dashboard/sentiment", label: "Sentiment", icon: "∿" },
+          { href: "/dashboard/benchmarking", label: "Benchmark", icon: "◎" },
           { href: "/dashboard/settings", label: "Settings", icon: "⚙" },
         ].map((item) => {
           const active = isActive(item.href);

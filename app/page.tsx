@@ -63,7 +63,7 @@ const faqItems: { q: string; a: string }[] = [
   },
   {
     q: "What platforms do you support?",
-    a: "Currently TripAdvisor, Google Maps, and Booking.com. Expedia and Hotels.com are coming soon.",
+    a: "TripAdvisor, Google Maps, Booking.com, Expedia, Trip.com, and Yelp — all six major platforms are fully supported.",
   },
 ];
 
@@ -91,6 +91,10 @@ export default function LandingPage() {
 
   const goLogin = useCallback(() => {
     router.push("/login");
+  }, [router]);
+
+  const goSignup = useCallback(() => {
+    router.push("/signup");
   }, [router]);
 
   const toggleFaq = useCallback((i: number) => {
@@ -307,7 +311,7 @@ export default function LandingPage() {
           </button>
           <button
             type="button"
-            onClick={goLogin}
+            onClick={goSignup}
             style={{
               ...primaryBtn,
               padding: "8px 20px",
@@ -328,7 +332,7 @@ export default function LandingPage() {
         <button
           type="button"
           className="landing-nav-mobile-cta"
-          onClick={goLogin}
+          onClick={goSignup}
           style={{
             ...primaryBtn,
             padding: "8px 18px",
@@ -354,7 +358,7 @@ export default function LandingPage() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: "160px 48px 100px",
+          padding: "clamp(80px, 12vw, 160px) 48px 100px",
           textAlign: "center",
           position: "relative",
           overflow: "hidden",
@@ -362,7 +366,7 @@ export default function LandingPage() {
         className="landing-section-pad"
       >
         <div style={{ position: "relative", zIndex: 1, maxWidth: "900px" }}>
-          <div style={{ ...badgePill, marginBottom: "24px" }}>✦ Trusted by independent hotels worldwide</div>
+          <div style={{ ...badgePill, marginBottom: "24px" }}>✦ Built for independent boutique hotels</div>
 
           <h1
             className="landing-hero-h1"
@@ -409,7 +413,7 @@ export default function LandingPage() {
           >
             <button
               type="button"
-              onClick={goLogin}
+              onClick={goSignup}
               style={{
                 ...primaryBtn,
                 height: "52px",
@@ -1175,7 +1179,7 @@ export default function LandingPage() {
 
           <button
             type="button"
-            onClick={goLogin}
+            onClick={goSignup}
             style={{
               ...primaryBtn,
               width: "100%",
@@ -1279,7 +1283,7 @@ export default function LandingPage() {
           <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", justifyContent: "center" }}>
             <button
               type="button"
-              onClick={goLogin}
+              onClick={goSignup}
               style={{
                 ...primaryBtn,
                 height: "56px",
@@ -1345,11 +1349,9 @@ export default function LandingPage() {
           </span>
         </div>
         <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
-          {["Privacy", "Terms", "Contact"].map((label) => (
-            <span key={label} style={{ fontSize: "13px", color: "#555555", cursor: "pointer" }}>
-              {label}
-            </span>
-          ))}
+          <button type="button" onClick={() => alert("Privacy policy coming soon")} style={{ background: "none", border: "none", padding: 0, fontSize: "13px", color: "#555555", cursor: "pointer", fontFamily: "inherit" }}>Privacy</button>
+          <button type="button" onClick={() => alert("Terms of service coming soon")} style={{ background: "none", border: "none", padding: 0, fontSize: "13px", color: "#555555", cursor: "pointer", fontFamily: "inherit" }}>Terms</button>
+          <a href="mailto:hello@guestpulse.app" style={{ fontSize: "13px", color: "#555555", textDecoration: "none" }}>Contact</a>
         </div>
       </footer>
     </div>
