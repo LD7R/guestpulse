@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import type { CSSProperties } from "react";
-import CheckoutModal from "@/components/CheckoutModal";
 
 const secondaryBtn: CSSProperties = {
   width: "100%",
@@ -43,10 +42,6 @@ export default function PricingPage() {
   const [billingInterval, setBillingInterval] = useState<"monthly" | "annual">("monthly");
   const [loading, setLoading] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [checkoutModal, setCheckoutModal] = useState<{
-    plan: string;
-    interval: "monthly" | "annual";
-  } | null>(null);
 
   const prices = {
     essential: { monthly: "$99", annual: "$83", annualTotal: "$990" },
@@ -70,7 +65,18 @@ export default function PricingPage() {
         return;
       }
 
-      setCheckoutModal({ plan, interval: billingInterval });
+      const res = await fetch("/api/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.id,
+          email: user.email,
+          plan,
+          interval: billingInterval,
+        }),
+      });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (data.url) window.location.href = data.url;
     } finally {
       setLoading(null);
     }
@@ -575,16 +581,6 @@ export default function PricingPage() {
         })}
       </div>
 
-      {checkoutModal && (
-        <CheckoutModal
-          plan={checkoutModal.plan}
-          interval={checkoutModal.interval}
-          onClose={() => setCheckoutModal(null)}
-          onSuccess={() => {
-            setCheckoutModal(null);
-          }}
-        />
-      )}
     </div>
   );
 }
