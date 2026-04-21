@@ -16,6 +16,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import CheckoutModal from "@/components/CheckoutModal";
 
 type ProfileRow = {
   id: string;
@@ -236,6 +237,10 @@ export default function SettingsPage() {
   });
 
   const [toast, setToast] = useState<ToastState>(null);
+  const [checkoutModal, setCheckoutModal] = useState<{
+    plan: string;
+    interval: "monthly" | "annual";
+  } | null>(null);
 
   const showToast = useCallback((type: "success" | "error", message: string) => {
     setToast({ type, message });
@@ -962,7 +967,8 @@ export default function SettingsPage() {
                 <p style={{ fontSize: 13, color: "#555555", margin: "0 0 20px 0", lineHeight: 1.6 }}>Upgrade to unlock AI drafts, full sentiment analysis, and competitor benchmarking.</p>
                 <button type="button" onClick={() => router.push("/dashboard/pricing")}
                   style={{ ...primaryBtn, width: "100%", padding: "11px 0", fontSize: 14 }}
-                  onMouseEnter={e => { e.currentTarget.style.background = "#e0e0e0"; }} onMouseLeave={e => { e.currentTarget.style.background = "#f0f0f0"; }}>
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#e0e0e0"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "#f0f0f0"; }}>
                   View pricing →
                 </button>
               </div>
@@ -988,15 +994,7 @@ export default function SettingsPage() {
                     <span style={{ fontSize: 13, color: "#888888" }}>days remaining</span>
                   </div>
                   <button type="button"
-                    onClick={async () => {
-                      if (!userId) return;
-                      try {
-                        const res = await fetch("/api/create-checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: userId, email: userEmail, plan, interval }) });
-                        const data = await res.json() as { url?: string; error?: string };
-                        if (data.url) window.location.href = data.url;
-                        else showToast("error", data.error ?? "Could not open checkout");
-                      } catch { showToast("error", "Could not open checkout"); }
-                    }}
+                    onClick={() => setCheckoutModal({ plan, interval: (interval === "annual" ? "annual" : "monthly") as "monthly" | "annual" })}
                     style={{ ...primaryBtn, width: "100%", padding: "11px 0", fontSize: 14, marginBottom: 12 }}
                     onMouseEnter={e => { e.currentTarget.style.background = "#e0e0e0"; }} onMouseLeave={e => { e.currentTarget.style.background = "#f0f0f0"; }}>
                     Add payment method
@@ -1062,7 +1060,11 @@ export default function SettingsPage() {
                       Manage subscription
                     </button>
                     {!isBusiness && (
-                      <button type="button" onClick={() => router.push("/dashboard/pricing")}
+                      <button type="button"
+                        onClick={() => {
+                          const nextPlan = isEssential ? "professional" : "business";
+                          setCheckoutModal({ plan: nextPlan, interval: (interval === "annual" ? "annual" : "monthly") as "monthly" | "annual" });
+                        }}
                         style={{ background: "transparent", border: "1px solid #2a2a2a", borderRadius: 6, padding: "7px 14px", color: "#888888", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = "#3a3a3a"; e.currentTarget.style.color = "#aaaaaa"; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = "#2a2a2a"; e.currentTarget.style.color = "#888888"; }}>
@@ -1070,7 +1072,8 @@ export default function SettingsPage() {
                       </button>
                     )}
                     {interval === "monthly" && (
-                      <button type="button" onClick={() => router.push("/dashboard/pricing")}
+                      <button type="button"
+                        onClick={() => setCheckoutModal({ plan, interval: "annual" })}
                         style={{ background: "#0a1a0a", border: "1px solid #1a3a1a", borderRadius: 6, padding: "7px 14px", color: "#4ade80", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
                         onMouseEnter={e => { e.currentTarget.style.background = "#0d2a0d"; }}
                         onMouseLeave={e => { e.currentTarget.style.background = "#0a1a0a"; }}>
@@ -1112,7 +1115,8 @@ export default function SettingsPage() {
                 {profile?.current_period_end && (
                   <p style={{ fontSize: 13, color: "#555555", margin: "0 0 16px 0" }}>Access expires {new Date(profile.current_period_end).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
                 )}
-                <button type="button" onClick={() => router.push("/dashboard/pricing")}
+                <button type="button"
+                  onClick={() => setCheckoutModal({ plan: profile?.subscription_plan ?? "professional", interval: (profile?.subscription_interval === "annual" ? "annual" : "monthly") as "monthly" | "annual" })}
                   style={{ ...primaryBtn }} onMouseEnter={e => { e.currentTarget.style.background = "#e0e0e0"; }} onMouseLeave={e => { e.currentTarget.style.background = "#f0f0f0"; }}>
                   Reactivate
                 </button>
@@ -1164,6 +1168,16 @@ export default function SettingsPage() {
             </div>
           </form>
         </div>
+      )}
+
+      {/* ── Checkout Modal ────────────────────────────────────────────────── */}
+      {checkoutModal && (
+        <CheckoutModal
+          plan={checkoutModal.plan}
+          interval={checkoutModal.interval}
+          onClose={() => setCheckoutModal(null)}
+          onSuccess={() => setCheckoutModal(null)}
+        />
       )}
 
       {/* ── Toast ─────────────────────────────────────────────────────────── */}
