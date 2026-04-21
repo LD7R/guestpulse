@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useState, useTransition } from "react";
 import type { CSSProperties } from "react";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase";
@@ -40,8 +40,9 @@ const primaryBtn: CSSProperties = {
   cursor: "pointer",
 };
 
-export default function SignupPage() {
+function SignupContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
   const [email, setEmail] = useState("");
@@ -71,8 +72,15 @@ export default function SignupPage() {
       return;
     }
 
+    const plan = searchParams.get("plan");
+    const interval = searchParams.get("interval");
+    const redirectTo =
+      plan
+        ? `/dashboard/pricing?plan=${plan}${interval ? `&interval=${interval}` : ""}`
+        : "/dashboard";
+
     startTransition(() => {
-      router.replace("/dashboard");
+      router.replace(redirectTo);
       router.refresh();
     });
   }
@@ -294,5 +302,13 @@ export default function SignupPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupContent />
+    </Suspense>
   );
 }

@@ -2,6 +2,7 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 
 import { defaultDraftResponse, useDraftResponses } from "@/lib/useDraftResponses";
 
@@ -317,6 +318,7 @@ function Pill({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function ReviewsInboxPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -348,6 +350,7 @@ export default function ReviewsInboxPage() {
   const [noteEditorId, setNoteEditorId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [undoConfirmId, setUndoConfirmId] = useState<string | null>(null);
+  const [upgradeModal, setUpgradeModal] = useState<{ message: string } | null>(null);
 
   // Close flag menu on outside click
   useEffect(() => {
@@ -505,8 +508,13 @@ export default function ReviewsInboxPage() {
         signal: controller.signal,
       });
 
-      const json = (await res.json()) as { success?: boolean; response?: string; error?: string };
+      const json = (await res.json()) as { success?: boolean; response?: string; error?: string; upgrade_required?: boolean };
       if (controller.signal.aborted) return;
+      if (json.upgrade_required) {
+        patchDraftResponse(id, { isOpen: false, status: "idle" });
+        setUpgradeModal({ message: json.error ?? "Upgrade required to use AI drafts." });
+        return;
+      }
       if (!res.ok || json.success !== true || !json.response) throw new Error(json.error ?? "Failed to generate draft");
       patchDraftResponse(id, { status: "done", text: json.response });
     } catch (err) {
@@ -819,6 +827,80 @@ export default function ReviewsInboxPage() {
   return (
     <div style={{ background: C.pageBg, minHeight: "100vh", padding: "24px 28px", boxSizing: "border-box" }}>
       <style dangerouslySetInnerHTML={{ __html: "@keyframes rv-pulse { 0%,100%{opacity:0.4} 50%{opacity:0.8} } @keyframes rvspin { to { transform: rotate(360deg); } } @keyframes sync-fadein { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } } @keyframes countdown-bar { from { width:100%; } to { width:0%; } }" }} />
+
+      {/* Upgrade modal */}
+      {upgradeModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+          }}
+          onClick={() => setUpgradeModal(null)}
+        >
+          <div
+            style={{
+              background: "#141414",
+              border: "1px solid #1e1e1e",
+              borderRadius: 8,
+              padding: 28,
+              maxWidth: 400,
+              width: "100%",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#f0f0f0", marginBottom: 12 }}>
+              Upgrade to continue
+            </div>
+            <p style={{ fontSize: 13, color: "#888888", marginBottom: 24, lineHeight: 1.6 }}>
+              {upgradeModal.message}
+            </p>
+            <button
+              type="button"
+              onClick={() => { setUpgradeModal(null); router.push("/dashboard/pricing"); }}
+              style={{
+                width: "100%",
+                background: "#f0f0f0",
+                border: "none",
+                borderRadius: 6,
+                padding: "11px 0",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#0d0d0d",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                marginBottom: 12,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#e0e0e0"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "#f0f0f0"; }}
+            >
+              View pricing plans
+            </button>
+            <button
+              type="button"
+              onClick={() => setUpgradeModal(null)}
+              style={{
+                display: "block",
+                width: "100%",
+                background: "none",
+                border: "none",
+                color: "#555555",
+                fontSize: 13,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                textAlign: "center",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── 1. Page Header ─────────────────────────────────────────────── */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>

@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Rate limit check for Essential plan ───────────────────────────────────
+    // ── Plan check ────────────────────────────────────────────────────────────
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -56,14 +56,31 @@ export async function POST(req: NextRequest) {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("subscription_plan, ai_drafts_used, ai_drafts_reset_at")
+        .select("subscription_plan, subscription_status, ai_drafts_used, ai_drafts_reset_at")
         .eq("id", user_id)
         .single();
 
-      if (profile?.subscription_plan === "essential") {
+      const plan = (profile?.subscription_plan as string | null) ?? "free";
+      const status = (profile?.subscription_status as string | null) ?? "free";
+      const isActive = status === "active" || status === "trialing";
+
+      // Free plan: no AI drafts
+      if (!isActive) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Start your free trial to use AI response drafting.",
+            upgrade_required: true,
+            plan: "free",
+          },
+          { status: 403 },
+        );
+      }
+
+      if (plan === "essential") {
         isEssential = true;
-        const draftsUsed = (profile.ai_drafts_used as number | null) ?? 0;
-        const resetAt = profile.ai_drafts_reset_at as string | null;
+        const draftsUsed = (profile?.ai_drafts_used as number | null) ?? 0;
+        const resetAt = profile?.ai_drafts_reset_at as string | null;
 
         // Reset counter if more than 30 days since last reset
         const daysSinceReset = resetAt
@@ -85,7 +102,8 @@ export async function POST(req: NextRequest) {
             {
               success: false,
               error: `Monthly AI draft limit reached (${ESSENTIAL_DRAFT_LIMIT}/${ESSENTIAL_DRAFT_LIMIT}). Upgrade to Professional for unlimited drafts.`,
-              upgrade: true,
+              upgrade_required: true,
+              plan: "essential",
             },
             { status: 403 },
           );

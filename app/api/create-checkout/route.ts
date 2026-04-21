@@ -1,6 +1,21 @@
 import Stripe from "stripe";
 import { NextRequest, NextResponse } from "next/server";
 
+const PRICES: Record<string, Record<string, string>> = {
+  essential: {
+    monthly: process.env.STRIPE_PRICE_ESSENTIAL_MONTHLY!,
+    annual: process.env.STRIPE_PRICE_ESSENTIAL_ANNUAL!,
+  },
+  professional: {
+    monthly: process.env.STRIPE_PRICE_PROFESSIONAL_MONTHLY!,
+    annual: process.env.STRIPE_PRICE_PROFESSIONAL_ANNUAL!,
+  },
+  business: {
+    monthly: process.env.STRIPE_PRICE_BUSINESS_MONTHLY!,
+    annual: process.env.STRIPE_PRICE_BUSINESS_ANNUAL!,
+  },
+};
+
 export async function POST(request: NextRequest) {
   try {
     const stripeKey = process.env.STRIPE_SECRET_KEY;
@@ -9,21 +24,17 @@ export async function POST(request: NextRequest) {
     }
     const stripe = new Stripe(stripeKey);
 
-    const PRICE_IDS = {
-      essential: process.env.STRIPE_PRICE_ESSENTIAL ?? "",
-      professional: process.env.STRIPE_PRICE_PROFESSIONAL ?? "",
-      business: process.env.STRIPE_PRICE_BUSINESS ?? "",
-    };
-
-    const { user_id, email, plan } = (await request.json()) as {
+    const { user_id, email, plan, interval } = (await request.json()) as {
       user_id?: string;
       email?: string;
       plan?: string;
+      interval?: string;
     };
 
-    const priceId = PRICE_IDS[plan as keyof typeof PRICE_IDS];
+    const resolvedInterval = interval === "annual" ? "annual" : "monthly";
+    const priceId = PRICES[plan ?? ""]?.[resolvedInterval];
     if (!priceId) {
-      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid plan or interval" }, { status: 400 });
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -31,15 +42,19 @@ export async function POST(request: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
       success_url:
-        process.env.NEXT_PUBLIC_APP_URL + "/dashboard?upgraded=true&plan=" + plan,
-      cancel_url: process.env.NEXT_PUBLIC_APP_URL + "/dashboard/settings",
+        process.env.NEXT_PUBLIC_APP_URL +
+        "/dashboard?upgraded=true&plan=" +
+        plan +
+        "&interval=" +
+        resolvedInterval,
+      cancel_url: process.env.NEXT_PUBLIC_APP_URL + "/dashboard/pricing",
       customer_email: email,
-      // Put metadata on both session and subscription so webhook can find user_id easily
-      metadata: { user_id: user_id ?? "", plan: plan ?? "" },
+      allow_promotion_codes: true,
       subscription_data: {
         trial_period_days: 7,
-        metadata: { user_id: user_id ?? "", plan: plan ?? "" },
+        metadata: { user_id: user_id ?? "", plan: plan ?? "", interval: resolvedInterval },
       },
+      metadata: { user_id: user_id ?? "", plan: plan ?? "", interval: resolvedInterval },
     });
 
     return NextResponse.json({ url: session.url });

@@ -25,7 +25,11 @@ type ProfileRow = {
   preferred_language: string | null;
   subscription_status: string | null;
   subscription_plan: string | null;
+  subscription_interval: string | null;
   stripe_customer_id: string | null;
+  current_period_end: string | null;
+  trial_ends_at: string | null;
+  ai_drafts_used: number | null;
   notif_new_reviews: boolean | null;
   notif_urgent_alerts: boolean | null;
   notif_weekly_digest: boolean | null;
@@ -250,7 +254,7 @@ export default function SettingsPage() {
 
   const billingPlan = useMemo(() => {
     const s = (profile?.subscription_status ?? "").toLowerCase();
-    if (s === "trialing" || s === "active" || s === "past_due") return s;
+    if (s === "trialing" || s === "active" || s === "past_due" || s === "cancelled") return s;
     return "free";
   }, [profile]);
 
@@ -350,7 +354,7 @@ export default function SettingsPage() {
         if (error) throw error;
       }
 
-      setProfile(prev => ({ id: user.id, ...profileData, subscription_status: prev?.subscription_status ?? null, subscription_plan: prev?.subscription_plan ?? null, stripe_customer_id: prev?.stripe_customer_id ?? null, notif_new_reviews: prev?.notif_new_reviews ?? null, notif_urgent_alerts: prev?.notif_urgent_alerts ?? null, notif_weekly_digest: prev?.notif_weekly_digest ?? null, notif_monthly_report: prev?.notif_monthly_report ?? null, notif_sync_reminders: prev?.notif_sync_reminders ?? null, notif_rating_drops: prev?.notif_rating_drops ?? null }));
+      setProfile(prev => ({ id: user.id, ...profileData, subscription_status: prev?.subscription_status ?? null, subscription_plan: prev?.subscription_plan ?? null, subscription_interval: prev?.subscription_interval ?? null, stripe_customer_id: prev?.stripe_customer_id ?? null, current_period_end: prev?.current_period_end ?? null, trial_ends_at: prev?.trial_ends_at ?? null, ai_drafts_used: prev?.ai_drafts_used ?? null, notif_new_reviews: prev?.notif_new_reviews ?? null, notif_urgent_alerts: prev?.notif_urgent_alerts ?? null, notif_weekly_digest: prev?.notif_weekly_digest ?? null, notif_monthly_report: prev?.notif_monthly_report ?? null, notif_sync_reminders: prev?.notif_sync_reminders ?? null, notif_rating_drops: prev?.notif_rating_drops ?? null }));
 
       if (hotelId) {
         const { error } = await supabase.from("hotels").update({ response_signature: responseSignature.trim() || "The Management Team" }).eq("id", hotelId);
@@ -952,102 +956,165 @@ export default function SettingsPage() {
 
             {/* FREE */}
             {billingPlan === "free" && (
-              <div>
-                <div style={{ display: "inline-block", background: "#1e1e1e", color: "#555555", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", padding: "3px 10px", borderRadius: 100, marginBottom: 12 }}>Free Plan</div>
-                <div style={{ fontSize: 22, fontWeight: 500, color: "#f0f0f0", marginBottom: 4 }}>Free</div>
-                <p style={{ fontSize: 13, color: "#555555", margin: "0 0 20px 0", lineHeight: 1.6 }}>Upgrade to access AI features, unlimited syncing, and competitor benchmarking</p>
-
-                {/* Feature comparison */}
-                <div className="settings-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24, padding: "20px 0", borderTop: "1px solid #1e1e1e", borderBottom: "1px solid #1e1e1e" }}>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#555555", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>Free</div>
-                    {["10 AI drafts/month", "Manual sync only", "3 platforms", "Basic dashboard"].map(f => (
-                      <div key={f} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                        <span style={{ color: "#555555", fontSize: 13 }}>✗</span>
-                        <span style={{ fontSize: 13, color: "#555555" }}>{f}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#4ade80", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>Pro</div>
-                    {["Unlimited AI drafts", "Auto daily sync", "6 platforms", "Full sentiment dashboard", "Competitor benchmarking", "Email digest"].map(f => (
-                      <div key={f} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                        <span style={{ color: "#4ade80", fontSize: 13 }}>✓</span>
-                        <span style={{ fontSize: 13, color: "#f0f0f0" }}>{f}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: 4 }}>
-                  <span style={{ fontSize: 32, fontWeight: 500, color: "#f0f0f0" }}>$99</span>
-                  <span style={{ fontSize: 14, color: "#555555" }}>/mo</span>
-                </div>
-                <p style={{ fontSize: 12, color: "#444444", margin: "0 0 16px 0" }}>7-day free trial · No credit card required</p>
+              <div style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, padding: 24 }}>
+                <div style={{ display: "inline-block", background: "#1e1e1e", color: "#555555", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", padding: "3px 10px", borderRadius: 100, marginBottom: 12 }}>Free Plan</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#f0f0f0", marginBottom: 4 }}>You&apos;re on the free plan</div>
+                <p style={{ fontSize: 13, color: "#555555", margin: "0 0 20px 0", lineHeight: 1.6 }}>Upgrade to unlock AI drafts, full sentiment analysis, and competitor benchmarking.</p>
                 <button type="button" onClick={() => router.push("/dashboard/pricing")}
                   style={{ ...primaryBtn, width: "100%", padding: "11px 0", fontSize: 14 }}
                   onMouseEnter={e => { e.currentTarget.style.background = "#e0e0e0"; }} onMouseLeave={e => { e.currentTarget.style.background = "#f0f0f0"; }}>
-                  Start free trial
+                  View pricing →
                 </button>
               </div>
             )}
 
             {/* TRIALING */}
-            {billingPlan === "trialing" && (
-              <div style={{ background: "#111111", border: "1px solid #2a2000", borderRadius: 8, padding: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#fbbf24", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>Trial Active</div>
-                <div style={{ fontSize: 18, fontWeight: 500, color: "#f0f0f0", marginBottom: 4 }}>
-                  {profile?.subscription_plan ? `${profile.subscription_plan.charAt(0).toUpperCase()}${profile.subscription_plan.slice(1)}` : "Professional"} — Trial
+            {billingPlan === "trialing" && (() => {
+              const plan = profile?.subscription_plan ?? "professional";
+              const interval = profile?.subscription_interval ?? "monthly";
+              const trialEnd = profile?.trial_ends_at ? new Date(profile.trial_ends_at) : null;
+              const daysLeft = trialEnd ? Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400000)) : 0;
+              const planLabel = plan === "essential" ? "Essential" : plan === "business" ? "Multi-property" : "Professional";
+              const trialEndFormatted = trialEnd ? trialEnd.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—";
+              return (
+                <div style={{ background: "#141414", border: "1px solid #2a2000", borderRadius: 8, padding: 24 }}>
+                  <div style={{ display: "inline-block", background: "#1a1200", color: "#fbbf24", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", padding: "3px 10px", borderRadius: 100, marginBottom: 12 }}>Trial Active</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#f0f0f0", marginBottom: 4 }}>
+                    {planLabel} — {interval === "annual" ? "Annual" : "Monthly"}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#888888", marginBottom: 16 }}>Trial ends {trialEndFormatted}</div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 16 }}>
+                    <span style={{ fontSize: 40, fontWeight: 700, color: "#fbbf24", lineHeight: 1 }}>{daysLeft}</span>
+                    <span style={{ fontSize: 13, color: "#888888" }}>days remaining</span>
+                  </div>
+                  <button type="button"
+                    onClick={async () => {
+                      if (!userId) return;
+                      try {
+                        const res = await fetch("/api/create-checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: userId, email: userEmail, plan, interval }) });
+                        const data = await res.json() as { url?: string; error?: string };
+                        if (data.url) window.location.href = data.url;
+                        else showToast("error", data.error ?? "Could not open checkout");
+                      } catch { showToast("error", "Could not open checkout"); }
+                    }}
+                    style={{ ...primaryBtn, width: "100%", padding: "11px 0", fontSize: 14, marginBottom: 12 }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "#e0e0e0"; }} onMouseLeave={e => { e.currentTarget.style.background = "#f0f0f0"; }}>
+                    Add payment method
+                  </button>
+                  <button type="button" onClick={() => router.push("/dashboard/pricing")}
+                    style={{ background: "none", border: "none", color: "#555555", fontSize: 13, cursor: "pointer", padding: 0, fontFamily: "inherit" }}>
+                    Cancel trial
+                  </button>
                 </div>
-                <p style={{ fontSize: 13, color: "#888888", margin: "0 0 16px 0" }}>Your trial is active. Upgrade before it ends to keep access.</p>
-                <button type="button" onClick={() => router.push("/dashboard/pricing")}
-                  style={{ ...primaryBtn }} onMouseEnter={e => { e.currentTarget.style.background = "#e0e0e0"; }} onMouseLeave={e => { e.currentTarget.style.background = "#f0f0f0"; }}>
-                  Manage subscription
-                </button>
-              </div>
-            )}
+              );
+            })()}
 
             {/* ACTIVE */}
             {billingPlan === "active" && (() => {
               const plan = profile?.subscription_plan ?? "professional";
+              const interval = profile?.subscription_interval ?? "monthly";
               const isEssential = plan === "essential";
               const isBusiness = plan === "business";
-              const accentColor = isEssential ? "#888888" : isBusiness ? "#60a5fa" : "#4ade80";
               const planLabel = isEssential ? "Essential" : isBusiness ? "Multi-property" : "Professional";
+              const planBadgeBg = isEssential ? "#1e1e1e" : isBusiness ? "#172554" : "#052e16";
+              const planBadgeColor = isEssential ? "#555555" : isBusiness ? "#60a5fa" : "#4ade80";
+              const borderColor = isEssential ? "#1e1e1e" : isBusiness ? "#172554" : "#1a3a1a";
+              const periodEnd = profile?.current_period_end ? new Date(profile.current_period_end).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—";
+              const draftsUsed = profile?.ai_drafts_used ?? 0;
+              const draftsPct = Math.min(100, (draftsUsed / 10) * 100);
+              const draftsBarColor = draftsUsed < 5 ? "#4ade80" : draftsUsed < 9 ? "#fbbf24" : "#f87171";
               return (
-                <div style={{ background: "#0a1a0a", border: "1px solid #1a3a1a", borderRadius: 8, padding: 20 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: accentColor, letterSpacing: "0.08em", textTransform: "uppercase" }}>PRO ✓</div>
+                <div style={{ background: "#141414", border: `1px solid ${borderColor}`, borderRadius: 8, padding: 24 }}>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                    <span style={{ display: "inline-block", background: planBadgeBg, color: planBadgeColor, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", padding: "3px 10px", borderRadius: 100 }}>{planLabel}</span>
+                    <span style={{ display: "inline-block", background: interval === "annual" ? "#0a1a0a" : "#1a1a1a", color: interval === "annual" ? "#4ade80" : "#555555", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", padding: "3px 10px", borderRadius: 100 }}>
+                      {interval === "annual" ? "Annual · save 17%" : "Monthly"}
+                    </span>
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 500, color: "#f0f0f0", marginBottom: 4 }}>You&apos;re on the {planLabel} plan</div>
-                  <p style={{ fontSize: 13, color: "#4ade80", margin: "0 0 4px 0" }}>All features unlocked</p>
-                  <p style={{ fontSize: 13, color: "#888888", margin: "0 0 16px 0" }}>Billing managed via Stripe</p>
-                  <button type="button" onClick={() => router.push("/dashboard/pricing")}
-                    style={{ background: "transparent", border: "1px solid #2a2a2a", borderRadius: 6, padding: "7px 16px", color: "#888888", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = "#3a3a3a"; e.currentTarget.style.color = "#aaaaaa"; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = "#2a2a2a"; e.currentTarget.style.color = "#888888"; }}>
-                    Manage subscription →
-                  </button>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: "#f0f0f0", marginBottom: 2 }}>{planLabel} plan</div>
+                  <div style={{ fontSize: 13, color: "#4ade80", marginBottom: 16 }}>Active ✓</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "#555555", marginBottom: isEssential ? 12 : 16 }}>
+                    <span>Next billing</span>
+                    <span style={{ color: "#888888" }}>{periodEnd}</span>
+                  </div>
+                  {isEssential && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 12, color: "#555555", marginBottom: 6 }}>AI drafts this month: {draftsUsed} / 10</div>
+                      <div style={{ height: 4, background: "#1e1e1e", borderRadius: 2, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${draftsPct}%`, background: draftsBarColor, borderRadius: 2, transition: "width 0.3s" }} />
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button type="button"
+                      onClick={async () => {
+                        if (!userId) return;
+                        try {
+                          const res = await fetch("/api/stripe-portal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: userId }) });
+                          const data = await res.json() as { url?: string; error?: string };
+                          if (data.url) window.location.href = data.url;
+                          else showToast("error", data.error ?? "Could not open billing portal");
+                        } catch { showToast("error", "Could not open billing portal"); }
+                      }}
+                      style={{ background: "transparent", border: "1px solid #2a2a2a", borderRadius: 6, padding: "7px 14px", color: "#888888", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = "#3a3a3a"; e.currentTarget.style.color = "#aaaaaa"; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "#2a2a2a"; e.currentTarget.style.color = "#888888"; }}>
+                      Manage subscription
+                    </button>
+                    {!isBusiness && (
+                      <button type="button" onClick={() => router.push("/dashboard/pricing")}
+                        style={{ background: "transparent", border: "1px solid #2a2a2a", borderRadius: 6, padding: "7px 14px", color: "#888888", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "#3a3a3a"; e.currentTarget.style.color = "#aaaaaa"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = "#2a2a2a"; e.currentTarget.style.color = "#888888"; }}>
+                        Upgrade plan
+                      </button>
+                    )}
+                    {interval === "monthly" && (
+                      <button type="button" onClick={() => router.push("/dashboard/pricing")}
+                        style={{ background: "#0a1a0a", border: "1px solid #1a3a1a", borderRadius: 6, padding: "7px 14px", color: "#4ade80", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "#0d2a0d"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "#0a1a0a"; }}>
+                        Switch to annual — save 17%
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })()}
 
             {/* PAST DUE */}
             {billingPlan === "past_due" && (
-              <div style={{ background: "#111111", border: "1px solid #3a1a1a", borderRadius: 8, padding: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#f87171", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>Payment Failed</div>
-                <div style={{ fontSize: 18, fontWeight: 500, color: "#f0f0f0", marginBottom: 8 }}>Update billing to restore access</div>
+              <div style={{ background: "#1a0a0a", border: "1px solid #2a1a1a", borderRadius: 8, padding: 24 }}>
+                <div style={{ display: "inline-block", background: "#2d0a0a", color: "#f87171", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", padding: "3px 10px", borderRadius: 100, marginBottom: 12 }}>Payment Failed</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#f0f0f0", marginBottom: 8 }}>Your payment failed</div>
+                <p style={{ fontSize: 13, color: "#888888", margin: "0 0 16px 0" }}>Update your payment method to restore access.</p>
                 <button type="button"
                   onClick={async () => {
+                    if (!userId) return;
                     try {
-                      const res = await fetch("/api/stripe-portal", { method: "POST" });
+                      const res = await fetch("/api/stripe-portal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: userId }) });
                       const data = await res.json() as { url?: string; error?: string };
-                      if (data.url) { window.location.href = data.url; }
-                      else { showToast("error", data.error ?? "Could not open billing portal"); }
+                      if (data.url) window.location.href = data.url;
+                      else showToast("error", data.error ?? "Could not open billing portal");
                     } catch { showToast("error", "Could not open billing portal"); }
                   }}
                   style={{ ...primaryBtn }} onMouseEnter={e => { e.currentTarget.style.background = "#e0e0e0"; }} onMouseLeave={e => { e.currentTarget.style.background = "#f0f0f0"; }}>
                   Update billing
+                </button>
+              </div>
+            )}
+
+            {/* CANCELLED */}
+            {billingPlan === "cancelled" && (
+              <div style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, padding: 24 }}>
+                <div style={{ display: "inline-block", background: "#1e1e1e", color: "#555555", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", padding: "3px 10px", borderRadius: 100, marginBottom: 12 }}>Cancelled</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#f0f0f0", marginBottom: 4 }}>Your subscription has been cancelled</div>
+                {profile?.current_period_end && (
+                  <p style={{ fontSize: 13, color: "#555555", margin: "0 0 16px 0" }}>Access expires {new Date(profile.current_period_end).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
+                )}
+                <button type="button" onClick={() => router.push("/dashboard/pricing")}
+                  style={{ ...primaryBtn }} onMouseEnter={e => { e.currentTarget.style.background = "#e0e0e0"; }} onMouseLeave={e => { e.currentTarget.style.background = "#f0f0f0"; }}>
+                  Reactivate
                 </button>
               </div>
             )}

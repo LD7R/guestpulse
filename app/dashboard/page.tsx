@@ -1,8 +1,8 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Bar,
   BarChart,
@@ -272,7 +272,7 @@ const CustomTooltip = ({
   );
 };
 
-export default function DashboardOverviewPage() {
+function DashboardOverviewContent() {
   const router = useRouter();
   const pathname = usePathname();
   const [loading, setLoading] = useState(true);
@@ -309,6 +309,11 @@ export default function DashboardOverviewPage() {
   const [weightedTotalCount, setWeightedTotalCount] = useState<number | null>(null);
   const [weightedHistoricalCount, setWeightedHistoricalCount] = useState<number | null>(null);
 
+  const searchParams = useSearchParams();
+  const [upgradeToast, setUpgradeToast] = useState<string | null>(null);
+  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
+  const [aiDraftsUsed, setAiDraftsUsed] = useState<number>(0);
   const [pdfToast, setPdfToast] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
@@ -346,15 +351,18 @@ export default function DashboardOverviewPage() {
 
     if (hotelsError) throw hotelsError;
 
-    // Fetch subscription status for upgrade banner
+    // Fetch subscription info for banners
     const { data: profileData } = await supabase
       .from("profiles")
-      .select("subscription_status")
+      .select("subscription_status, subscription_plan, trial_ends_at, ai_drafts_used")
       .eq("id", user.id)
       .maybeSingle();
-    const status = (profileData as { subscription_status?: string | null } | null)
-      ?.subscription_status ?? null;
+    const pd = profileData as { subscription_status?: string | null; subscription_plan?: string | null; trial_ends_at?: string | null; ai_drafts_used?: number | null } | null;
+    const status = pd?.subscription_status ?? null;
     setSubscriptionStatus(status);
+    setSubscriptionPlan(pd?.subscription_plan ?? null);
+    setTrialEndsAt(pd?.trial_ends_at ?? null);
+    setAiDraftsUsed(pd?.ai_drafts_used ?? 0);
 
     const hotelIds = (hotels ?? []).map((h: Hotel) => h.id);
     if (hotelIds.length === 0) {
@@ -652,6 +660,26 @@ export default function DashboardOverviewPage() {
     }
     load();
   }, [loadDashboard]);
+
+  useEffect(() => {
+    const upgraded = searchParams.get("upgraded");
+    const plan = searchParams.get("plan");
+    const interval = searchParams.get("interval");
+    if (upgraded === "true") {
+      const planName =
+        plan === "essential"
+          ? "Essential"
+          : plan === "professional"
+            ? "Professional"
+            : "Multi-property";
+      const int = interval === "annual" ? "annual" : "monthly";
+      setUpgradeToast(
+        `Welcome to GuestPulse ${planName}! Your ${int} subscription is now active.`,
+      );
+      window.setTimeout(() => setUpgradeToast(null), 6000);
+      router.replace("/dashboard");
+    }
+  }, [searchParams, router]);
 
   async function syncPlatform(
     platform: "tripadvisor" | "google" | "booking" | "trip" | "expedia" | "yelp",
@@ -1245,41 +1273,145 @@ export default function DashboardOverviewPage() {
         );
       })()}
 
-      {/* Upgrade banner for free users */}
-      {(!subscriptionStatus || subscriptionStatus === "free") && (
+      {/* Upgrade toast after checkout */}
+      {upgradeToast && (
         <div
           style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
             background: "#0a1a0a",
             border: "1px solid #1a3a1a",
             borderRadius: 8,
-            padding: "12px 16px",
-            marginBottom: 20,
+            padding: "12px 20px",
+            fontSize: 13,
+            color: "#4ade80",
+            zIndex: 9999,
+            whiteSpace: "nowrap",
+            boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
+          }}
+        >
+          {upgradeToast}
+        </div>
+      )}
+
+      {/* FREE banner */}
+      {(!subscriptionStatus || subscriptionStatus === "free") && (
+        <div
+          style={{
+            background: "#111111",
+            border: "1px solid #1e1e1e",
+            borderRadius: 6,
+            padding: "10px 16px",
+            marginBottom: 16,
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
             gap: 12,
           }}
         >
-          <div style={{ fontSize: 13, color: "#f0f0f0" }}>
-            🚀 Start your 7-day free trial — Essential from $99/mo
-          </div>
+          <span style={{ fontSize: 13, color: "#888888" }}>
+            Start your 7-day free trial — Professional from $199/mo
+          </span>
           <button
             type="button"
             onClick={() => router.push("/dashboard/pricing")}
             style={{
-              background: "#4ade80",
-              border: "none",
+              background: "transparent",
+              border: "1px solid #2a2a2a",
+              borderRadius: 4,
+              padding: "5px 12px",
+              fontSize: 11,
+              color: "#888888",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              fontFamily: "inherit",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "#f0f0f0"; e.currentTarget.style.borderColor = "#3a3a3a"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "#888888"; e.currentTarget.style.borderColor = "#2a2a2a"; }}
+          >
+            View plans →
+          </button>
+        </div>
+      )}
+
+      {/* TRIAL banner */}
+      {subscriptionStatus === "trialing" && (() => {
+        const trialEnd = trialEndsAt ? new Date(trialEndsAt) : null;
+        const daysLeft = trialEnd ? Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400000)) : 0;
+        return (
+          <div
+            style={{
+              background: "#1a1200",
+              border: "1px solid #2a2000",
               borderRadius: 6,
-              padding: "6px 14px",
-              fontSize: 12,
-              fontWeight: 600,
-              color: "#0d0d0d",
+              padding: "10px 16px",
+              marginBottom: 16,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 13, color: "#fbbf24" }}>
+              Trial active — {daysLeft} day{daysLeft !== 1 ? "s" : ""} remaining
+            </span>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/pricing")}
+              style={{
+                background: "transparent",
+                border: "1px solid #3a2a00",
+                borderRadius: 4,
+                padding: "5px 12px",
+                fontSize: 11,
+                color: "#fbbf24",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                fontFamily: "inherit",
+              }}
+            >
+              Add payment method →
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* ESSENTIAL AI limit warning */}
+      {subscriptionStatus === "active" && subscriptionPlan === "essential" && aiDraftsUsed >= 8 && (
+        <div
+          style={{
+            background: "#1a0a00",
+            border: "1px solid #2a1a00",
+            borderRadius: 6,
+            padding: "10px 16px",
+            marginBottom: 16,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <span style={{ fontSize: 13, color: "#fbbf24" }}>
+            You&apos;ve used {aiDraftsUsed}/10 AI drafts this month
+          </span>
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard/pricing")}
+            style={{
+              background: "transparent",
+              border: "1px solid #3a2a00",
+              borderRadius: 4,
+              padding: "5px 12px",
+              fontSize: 11,
+              color: "#fbbf24",
               cursor: "pointer",
               whiteSpace: "nowrap",
               fontFamily: "inherit",
             }}
           >
-            View plans
+            Upgrade to Professional for unlimited →
           </button>
         </div>
       )}
@@ -2089,5 +2221,13 @@ export default function DashboardOverviewPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function DashboardOverviewPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardOverviewContent />
+    </Suspense>
   );
 }
