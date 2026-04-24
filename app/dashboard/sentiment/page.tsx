@@ -3,6 +3,7 @@
 import { createBrowserClient } from "@supabase/ssr";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import ReputationScoreCard from "@/components/ReputationScoreCard";
 import {
   CartesianGrid,
   Line,
@@ -196,6 +197,24 @@ export default function SentimentPage() {
       return d >= start && d < end;
     });
   }, [reviews, period]);
+
+  /* ── reputation score inputs ─────────────────────────── */
+  const repCurrentReviews = useMemo(() => {
+    const cutoff = new Date(Date.now() - 30 * 86400000);
+    return reviews.filter((r) => {
+      const d = new Date(r.review_date ?? r.created_at ?? 0);
+      return d >= cutoff;
+    });
+  }, [reviews]);
+
+  const repPrevReviews = useMemo(() => {
+    const start = new Date(Date.now() - 60 * 86400000);
+    const end = new Date(Date.now() - 30 * 86400000);
+    return reviews.filter((r) => {
+      const d = new Date(r.review_date ?? r.created_at ?? 0);
+      return d >= start && d < end;
+    });
+  }, [reviews]);
 
   /* ── stat helpers ────────────────────────────────────── */
   function calcStats(arr: ReviewRow[]) {
@@ -544,6 +563,9 @@ export default function SentimentPage() {
 
       {reviews.length > 0 && (
         <>
+          {/* ── reputation score hero ──────────────────── */}
+          <ReputationScoreCard reviews={repCurrentReviews} lastMonthReviews={repPrevReviews} />
+
           {/* ── row 1: stat cards ──────────────────────── */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 20 }}>
             <StatCard

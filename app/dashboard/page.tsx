@@ -13,6 +13,7 @@ import {
   Tooltip,
   XAxis,
 } from "recharts";
+import ReputationScoreCard from "@/components/ReputationScoreCard";
 
 type Hotel = {
   id: string;
@@ -70,6 +71,8 @@ type TimeSeriesReview = {
   rating: unknown;
   created_at: string | null;
   review_date: string | null;
+  sentiment?: string | null;
+  responded?: boolean | null;
 };
 
 type SyncResult = {
@@ -514,7 +517,7 @@ function DashboardOverviewContent() {
 
     const { data: ratingsWithDates } = await supabase
       .from("reviews")
-      .select("rating, created_at, review_date")
+      .select("rating, created_at, review_date, sentiment, responded")
       .in("hotel_id", hotelIds);
 
     setReviewsTimeSeries((ratingsWithDates ?? []) as TimeSeriesReview[]);
@@ -1035,6 +1038,23 @@ function DashboardOverviewContent() {
     [urgentReviewsList],
   );
 
+  const reputationCurrentReviews = useMemo(() => {
+    const cutoff = new Date(Date.now() - 30 * 86400000);
+    return reviewsTimeSeries.filter((r) => {
+      const d = new Date(r.review_date ?? r.created_at ?? 0);
+      return !Number.isNaN(d.getTime()) && d >= cutoff;
+    });
+  }, [reviewsTimeSeries]);
+
+  const reputationPrevReviews = useMemo(() => {
+    const start = new Date(Date.now() - 60 * 86400000);
+    const end = new Date(Date.now() - 30 * 86400000);
+    return reviewsTimeSeries.filter((r) => {
+      const d = new Date(r.review_date ?? r.created_at ?? 0);
+      return !Number.isNaN(d.getTime()) && d >= start && d < end;
+    });
+  }, [reviewsTimeSeries]);
+
   if (loading) {
     return (
       <div style={{ background: "#0d0d0d", minHeight: "100vh", padding: "24px 28px" }}>
@@ -1516,6 +1536,11 @@ function DashboardOverviewContent() {
               </div>
             )}
 
+          <ReputationScoreCard
+            reviews={reputationCurrentReviews}
+            lastMonthReviews={reputationPrevReviews}
+          />
+
           <div
             style={{
               display: "grid",
@@ -1577,7 +1602,7 @@ function DashboardOverviewContent() {
                   background: "#141414",
                   border: "1px solid #1e1e1e",
                   borderRadius: 8,
-                  padding: "16px 18px",
+                  padding: "14px 16px",
                 }}
               >
                 <div
@@ -1594,7 +1619,7 @@ function DashboardOverviewContent() {
                 </div>
                 <div
                   style={{
-                    fontSize: 36,
+                    fontSize: 28,
                     fontWeight: 700,
                     letterSpacing: "-1.5px",
                     color: card.urgent ? "#ef4444" : "#f0f0f0",
