@@ -237,7 +237,8 @@ export default function DashboardLayout({
     );
 
     await supabase.auth.signOut();
-    router.replace("/login");
+    router.push("/");
+    router.refresh();
   }
 
   function isActive(href: string) {

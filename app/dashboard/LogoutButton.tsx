@@ -21,7 +21,7 @@ export function LogoutButton() {
     }
 
     startTransition(() => {
-      router.replace("/login");
+      router.push("/");
       router.refresh();
     });
   }
