@@ -46,7 +46,7 @@ type Hotel = {
   country?: string | null;
   latitude?: number | null;
   longitude?: number | null;
-  // Analysis fields (added by analyze-competitor route)
+  // Analysis fields (loaded in background)
   description?: string | null;
   usps?: unknown;
   strengths?: unknown;
@@ -140,6 +140,60 @@ const INSIGHT_CARDS: Array<{
   { key: "rating_gap", icon: "△", label: "RATING GAP", color: "#fbbf24" },
 ];
 
+// Essential fields — loaded first for fast initial render
+const HOTEL_ESSENTIAL_SELECT = [
+  "id",
+  "name",
+  "google_url",
+  "tripadvisor_url",
+  "booking_url",
+  "address",
+  "city",
+  "country",
+  "latitude",
+  "longitude",
+].join(", ");
+
+// Analysis fields — loaded in background after essential render
+const HOTEL_ANALYSIS_SELECT = [
+  "description",
+  "usps",
+  "strengths",
+  "weaknesses",
+  "amenities",
+  "price_tier",
+  "target_guest",
+  "last_analyzed_at",
+].join(", ");
+
+const COMP_ESSENTIAL_SELECT = [
+  "id",
+  "hotel_id",
+  "name",
+  "google_url",
+  "tripadvisor_url",
+  "avg_rating",
+  "total_reviews",
+  "latitude",
+  "longitude",
+  "address",
+  "last_synced_at",
+  "recent_snippets",
+].join(", ");
+
+const COMP_ANALYSIS_SELECT = [
+  "id",
+  "description",
+  "usps",
+  "strengths",
+  "weaknesses",
+  "amenities",
+  "price_tier",
+  "target_guest",
+  "last_analyzed_at",
+].join(", ");
+
+// Full select — used for insert/update returns
 const COMP_SELECT = [
   "id",
   "hotel_id",
@@ -153,27 +207,6 @@ const COMP_SELECT = [
   "address",
   "last_synced_at",
   "recent_snippets",
-  "description",
-  "usps",
-  "strengths",
-  "weaknesses",
-  "amenities",
-  "price_tier",
-  "target_guest",
-  "last_analyzed_at",
-].join(", ");
-
-const HOTEL_SELECT = [
-  "id",
-  "name",
-  "google_url",
-  "tripadvisor_url",
-  "booking_url",
-  "address",
-  "city",
-  "country",
-  "latitude",
-  "longitude",
   "description",
   "usps",
   "strengths",
@@ -297,6 +330,7 @@ const inputStyle: CSSProperties = {
 export default function BenchmarkingPage() {
   // Core data
   const [loading, setLoading] = useState(true);
+  const [loadingAnalysis, setLoadingAnalysis] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
@@ -343,6 +377,7 @@ export default function BenchmarkingPage() {
   const [comparison, setComparison] = useState<ComparisonResult | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
+  const [comparisonUpdatedAt, setComparisonUpdatedAt] = useState<string | null>(null);
 
   // Feature comparison expanded rows
   const [expandedFeatureRows, setExpandedFeatureRows] = useState<Set<string>>(new Set());
@@ -440,24 +475,12 @@ export default function BenchmarkingPage() {
     setComparisonLoading(true);
     setComparisonError(null);
 
-    // Step 1: Analyze hotel if not analyzed
-    if (!hotel.description) {
-      setAnalysisToast("Analyzing your hotel…");
-      setAnalyzingHotel(true);
-      try {
-        await analyzeEntityDirect(hotel.id, "hotel");
-      } catch {
-        // continue even if hotel analysis fails
-      } finally {
-        setAnalyzingHotel(false);
-      }
-    }
-
-    // Step 2: Analyze each unanalyzed competitor
+    // Step 1: Analyze each unanalyzed competitor
     const unanalyzed = competitors.filter((c) => !c.description);
     if (unanalyzed.length > 0) {
-      setAnalysisToast(`Analyzing ${unanalyzed.length} competitor${unanalyzed.length !== 1 ? "s" : ""}…`);
-      for (const comp of unanalyzed) {
+      for (let i = 0; i < unanalyzed.length; i++) {
+        const comp = unanalyzed[i]!;
+        setAnalysisToast(`Analyzing ${comp.name}… (${i + 1} of ${unanalyzed.length})`);
         setAnalyzingCompetitorIds((prev) => new Set([...prev, comp.id]));
         try {
           await analyzeEntityDirect(comp.id, "competitor");
@@ -473,7 +496,20 @@ export default function BenchmarkingPage() {
       }
     }
 
-    setAnalysisToast(null);
+    // Step 2: Analyze hotel if not analyzed
+    if (!hotel.description) {
+      setAnalysisToast("Analyzing your hotel…");
+      setAnalyzingHotel(true);
+      try {
+        await analyzeEntityDirect(hotel.id, "hotel");
+      } catch {
+        // continue
+      } finally {
+        setAnalyzingHotel(false);
+      }
+    }
+
+    setAnalysisToast("Running competitive comparison…");
 
     // Step 3: Run comparison
     try {
@@ -486,9 +522,11 @@ export default function BenchmarkingPage() {
         success?: boolean;
         comparison?: ComparisonResult;
         error?: string;
+        needs_analysis?: boolean;
       };
       if (data.success && data.comparison) {
         setComparison(data.comparison);
+        setComparisonUpdatedAt(new Date().toISOString());
       } else {
         setComparisonError(data.error ?? "Failed to generate comparison");
       }
@@ -496,11 +534,12 @@ export default function BenchmarkingPage() {
       setComparisonError(e instanceof Error ? e.message : "Failed");
     } finally {
       setComparisonLoading(false);
+      setAnalysisToast(null);
     }
   }
 
-  // ── Load ──────────────────────────────────────────────────────────────────
-  const loadBenchmarking = useCallback(async () => {
+  // ── Load essential data (fast, unblocks render) ───────────────────────────
+  const loadEssential = useCallback(async (): Promise<string | null> => {
     const sb = createSupabaseBrowserClient();
 
     const {
@@ -512,7 +551,7 @@ export default function BenchmarkingPage() {
 
     const { data: hotelData, error: hotelsError } = await sb
       .from("hotels")
-      .select(HOTEL_SELECT)
+      .select(HOTEL_ESSENTIAL_SELECT)
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -521,7 +560,7 @@ export default function BenchmarkingPage() {
     if (!hotelData) {
       setHotel(null);
       setCompetitors([]);
-      return { hotel: null, myAvg: null, myTotal: 0, comps: [] as Competitor[] };
+      return null;
     }
 
     const typedHotel = hotelData as unknown as Hotel;
@@ -548,66 +587,71 @@ export default function BenchmarkingPage() {
 
     const { data: compsData, error: compsError } = await sb
       .from("competitors")
-      .select(COMP_SELECT)
+      .select(COMP_ESSENTIAL_SELECT)
       .eq("hotel_id", typedHotel.id)
       .order("avg_rating", { ascending: false });
 
     if (compsError) throw compsError;
 
-    const comps = (compsData ?? []) as unknown as Competitor[];
-    setCompetitors(comps);
+    setCompetitors((compsData ?? []) as unknown as Competitor[]);
 
-    return { hotel: typedHotel, myAvg, myTotal, comps };
+    return typedHotel.id;
   }, []);
 
   useEffect(() => {
-    async function load() {
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      let hotelId: string | null = null;
       try {
-        setLoading(true);
-        setError(null);
-        const result = await loadBenchmarking();
-
-        if (result.hotel && result.comps.some((c) => c.avg_rating != null)) {
-          await doGenerateInsights(result.hotel, result.myAvg, result.myTotal, result.comps);
-        }
-
-        // Auto-analyze on first visit if hotel not yet analyzed
-        if (result.hotel && !result.hotel.description) {
-          setAnalysisToast("Analyzing your hotel for competitive intelligence…");
-          setAnalyzingHotel(true);
-          try {
-            await analyzeEntityDirect(result.hotel.id, "hotel");
-            setAnalysisToast("Hotel analyzed. Analyzing competitors…");
-            for (const comp of result.comps) {
-              if (!comp.description) {
-                setAnalyzingCompetitorIds((prev) => new Set([...prev, comp.id]));
-                try {
-                  await analyzeEntityDirect(comp.id, "competitor");
-                } finally {
-                  setAnalyzingCompetitorIds((prev) => {
-                    const s = new Set(prev);
-                    s.delete(comp.id);
-                    return s;
-                  });
-                }
-              }
-            }
-          } catch {
-            // ignore auto-analysis errors silently
-          } finally {
-            setAnalyzingHotel(false);
-            setAnalysisToast(null);
-          }
-        }
+        hotelId = await loadEssential();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load");
-      } finally {
         setLoading(false);
+        setLoadingAnalysis(false);
+        return;
       }
-    }
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadBenchmarking]);
+      setLoading(false);
+
+      if (!hotelId) {
+        setLoadingAnalysis(false);
+        return;
+      }
+
+      // Load analysis fields in background — does not block render
+      const sb = createSupabaseBrowserClient();
+      try {
+        const [{ data: hotelAnalysis }, { data: compsAnalysis }] = await Promise.all([
+          sb.from("hotels").select(HOTEL_ANALYSIS_SELECT).eq("id", hotelId).maybeSingle(),
+          sb.from("competitors").select(COMP_ANALYSIS_SELECT).eq("hotel_id", hotelId),
+        ]);
+
+        if (hotelAnalysis) {
+          setHotel((prev) =>
+            prev ? { ...prev, ...(hotelAnalysis as unknown as Partial<Hotel>) } : prev,
+          );
+        }
+
+        if (compsAnalysis && compsAnalysis.length > 0) {
+          const analysisMap = new Map(
+            (compsAnalysis as unknown as Array<{ id: string } & Record<string, unknown>>).map(
+              (c) => [c.id, c],
+            ),
+          );
+          setCompetitors((prev) =>
+            prev.map((c) => {
+              const a = analysisMap.get(c.id);
+              return a ? { ...c, ...(a as Partial<Competitor>) } : c;
+            }),
+          );
+        }
+      } catch {
+        // Analysis fields are non-critical — silently ignore
+      } finally {
+        setLoadingAnalysis(false);
+      }
+    })();
+  }, [loadEssential]);
 
   // ── Sync all ──────────────────────────────────────────────────────────────
   async function handleSyncAll() {
@@ -887,7 +931,7 @@ export default function BenchmarkingPage() {
     if (inserted) {
       const newComp = inserted as unknown as Competitor;
       setCompetitors((prev) => [...prev, newComp]);
-      // Trigger analysis in background
+      // Trigger analysis in background (user-initiated)
       void analyzeEntityDirect(newComp.id, "competitor");
     }
     setManualName("");
@@ -899,7 +943,12 @@ export default function BenchmarkingPage() {
 
   // ── Derived state ─────────────────────────────────────────────────────────
   const myHotelCoords = useMemo((): { lat: number; lng: number } | null => {
-    if (hotel?.latitude != null && hotel?.longitude != null && !Number.isNaN(hotel.latitude) && !Number.isNaN(hotel.longitude)) {
+    if (
+      hotel?.latitude != null &&
+      hotel?.longitude != null &&
+      !Number.isNaN(hotel.latitude) &&
+      !Number.isNaN(hotel.longitude)
+    ) {
       return { lat: hotel.latitude, lng: hotel.longitude };
     }
     return extractCoords(hotel?.google_url) ?? null;
@@ -998,7 +1047,8 @@ export default function BenchmarkingPage() {
     if (myRankInList !== null && myRankInList <= 3) {
       if (leader && !leader.isMe) {
         const behind = (leader.total_reviews ?? 0) - myTotalReviews;
-        if (behind > 0) return `${behind.toLocaleString()} reviews behind the leader. Focus on review volume to overtake.`;
+        if (behind > 0)
+          return `${behind.toLocaleString()} reviews behind the leader. Focus on review volume to overtake.`;
       }
       return "Focus on review volume to climb the rankings.";
     }
@@ -1008,7 +1058,7 @@ export default function BenchmarkingPage() {
     return null;
   }, [myRankInList, leader, myTotalReviews]);
 
-  // Feature comparison rows (your hotel + competitors, all for table)
+  // Feature comparison rows (your hotel + competitors)
   const featureRows = useMemo(() => {
     const hotelRow = {
       id: "me",
@@ -1046,20 +1096,85 @@ export default function BenchmarkingPage() {
     return (
       <div style={{ background: PAGE_BG, minHeight: "100vh", padding: "24px 28px" }}>
         <style>{`@keyframes bench-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            marginBottom: 20,
+          }}
+        >
           <div>
-            <div style={{ width: 200, height: 22, background: "#1a1a1a", borderRadius: 4, animation: "bench-pulse 1.5s ease-in-out infinite" }} />
-            <div style={{ width: 140, height: 14, background: "#1a1a1a", borderRadius: 4, marginTop: 6, animation: "bench-pulse 1.5s ease-in-out infinite" }} />
+            <div
+              style={{
+                width: 200,
+                height: 22,
+                background: "#1a1a1a",
+                borderRadius: 4,
+                animation: "bench-pulse 1.5s ease-in-out infinite",
+              }}
+            />
+            <div
+              style={{
+                width: 140,
+                height: 14,
+                background: "#1a1a1a",
+                borderRadius: 4,
+                marginTop: 6,
+                animation: "bench-pulse 1.5s ease-in-out infinite",
+              }}
+            />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <div style={{ width: 120, height: 32, background: "#1a1a1a", borderRadius: 6, animation: "bench-pulse 1.5s ease-in-out infinite" }} />
-            <div style={{ width: 80, height: 32, background: "#1a1a1a", borderRadius: 6, animation: "bench-pulse 1.5s ease-in-out infinite" }} />
+            <div
+              style={{
+                width: 120,
+                height: 32,
+                background: "#1a1a1a",
+                borderRadius: 6,
+                animation: "bench-pulse 1.5s ease-in-out infinite",
+              }}
+            />
+            <div
+              style={{
+                width: 80,
+                height: 32,
+                background: "#1a1a1a",
+                borderRadius: 6,
+                animation: "bench-pulse 1.5s ease-in-out infinite",
+              }}
+            />
           </div>
         </div>
-        <div style={{ height: 280, background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, animation: "bench-pulse 1.5s ease-in-out infinite", marginBottom: 12 }} />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 12 }}>
+        <div
+          style={{
+            height: 280,
+            background: "#141414",
+            border: "1px solid #1e1e1e",
+            borderRadius: 8,
+            animation: "bench-pulse 1.5s ease-in-out infinite",
+            marginBottom: 12,
+          }}
+        />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(5, 1fr)",
+            gap: 10,
+            marginBottom: 12,
+          }}
+        >
           {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} style={{ height: 100, background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, animation: "bench-pulse 1.5s ease-in-out infinite" }} />
+            <div
+              key={i}
+              style={{
+                height: 100,
+                background: "#141414",
+                border: "1px solid #1e1e1e",
+                borderRadius: 8,
+                animation: "bench-pulse 1.5s ease-in-out infinite",
+              }}
+            />
           ))}
         </div>
       </div>
@@ -1068,17 +1183,34 @@ export default function BenchmarkingPage() {
 
   if (error) {
     return (
-      <div style={{ background: PAGE_BG, minHeight: "100vh", padding: "24px 28px", color: "#f87171" }}>
+      <div
+        style={{
+          background: PAGE_BG,
+          minHeight: "100vh",
+          padding: "24px 28px",
+          color: "#f87171",
+        }}
+      >
         {error}
       </div>
     );
   }
 
   return (
-    <div style={{ background: PAGE_BG, minHeight: "100vh", padding: "24px 28px", boxSizing: "border-box" }}>
-      <style dangerouslySetInnerHTML={{ __html: `
+    <div
+      style={{
+        background: PAGE_BG,
+        minHeight: "100vh",
+        padding: "24px 28px",
+        boxSizing: "border-box",
+      }}
+    >
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @keyframes bench-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
         @keyframes bench-dot-pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        @keyframes bench-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         .bench-map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .bench-analysis-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
         .bench-insights-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
@@ -1102,29 +1234,51 @@ export default function BenchmarkingPage() {
           .bench-ci-grid { grid-template-columns: 1fr !important; }
           .bench-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         }
-      ` }} />
+      `,
+        }}
+      />
 
       {/* ── Analysis toast ──────────────────────────────────────────────────── */}
       {analysisToast && (
-        <div style={{
-          background: "#0a1a0a",
-          border: "1px solid #1a3a1a",
-          borderRadius: 6,
-          padding: "10px 16px",
-          marginBottom: 12,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          fontSize: 12,
-          color: "#4ade80",
-        }}>
-          <span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #1a3a1a", borderTopColor: "#4ade80", borderRadius: "50%", animation: "bench-dot-pulse 0.8s linear infinite", flexShrink: 0 }} />
+        <div
+          style={{
+            background: "#0a1a0a",
+            border: "1px solid #1a3a1a",
+            borderRadius: 6,
+            padding: "10px 16px",
+            marginBottom: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            fontSize: 12,
+            color: "#4ade80",
+          }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              width: 12,
+              height: 12,
+              border: "2px solid #1a3a1a",
+              borderTopColor: "#4ade80",
+              borderRadius: "50%",
+              animation: "bench-spin 0.8s linear infinite",
+              flexShrink: 0,
+            }}
+          />
           {analysisToast}
         </div>
       )}
 
       {/* ── 1. Page Header ─────────────────────────────────────────────────── */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+      <header
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginBottom: 20,
+        }}
+      >
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 500, color: TEXT_PRIMARY, margin: 0 }}>
             Competitor benchmarking
@@ -1133,17 +1287,32 @@ export default function BenchmarkingPage() {
             Your market position at a glance
           </p>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+        <div
+          style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}
+        >
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button type="button" onClick={() => setShowManual(!showManual)} style={secondaryBtnStyle()}>
+            <button
+              type="button"
+              onClick={() => setShowManual(!showManual)}
+              style={secondaryBtnStyle()}
+            >
               + Add competitor
             </button>
-            <button type="button" disabled={syncingAll || !hotel?.id} onClick={() => void handleSyncAll()} style={primaryBtnStyle(syncingAll || !hotel?.id)}>
+            <button
+              type="button"
+              disabled={syncingAll || !hotel?.id}
+              onClick={() => void handleSyncAll()}
+              style={primaryBtnStyle(syncingAll || !hotel?.id)}
+            >
               {syncingAll ? "Syncing…" : "Sync all"}
             </button>
           </div>
-          {syncMsg && <div style={{ fontSize: 11, color: "#4ade80", textAlign: "right" }}>{syncMsg}</div>}
-          {syncError && <div style={{ fontSize: 11, color: "#f87171", textAlign: "right" }}>{syncError}</div>}
+          {syncMsg && (
+            <div style={{ fontSize: 11, color: "#4ade80", textAlign: "right" }}>{syncMsg}</div>
+          )}
+          {syncError && (
+            <div style={{ fontSize: 11, color: "#f87171", textAlign: "right" }}>{syncError}</div>
+          )}
         </div>
       </header>
 
@@ -1153,50 +1322,109 @@ export default function BenchmarkingPage() {
           <div style={{ ...sectionLabelStyle, marginBottom: 12 }}>ADD COMPETITOR MANUALLY</div>
           <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
             <div style={{ flex: 1 }}>
-              <input type="text" placeholder="Hotel name *" value={manualName} onChange={(e) => setManualName(e.target.value)} style={inputStyle} />
+              <input
+                type="text"
+                placeholder="Hotel name *"
+                value={manualName}
+                onChange={(e) => setManualName(e.target.value)}
+                style={inputStyle}
+              />
             </div>
             <div style={{ flex: 1.5 }}>
-              <input type="text" placeholder="Google Maps URL" value={manualGoogleUrl} onChange={(e) => setManualGoogleUrl(e.target.value)} style={inputStyle} />
+              <input
+                type="text"
+                placeholder="Google Maps URL"
+                value={manualGoogleUrl}
+                onChange={(e) => setManualGoogleUrl(e.target.value)}
+                style={inputStyle}
+              />
             </div>
             <div style={{ flex: 1.5 }}>
-              <input type="text" placeholder="TripAdvisor URL (optional)" value={manualTAUrl} onChange={(e) => setManualTAUrl(e.target.value)} style={inputStyle} />
+              <input
+                type="text"
+                placeholder="TripAdvisor URL (optional)"
+                value={manualTAUrl}
+                onChange={(e) => setManualTAUrl(e.target.value)}
+                style={inputStyle}
+              />
             </div>
-            <button type="button" disabled={addingManual || !manualName.trim()} onClick={() => void handleManualAdd()} style={primaryBtnStyle(addingManual || !manualName.trim())}>
+            <button
+              type="button"
+              disabled={addingManual || !manualName.trim()}
+              onClick={() => void handleManualAdd()}
+              style={primaryBtnStyle(addingManual || !manualName.trim())}
+            >
               {addingManual ? "Adding…" : "Add"}
             </button>
           </div>
-          {manualError && <div style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{manualError}</div>}
+          {manualError && (
+            <div style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{manualError}</div>
+          )}
         </div>
       )}
 
       {/* ── 3. Find Competitors Card (only if < 3 tracked) ─────────────────── */}
       {competitors.length < 3 && (
-        <div style={{
-          background: finding ? CARD : "#0a1a0a",
-          border: `1px solid ${finding ? BORDER : "#1a3a1a"}`,
-          borderRadius: 8,
-          padding: "14px 18px",
-          marginBottom: 12,
-        }}>
+        <div
+          style={{
+            background: finding ? CARD : "#0a1a0a",
+            border: `1px solid ${finding ? BORDER : "#1a3a1a"}`,
+            borderRadius: 8,
+            padding: "14px 18px",
+            marginBottom: 12,
+          }}
+        >
           {finding ? (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: TEXT_PRIMARY, marginBottom: 10 }}>Finding competitors…</div>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: TEXT_PRIMARY,
+                  marginBottom: 10,
+                }}
+              >
+                Finding competitors…
+              </div>
               {findSteps.map((step, i) => (
-                <div key={i} style={{ fontSize: 12, color: TEXT_SECONDARY, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ color: "#4ade80" }}>✓</span>{step}
+                <div
+                  key={i}
+                  style={{
+                    fontSize: 12,
+                    color: TEXT_SECONDARY,
+                    marginBottom: 4,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <span style={{ color: "#4ade80" }}>✓</span>
+                  {step}
                 </div>
               ))}
-              <div style={{ fontSize: 11, color: "#444444", marginTop: 6 }}>This may take 30–60 seconds…</div>
+              <div style={{ fontSize: 11, color: "#444444", marginTop: 6 }}>
+                This may take 30–60 seconds…
+              </div>
             </div>
           ) : suggestions.length > 0 ? (
             <div>
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 500, color: TEXT_PRIMARY }}>
-                  AI found {suggestions.length} nearby competitor{suggestions.length !== 1 ? "s" : ""}
+                  AI found {suggestions.length} nearby competitor
+                  {suggestions.length !== 1 ? "s" : ""}
                 </div>
-                <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>Click to select hotels to add</div>
+                <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>
+                  Click to select hotels to add
+                </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: 10,
+                  marginBottom: 14,
+                }}
+              >
                 {suggestions.map((s, i) => {
                   const isSelected = selectedIdxs.has(i);
                   const progress = addProgress.get(i);
@@ -1205,40 +1433,128 @@ export default function BenchmarkingPage() {
                       key={i}
                       onClick={() => {
                         if (addingSelected || progress) return;
-                        if (isSelected) { setSelectedIdxs((prev) => { const n = new Set(prev); n.delete(i); return n; }); }
-                        else if (selectedIdxs.size < 5) { setSelectedIdxs((prev) => new Set([...prev, i])); }
+                        if (isSelected) {
+                          setSelectedIdxs((prev) => {
+                            const n = new Set(prev);
+                            n.delete(i);
+                            return n;
+                          });
+                        } else if (selectedIdxs.size < 5) {
+                          setSelectedIdxs((prev) => new Set([...prev, i]));
+                        }
                       }}
-                      style={{ background: isSelected ? "#0a1a0a" : CARD, border: `1px solid ${isSelected ? "#4ade80" : BORDER}`, borderRadius: 6, padding: "12px 14px", cursor: addingSelected || progress ? "default" : "pointer" }}
+                      style={{
+                        background: isSelected ? "#0a1a0a" : CARD,
+                        border: `1px solid ${isSelected ? "#4ade80" : BORDER}`,
+                        borderRadius: 6,
+                        padding: "12px 14px",
+                        cursor: addingSelected || progress ? "default" : "pointer",
+                      }}
                     >
-                      {progress && <div style={{ fontSize: 10, fontWeight: 600, color: progress === "Done" ? "#4ade80" : progress === "Error" ? "#f87171" : TEXT_MUTED, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>{progress}</div>}
-                      <div style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY, marginBottom: 4 }}>{s.name}</div>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: ratingColor(s.avg_rating), marginBottom: 2, lineHeight: 1 }}>{s.avg_rating ? s.avg_rating.toFixed(1) : "—"}</div>
-                      <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 4 }}>{s.total_reviews.toLocaleString()} reviews</div>
-                      {s.reason && <div style={{ fontSize: 11, color: TEXT_MUTED, fontStyle: "italic" }}>{s.reason}</div>}
+                      {progress && (
+                        <div
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color:
+                              progress === "Done"
+                                ? "#4ade80"
+                                : progress === "Error"
+                                  ? "#f87171"
+                                  : TEXT_MUTED,
+                            marginBottom: 4,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                          }}
+                        >
+                          {progress}
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: TEXT_PRIMARY,
+                          marginBottom: 4,
+                        }}
+                      >
+                        {s.name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 20,
+                          fontWeight: 700,
+                          color: ratingColor(s.avg_rating),
+                          marginBottom: 2,
+                          lineHeight: 1,
+                        }}
+                      >
+                        {s.avg_rating ? s.avg_rating.toFixed(1) : "—"}
+                      </div>
+                      <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 4 }}>
+                        {s.total_reviews.toLocaleString()} reviews
+                      </div>
+                      {s.reason && (
+                        <div style={{ fontSize: 11, color: TEXT_MUTED, fontStyle: "italic" }}>
+                          {s.reason}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 {selectedIdxs.size > 0 && (
-                  <button type="button" disabled={addingSelected} onClick={() => void handleAddSelected()} style={primaryBtnStyle(addingSelected)}>
+                  <button
+                    type="button"
+                    disabled={addingSelected}
+                    onClick={() => void handleAddSelected()}
+                    style={primaryBtnStyle(addingSelected)}
+                  >
                     {addingSelected ? "Adding…" : `Add selected (${selectedIdxs.size})`}
                   </button>
                 )}
-                <span style={{ fontSize: 12, color: TEXT_MUTED }}>{selectedIdxs.size} / 5 selected</span>
-                <button type="button" onClick={() => { setSuggestions([]); setSelectedIdxs(new Set()); setAddProgress(new Map()); }} style={secondaryBtnStyle({ marginLeft: "auto" })}>
+                <span style={{ fontSize: 12, color: TEXT_MUTED }}>
+                  {selectedIdxs.size} / 5 selected
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSuggestions([]);
+                    setSelectedIdxs(new Set());
+                    setAddProgress(new Map());
+                  }}
+                  style={secondaryBtnStyle({ marginLeft: "auto" })}
+                >
                   Clear
                 </button>
               </div>
             </div>
           ) : (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: TEXT_PRIMARY }}>Find competitors automatically</div>
-                <div style={{ fontSize: 11, color: "#4ade80", marginTop: 2 }}>AI finds hotels in your area with similar rating and service class</div>
-                {findError && <div style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{findError}</div>}
+                <div style={{ fontSize: 13, fontWeight: 500, color: TEXT_PRIMARY }}>
+                  Find competitors automatically
+                </div>
+                <div style={{ fontSize: 11, color: "#4ade80", marginTop: 2 }}>
+                  AI finds hotels in your area with similar rating and service class
+                </div>
+                {findError && (
+                  <div style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{findError}</div>
+                )}
               </div>
-              <button type="button" disabled={!hotel?.id} onClick={() => void handleFindCompetitors()} style={primaryBtnStyle(!hotel?.id)}>
+              <button
+                type="button"
+                disabled={!hotel?.id}
+                onClick={() => void handleFindCompetitors()}
+                style={primaryBtnStyle(!hotel?.id)}
+              >
                 Find competitors
               </button>
             </div>
@@ -1248,8 +1564,16 @@ export default function BenchmarkingPage() {
 
       {/* ── 4. Map + Ranking ────────────────────────────────────────────────── */}
       <div className="bench-map-grid" style={{ marginBottom: 12 }}>
-        <div style={{ ...cardStyle, height: 280, overflow: "hidden", position: "relative" }}>
-          <MapComponent center={mapCenter} zoom={14} myHotel={mapHotel} competitors={mapCompetitors} height={280} />
+        <div
+          style={{ ...cardStyle, height: 280, overflow: "hidden", position: "relative" }}
+        >
+          <MapComponent
+            center={mapCenter}
+            zoom={14}
+            myHotel={mapHotel}
+            competitors={mapCompetitors}
+            height={280}
+          />
         </div>
 
         <div style={{ ...cardStyle, height: 280, padding: "20px", overflowY: "auto" }}>
@@ -1258,193 +1582,651 @@ export default function BenchmarkingPage() {
           </div>
           {rankingList.length === 0 ? (
             <div style={{ fontSize: 13, color: TEXT_MUTED }}>No hotels yet</div>
-          ) : rankingList.map((entry, idx) => {
-            const rank = idx + 1;
-            const delta = marketAvg != null && entry.avg_rating != null ? entry.avg_rating - marketAvg : null;
-            const deltaText = delta == null ? null : Math.abs(delta) < 0.05 ? "no change" : delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
-            const deltaColor = delta == null || Math.abs(delta) < 0.05 ? TEXT_MUTED : delta > 0 ? "#4ade80" : "#f87171";
-            const rColor = entry.avg_rating == null ? TEXT_MUTED : entry.avg_rating >= 4.5 ? "#4ade80" : entry.avg_rating >= 3.5 ? TEXT_PRIMARY : "#fbbf24";
-            return (
-              <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: entry.isMe ? "10px 12px" : "10px 0", margin: entry.isMe ? "0 -12px" : 0, background: entry.isMe ? "#0a1a0a" : "transparent", borderRadius: entry.isMe ? 6 : 0, borderBottom: entry.isMe ? "1px solid #1a3a1a" : `1px solid ${BORDER}` }}>
-                <div style={{ fontSize: 16, fontWeight: 600, width: 24, flexShrink: 0, color: rank === 1 ? "#fbbf24" : entry.isMe ? "#4ade80" : TEXT_MUTED }}>#{rank}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span style={{ fontSize: 13, fontWeight: 500, color: TEXT_PRIMARY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{truncName(entry.name, 20)}</span>
-                    {entry.isMe && <span style={{ fontSize: 10, fontWeight: 600, color: "#4ade80", flexShrink: 0 }}>YOU</span>}
+          ) : (
+            rankingList.map((entry, idx) => {
+              const rank = idx + 1;
+              const delta =
+                marketAvg != null && entry.avg_rating != null
+                  ? entry.avg_rating - marketAvg
+                  : null;
+              const deltaText =
+                delta == null
+                  ? null
+                  : Math.abs(delta) < 0.05
+                    ? "no change"
+                    : delta > 0
+                      ? `+${delta.toFixed(1)}`
+                      : delta.toFixed(1);
+              const deltaColor =
+                delta == null || Math.abs(delta) < 0.05
+                  ? TEXT_MUTED
+                  : delta > 0
+                    ? "#4ade80"
+                    : "#f87171";
+              const rColor =
+                entry.avg_rating == null
+                  ? TEXT_MUTED
+                  : entry.avg_rating >= 4.5
+                    ? "#4ade80"
+                    : entry.avg_rating >= 3.5
+                      ? TEXT_PRIMARY
+                      : "#fbbf24";
+              return (
+                <div
+                  key={entry.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: entry.isMe ? "10px 12px" : "10px 0",
+                    margin: entry.isMe ? "0 -12px" : 0,
+                    background: entry.isMe ? "#0a1a0a" : "transparent",
+                    borderRadius: entry.isMe ? 6 : 0,
+                    borderBottom: entry.isMe
+                      ? "1px solid #1a3a1a"
+                      : `1px solid ${BORDER}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 600,
+                      width: 24,
+                      flexShrink: 0,
+                      color:
+                        rank === 1 ? "#fbbf24" : entry.isMe ? "#4ade80" : TEXT_MUTED,
+                    }}
+                  >
+                    #{rank}
                   </div>
-                  <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>{(entry.total_reviews ?? 0).toLocaleString()} reviews</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: TEXT_PRIMARY,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {truncName(entry.name, 20)}
+                      </span>
+                      {entry.isMe && (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: "#4ade80",
+                            flexShrink: 0,
+                          }}
+                        >
+                          YOU
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>
+                      {(entry.total_reviews ?? 0).toLocaleString()} reviews
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 18,
+                        fontWeight: 600,
+                        color: rColor,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {entry.avg_rating != null ? entry.avg_rating.toFixed(1) : "—"}
+                    </div>
+                    {deltaText && (
+                      <div style={{ fontSize: 11, color: deltaColor, marginTop: 2 }}>
+                        {deltaText}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontSize: 18, fontWeight: 600, color: rColor, lineHeight: 1 }}>{entry.avg_rating != null ? entry.avg_rating.toFixed(1) : "—"}</div>
-                  {deltaText && <div style={{ fontSize: 11, color: deltaColor, marginTop: 2 }}>{deltaText}</div>}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
 
       {/* ── 5. AI Insights Row ──────────────────────────────────────────────── */}
       <div style={{ marginBottom: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ ...sectionLabelStyle, marginBottom: 0 } as CSSProperties}>AI INSIGHTS</div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 10,
+          }}
+        >
+          <div style={{ ...sectionLabelStyle, marginBottom: 0 } as CSSProperties}>
+            AI INSIGHTS
+          </div>
           {insights && !insightsLoading && (
-            <button type="button" onClick={() => hotel && void doGenerateInsights(hotel, myAvgRating, myTotalReviews, competitors)} style={secondaryBtnStyle({ fontSize: 11, padding: "4px 10px" })}>
+            <button
+              type="button"
+              onClick={() =>
+                hotel && void doGenerateInsights(hotel, myAvgRating, myTotalReviews, competitors)
+              }
+              style={secondaryBtnStyle({ fontSize: 11, padding: "4px 10px" })}
+            >
               Regenerate insights
             </button>
           )}
         </div>
         {!hasSyncedCompetitors ? (
           <div style={{ ...cardStyle, padding: "14px 18px" }}>
-            <span style={{ fontSize: 13, color: "#fbbf24" }}>Sync competitors to generate AI insights</span>
+            <span style={{ fontSize: 13, color: "#fbbf24" }}>
+              Sync competitors to generate AI insights
+            </span>
           </div>
         ) : insightsLoading ? (
           <div className="bench-insights-grid">
             {INSIGHT_CARDS.map(({ key }) => (
-              <div key={key} style={{ ...cardStyle, padding: "16px 18px", animation: "bench-pulse 1.5s ease-in-out infinite" }}>
-                <div style={{ width: "60%", height: 10, background: "#1e1e1e", borderRadius: 3, marginBottom: 8 }} />
-                <div style={{ width: "100%", height: 8, background: "#1e1e1e", borderRadius: 3, marginBottom: 4 }} />
-                <div style={{ width: "80%", height: 8, background: "#1e1e1e", borderRadius: 3 }} />
+              <div
+                key={key}
+                style={{
+                  ...cardStyle,
+                  padding: "16px 18px",
+                  animation: "bench-pulse 1.5s ease-in-out infinite",
+                }}
+              >
+                <div
+                  style={{
+                    width: "60%",
+                    height: 10,
+                    background: "#1e1e1e",
+                    borderRadius: 3,
+                    marginBottom: 8,
+                  }}
+                />
+                <div
+                  style={{
+                    width: "100%",
+                    height: 8,
+                    background: "#1e1e1e",
+                    borderRadius: 3,
+                    marginBottom: 4,
+                  }}
+                />
+                <div
+                  style={{ width: "80%", height: 8, background: "#1e1e1e", borderRadius: 3 }}
+                />
               </div>
             ))}
           </div>
         ) : insightsError ? (
-          <div style={{ ...cardStyle, padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div
+            style={{
+              ...cardStyle,
+              padding: "14px 18px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
             <span style={{ fontSize: 13, color: "#f87171" }}>{insightsError}</span>
-            <button type="button" onClick={() => hotel && void doGenerateInsights(hotel, myAvgRating, myTotalReviews, competitors)} style={secondaryBtnStyle()}>Retry</button>
+            <button
+              type="button"
+              onClick={() =>
+                hotel && void doGenerateInsights(hotel, myAvgRating, myTotalReviews, competitors)
+              }
+              style={secondaryBtnStyle()}
+            >
+              Retry
+            </button>
           </div>
         ) : insights ? (
           <div className="bench-insights-grid">
             {INSIGHT_CARDS.map(({ key, icon, label, color }) => (
               <div key={key} style={{ ...cardStyle, padding: "16px 18px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginBottom: 8,
+                  }}
+                >
                   <span style={{ color, fontSize: 14 }}>{icon}</span>
-                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", color: TEXT_MUTED, textTransform: "uppercase" }}>{label}</span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      letterSpacing: "0.1em",
+                      color: TEXT_MUTED,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {label}
+                  </span>
                 </div>
-                <div style={{ fontSize: 12, color: "#cccccc", lineHeight: 1.5 }}>{insights[key] || "—"}</div>
+                <div style={{ fontSize: 12, color: "#cccccc", lineHeight: 1.5 }}>
+                  {insights[key] || "—"}
+                </div>
               </div>
             ))}
           </div>
         ) : (
-          <div style={{ ...cardStyle, padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 13, color: TEXT_MUTED }}>Ready to generate AI insights</span>
-            <button type="button" onClick={() => hotel && void doGenerateInsights(hotel, myAvgRating, myTotalReviews, competitors)} style={primaryBtnStyle()}>Generate insights</button>
+          <div
+            style={{
+              ...cardStyle,
+              padding: "14px 18px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <span style={{ fontSize: 13, color: TEXT_MUTED }}>
+              Ready to generate AI insights
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                hotel && void doGenerateInsights(hotel, myAvgRating, myTotalReviews, competitors)
+              }
+              style={primaryBtnStyle()}
+            >
+              Generate insights
+            </button>
           </div>
         )}
       </div>
 
       {/* ── 6. Competitive Intelligence ─────────────────────────────────────── */}
       <div style={{ ...cardStyle, padding: "20px 24px", marginBottom: 12 }}>
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: comparison ? 20 : 0 }}>
-          <div>
-            <div style={sectionLabelStyle}>COMPETITIVE INTELLIGENCE</div>
-            <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: -8 }}>
-              {comparison ? "Deep analysis based on review corpus" : "AI-powered analysis of your competitive position"}
-            </div>
-          </div>
-          <button
-            type="button"
-            disabled={comparisonLoading || !hotel?.id || competitors.length === 0}
-            onClick={() => void handleGenerateComparison()}
-            style={primaryBtnStyle(comparisonLoading || !hotel?.id || competitors.length === 0)}
+
+        {/* Results header — only shown when results exist */}
+        {comparison && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: 20,
+            }}
           >
-            {comparisonLoading ? "Analyzing… ~30s" : comparison ? "Re-analyze" : "Analyze competitors"}
-          </button>
-        </div>
-
-        {comparisonError && (
-          <div style={{ fontSize: 12, color: "#f87171", marginTop: 8 }}>{comparisonError}</div>
-        )}
-
-        {!comparison && !comparisonLoading && (
-          <div style={{ marginTop: 16, textAlign: "center", padding: "24px 0" }}>
-            <div style={{ fontSize: 13, color: TEXT_PRIMARY, marginBottom: 6, fontWeight: 500 }}>
-              Get AI-powered competitive analysis
+            <div>
+              <div style={sectionLabelStyle}>COMPETITIVE INTELLIGENCE</div>
+              {comparisonUpdatedAt && (
+                <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: -8 }}>
+                  Last updated {formatTimeAgo(comparisonUpdatedAt)}
+                </div>
+              )}
             </div>
-            <div style={{ fontSize: 12, color: TEXT_MUTED, maxWidth: 480, margin: "0 auto", lineHeight: 1.6 }}>
-              We&apos;ll analyze your competitors&apos; reviews to find your unique advantages, competitive gaps, and specific actions to take.
-            </div>
-            {competitors.length === 0 && (
-              <div style={{ fontSize: 11, color: "#fbbf24", marginTop: 10 }}>
-                Add competitors above first to enable this analysis.
-              </div>
-            )}
+            <button
+              type="button"
+              disabled={comparisonLoading}
+              onClick={() => void handleGenerateComparison()}
+              style={secondaryBtnStyle({ fontSize: 11, padding: "5px 12px" })}
+            >
+              Re-run analysis
+            </button>
           </div>
         )}
 
+        {/* Loading / progress state */}
         {comparisonLoading && (
-          <div style={{ marginTop: 16 }}>
+          <div style={{ padding: "32px 0", textAlign: "center" }}>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                fontSize: 13,
+                color: TEXT_SECONDARY,
+                marginBottom: 24,
+              }}
+            >
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 14,
+                  height: 14,
+                  border: "2px solid #2a2a2a",
+                  borderTopColor: "#4ade80",
+                  borderRadius: "50%",
+                  animation: "bench-spin 0.8s linear infinite",
+                  flexShrink: 0,
+                }}
+              />
+              {analysisToast ?? "Running competitive comparison…"}
+            </div>
             {[0, 1, 2].map((i) => (
-              <div key={i} style={{ background: "#1a1a1a", borderRadius: 6, padding: "14px 16px", marginBottom: 8, animation: "bench-pulse 1.5s ease-in-out infinite" }}>
-                <div style={{ width: "40%", height: 10, background: "#222", borderRadius: 3, marginBottom: 6 }} />
-                <div style={{ width: "80%", height: 8, background: "#222", borderRadius: 3 }} />
+              <div
+                key={i}
+                style={{
+                  background: "#1a1a1a",
+                  borderRadius: 6,
+                  padding: "14px 16px",
+                  marginBottom: 8,
+                  animation: "bench-pulse 1.5s ease-in-out infinite",
+                  textAlign: "left",
+                }}
+              >
+                <div
+                  style={{
+                    width: "40%",
+                    height: 10,
+                    background: "#222",
+                    borderRadius: 3,
+                    marginBottom: 6,
+                  }}
+                />
+                <div
+                  style={{ width: "80%", height: 8, background: "#222", borderRadius: 3 }}
+                />
               </div>
             ))}
           </div>
         )}
 
-        {comparison && (
+        {/* Error */}
+        {comparisonError && !comparisonLoading && (
+          <div
+            style={{
+              fontSize: 12,
+              color: "#f87171",
+              marginBottom: comparison ? 16 : 0,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <span>{comparisonError}</span>
+            <button
+              type="button"
+              onClick={() => void handleGenerateComparison()}
+              style={secondaryBtnStyle({ fontSize: 11, padding: "3px 10px" })}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Empty state — no results yet */}
+        {!comparison && !comparisonLoading && (
+          <div style={{ textAlign: "center", padding: "40px 32px" }}>
+            {/* Sparkle icon */}
+            <div
+              style={{
+                fontSize: 40,
+                color: "#4ade80",
+                lineHeight: 1,
+                userSelect: "none",
+              }}
+            >
+              ✦
+            </div>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 600,
+                color: TEXT_PRIMARY,
+                marginTop: 16,
+              }}
+            >
+              Get AI-powered competitive analysis
+            </div>
+            <div
+              style={{
+                fontSize: 14,
+                color: TEXT_SECONDARY,
+                maxWidth: 480,
+                margin: "8px auto 0",
+                lineHeight: 1.6,
+              }}
+            >
+              We&apos;ll analyze your competitors&apos; reviews to find your unique advantages,
+              competitive gaps, and specific actions to take.
+            </div>
+            <div
+              style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 12 }}
+            >
+              You have {competitors.length} competitor{competitors.length !== 1 ? "s" : ""} tracked
+            </div>
+
+            {competitors.length === 0 ? (
+              <>
+                <div style={{ fontSize: 11, color: "#fbbf24", marginTop: 8 }}>
+                  Add at least 1 competitor to run analysis
+                </div>
+                <button
+                  type="button"
+                  disabled={!hotel?.id}
+                  onClick={() => void handleFindCompetitors()}
+                  style={{ ...primaryBtnStyle(!hotel?.id), marginTop: 20 }}
+                >
+                  Find competitors
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                disabled={comparisonLoading || !hotel?.id}
+                onClick={() => void handleGenerateComparison()}
+                style={{ ...primaryBtnStyle(comparisonLoading || !hotel?.id), marginTop: 20 }}
+              >
+                Start competitive analysis
+              </button>
+            )}
+
+            {comparisonError && (
+              <div style={{ fontSize: 12, color: "#f87171", marginTop: 12 }}>
+                {comparisonError}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Results */}
+        {comparison && !comparisonLoading && (
           <div>
             <div className="bench-ci-grid">
               {/* Section A — Unique Advantages */}
               <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#4ade80", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#4ade80",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    marginBottom: 10,
+                  }}
+                >
                   YOUR UNIQUE ADVANTAGES
                 </div>
-                <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 10 }}>What only you offer</div>
+                <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 10 }}>
+                  What only you offer
+                </div>
                 {(comparison.unique_advantages ?? []).map((adv, i) => (
-                  <div key={i} style={{ background: "#0a1a0a", border: "1px solid #1a3a1a", borderRadius: 6, padding: "14px 16px", marginBottom: 8 }}>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-                      <span style={{ color: "#4ade80", fontSize: 13, flexShrink: 0, marginTop: 1 }}>✓</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY }}>{adv.advantage}</span>
+                  <div
+                    key={i}
+                    style={{
+                      background: "#0a1a0a",
+                      border: "1px solid #1a3a1a",
+                      borderRadius: 6,
+                      padding: "14px 16px",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        marginBottom: 4,
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: "#4ade80",
+                          fontSize: 13,
+                          flexShrink: 0,
+                          marginTop: 1,
+                        }}
+                      >
+                        ✓
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: TEXT_PRIMARY,
+                        }}
+                      >
+                        {adv.advantage}
+                      </span>
                     </div>
                     {adv.vs_competitors && (
-                      <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginLeft: 21, marginBottom: 4 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: TEXT_SECONDARY,
+                          marginLeft: 21,
+                          marginBottom: 4,
+                        }}
+                      >
                         vs competitors: {adv.vs_competitors}
                       </div>
                     )}
                     {adv.how_to_leverage && (
-                      <div style={{ fontSize: 12, color: "#4ade80", marginLeft: 21 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "#4ade80",
+                          marginLeft: 21,
+                        }}
+                      >
                         → {adv.how_to_leverage}
                       </div>
                     )}
                   </div>
                 ))}
                 {(comparison.unique_advantages ?? []).length === 0 && (
-                  <div style={{ fontSize: 12, color: TEXT_MUTED }}>No unique advantages identified yet.</div>
+                  <div style={{ fontSize: 12, color: TEXT_MUTED }}>
+                    No unique advantages identified yet.
+                  </div>
                 )}
               </div>
 
               {/* Section B — Competitive Gaps */}
               <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#f87171", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#f87171",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    marginBottom: 10,
+                  }}
+                >
                   WHERE COMPETITORS LEAD
                 </div>
-                <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 10 }}>What you&apos;re missing</div>
+                <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 10 }}>
+                  What you&apos;re missing
+                </div>
                 {(comparison.competitive_gaps ?? []).map((gap, i) => {
-                  const pColor = gap.priority === "high" ? "#f87171" : gap.priority === "medium" ? "#fbbf24" : TEXT_SECONDARY;
-                  const pBg = gap.priority === "high" ? "#2d0a0a" : gap.priority === "medium" ? "#1a1200" : "#1a1a1a";
+                  const pColor =
+                    gap.priority === "high"
+                      ? "#f87171"
+                      : gap.priority === "medium"
+                        ? "#fbbf24"
+                        : TEXT_SECONDARY;
+                  const pBg =
+                    gap.priority === "high"
+                      ? "#2d0a0a"
+                      : gap.priority === "medium"
+                        ? "#1a1200"
+                        : "#1a1a1a";
                   return (
-                    <div key={i} style={{ background: "#1a0a0a", border: "1px solid #2a1a1a", borderRadius: 6, padding: "14px 16px", marginBottom: 8 }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
-                        <span style={{ color: "#f87171", fontSize: 13, flexShrink: 0, marginTop: 1 }}>⚠</span>
+                    <div
+                      key={i}
+                      style={{
+                        background: "#1a0a0a",
+                        border: "1px solid #2a1a1a",
+                        borderRadius: 6,
+                        padding: "14px 16px",
+                        marginBottom: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "flex-start",
+                          marginBottom: 4,
+                        }}
+                      >
+                        <span
+                          style={{
+                            color: "#f87171",
+                            fontSize: 13,
+                            flexShrink: 0,
+                            marginTop: 1,
+                          }}
+                        >
+                          ⚠
+                        </span>
                         <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY }}>{gap.gap}</span>
-                            <span style={{ background: pBg, color: pColor, borderRadius: 3, padding: "2px 7px", fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 8,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: TEXT_PRIMARY,
+                              }}
+                            >
+                              {gap.gap}
+                            </span>
+                            <span
+                              style={{
+                                background: pBg,
+                                color: pColor,
+                                borderRadius: 3,
+                                padding: "2px 7px",
+                                fontSize: 10,
+                                fontWeight: 600,
+                                flexShrink: 0,
+                              }}
+                            >
                               {gap.priority}
                             </span>
                           </div>
                         </div>
                       </div>
                       {gap.who_has_it && (
-                        <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginLeft: 21, marginBottom: 4 }}>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: TEXT_SECONDARY,
+                            marginLeft: 21,
+                            marginBottom: 4,
+                          }}
+                        >
                           Who has it: {gap.who_has_it}
                         </div>
                       )}
                       {gap.action && (
-                        <div style={{ fontSize: 12, color: "#a78bfa", marginLeft: 21 }}>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: "#a78bfa",
+                            marginLeft: 21,
+                          }}
+                        >
                           → {gap.action}
                         </div>
                       )}
@@ -1460,18 +2242,51 @@ export default function BenchmarkingPage() {
             {/* Section C — Market Positioning */}
             {comparison.market_positioning && (
               <div style={{ ...cardStyle, padding: "16px 18px", marginTop: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: TEXT_MUTED, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 12 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: TEXT_MUTED,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    marginBottom: 12,
+                  }}
+                >
                   MARKET POSITIONING
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {[
-                    { label: "Current position", text: comparison.market_positioning.your_position },
-                    { label: "Recommended position", text: comparison.market_positioning.recommended_position },
-                    { label: "Strategy", text: comparison.market_positioning.differentiation_strategy },
+                    {
+                      label: "Current position",
+                      text: comparison.market_positioning.your_position,
+                    },
+                    {
+                      label: "Recommended position",
+                      text: comparison.market_positioning.recommended_position,
+                    },
+                    {
+                      label: "Strategy",
+                      text: comparison.market_positioning.differentiation_strategy,
+                    },
                   ].map((row) => (
-                    <div key={row.label} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                      <span style={{ fontSize: 11, color: TEXT_MUTED, width: 160, flexShrink: 0, paddingTop: 1 }}>{row.label}:</span>
-                      <span style={{ fontSize: 12, color: "#cccccc", lineHeight: 1.5 }}>{row.text}</span>
+                    <div
+                      key={row.label}
+                      style={{ display: "flex", gap: 12, alignItems: "flex-start" }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: TEXT_MUTED,
+                          width: 160,
+                          flexShrink: 0,
+                          paddingTop: 1,
+                        }}
+                      >
+                        {row.label}:
+                      </span>
+                      <span style={{ fontSize: 12, color: "#cccccc", lineHeight: 1.5 }}>
+                        {row.text}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1481,21 +2296,73 @@ export default function BenchmarkingPage() {
             {/* Section D — Quick Wins */}
             {(comparison.quick_wins ?? []).length > 0 && (
               <div style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: TEXT_MUTED, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: TEXT_MUTED,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    marginBottom: 10,
+                  }}
+                >
                   QUICK WINS
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {comparison.quick_wins.map((win, i) => {
-                    const eColor = win.effort === "low" ? "#4ade80" : win.effort === "medium" ? "#fbbf24" : "#f87171";
-                    const eBg = win.effort === "low" ? "#052e16" : win.effort === "medium" ? "#1a1200" : "#1a0a0a";
+                    const eColor =
+                      win.effort === "low"
+                        ? "#4ade80"
+                        : win.effort === "medium"
+                          ? "#fbbf24"
+                          : "#f87171";
+                    const eBg =
+                      win.effort === "low"
+                        ? "#052e16"
+                        : win.effort === "medium"
+                          ? "#1a1200"
+                          : "#1a0a0a";
                     return (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, background: "#111111", border: `1px solid ${BORDER}`, borderRadius: 6, padding: "12px 14px" }}>
-                        <span style={{ background: eBg, color: eColor, borderRadius: 3, padding: "2px 8px", fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
+                      <div
+                        key={i}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                          background: "#111111",
+                          border: `1px solid ${BORDER}`,
+                          borderRadius: 6,
+                          padding: "12px 14px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            background: eBg,
+                            color: eColor,
+                            borderRadius: 3,
+                            padding: "2px 8px",
+                            fontSize: 10,
+                            fontWeight: 600,
+                            flexShrink: 0,
+                          }}
+                        >
                           {win.effort} effort
                         </span>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, color: TEXT_PRIMARY, fontWeight: 500 }}>{win.win}</div>
-                          {win.impact && <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>{win.impact}</div>}
+                          <div
+                            style={{
+                              fontSize: 13,
+                              color: TEXT_PRIMARY,
+                              fontWeight: 500,
+                            }}
+                          >
+                            {win.win}
+                          </div>
+                          {win.impact && (
+                            <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>
+                              {win.impact}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -1506,9 +2373,30 @@ export default function BenchmarkingPage() {
 
             {/* Long-term strategy */}
             {comparison.long_term_strategy && (
-              <div style={{ marginTop: 12, background: "#111111", border: `1px solid ${BORDER}`, borderRadius: 6, padding: "12px 14px" }}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: TEXT_MUTED, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>LONG-TERM STRATEGY</div>
-                <div style={{ fontSize: 12, color: "#cccccc", lineHeight: 1.6 }}>{comparison.long_term_strategy}</div>
+              <div
+                style={{
+                  marginTop: 12,
+                  background: "#111111",
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 6,
+                  padding: "12px 14px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: TEXT_MUTED,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    marginBottom: 6,
+                  }}
+                >
+                  LONG-TERM STRATEGY
+                </div>
+                <div style={{ fontSize: 12, color: "#cccccc", lineHeight: 1.6 }}>
+                  {comparison.long_term_strategy}
+                </div>
               </div>
             )}
           </div>
@@ -1522,22 +2410,79 @@ export default function BenchmarkingPage() {
           <div style={sectionLabelStyle}>RATING OVERVIEW</div>
           {rankingList.length === 0 ? (
             <div style={{ fontSize: 12, color: TEXT_MUTED }}>No data yet</div>
-          ) : rankingList.map((entry) => (
-            <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <div style={{ width: 100, fontSize: 12, color: entry.isMe ? "#4ade80" : TEXT_SECONDARY, fontWeight: entry.isMe ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0 }}>
-                {entry.isMe ? "You" : truncName(entry.name, 13)}
+          ) : (
+            rankingList.map((entry) => (
+              <div
+                key={entry.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 8,
+                }}
+              >
+                <div
+                  style={{
+                    width: 100,
+                    fontSize: 12,
+                    color: entry.isMe ? "#4ade80" : TEXT_SECONDARY,
+                    fontWeight: entry.isMe ? 600 : 400,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  {entry.isMe ? "You" : truncName(entry.name, 13)}
+                </div>
+                <div
+                  style={{
+                    flex: 1,
+                    height: 5,
+                    background: "#1a1a1a",
+                    borderRadius: 3,
+                    overflow: "hidden",
+                  }}
+                >
+                  {entry.avg_rating != null && (
+                    <div
+                      style={{
+                        width: `${(entry.avg_rating / 5) * 100}%`,
+                        height: "100%",
+                        background: entry.isMe ? "#6366f1" : ratingColor(entry.avg_rating),
+                        borderRadius: 3,
+                      }}
+                    />
+                  )}
+                </div>
+                <div
+                  style={{
+                    width: 40,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: entry.isMe
+                      ? "#6366f1"
+                      : entry.avg_rating != null
+                        ? TEXT_PRIMARY
+                        : "#444444",
+                    textAlign: "right",
+                    flexShrink: 0,
+                  }}
+                >
+                  {entry.avg_rating != null ? (
+                    entry.avg_rating.toFixed(1)
+                  ) : (
+                    <span style={{ fontSize: 10, color: "#444444" }}>N/S</span>
+                  )}
+                </div>
               </div>
-              <div style={{ flex: 1, height: 5, background: "#1a1a1a", borderRadius: 3, overflow: "hidden" }}>
-                {entry.avg_rating != null && (
-                  <div style={{ width: `${(entry.avg_rating / 5) * 100}%`, height: "100%", background: entry.isMe ? "#6366f1" : ratingColor(entry.avg_rating), borderRadius: 3 }} />
-                )}
-              </div>
-              <div style={{ width: 40, fontSize: 12, fontWeight: 500, color: entry.isMe ? "#6366f1" : entry.avg_rating != null ? TEXT_PRIMARY : "#444444", textAlign: "right", flexShrink: 0 }}>
-                {entry.avg_rating != null ? entry.avg_rating.toFixed(1) : <span style={{ fontSize: 10, color: "#444444" }}>N/S</span>}
-              </div>
+            ))
+          )}
+          {marketAvg != null && (
+            <div style={{ fontSize: 10, color: "#444444", marginTop: 8 }}>
+              Market avg: {marketAvg.toFixed(2)}★
             </div>
-          ))}
-          {marketAvg != null && <div style={{ fontSize: 10, color: "#444444", marginTop: 8 }}>Market avg: {marketAvg.toFixed(2)}★</div>}
+          )}
         </div>
 
         {/* Review volume */}
@@ -1545,19 +2490,68 @@ export default function BenchmarkingPage() {
           <div style={sectionLabelStyle}>REVIEW VOLUME</div>
           {rankingList.length === 0 ? (
             <div style={{ fontSize: 12, color: TEXT_MUTED }}>No data yet</div>
-          ) : rankingList.map((entry) => (
-            <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <div style={{ width: 100, fontSize: 12, color: entry.isMe ? "#4ade80" : TEXT_SECONDARY, fontWeight: entry.isMe ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0 }}>
-                {entry.isMe ? "You" : truncName(entry.name, 13)}
+          ) : (
+            rankingList.map((entry) => (
+              <div
+                key={entry.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 8,
+                }}
+              >
+                <div
+                  style={{
+                    width: 100,
+                    fontSize: 12,
+                    color: entry.isMe ? "#4ade80" : TEXT_SECONDARY,
+                    fontWeight: entry.isMe ? 600 : 400,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  {entry.isMe ? "You" : truncName(entry.name, 13)}
+                </div>
+                <div
+                  style={{
+                    flex: 1,
+                    height: 5,
+                    background: "#1a1a1a",
+                    borderRadius: 3,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${((entry.total_reviews ?? 0) / maxReviews) * 100}%`,
+                      height: "100%",
+                      background: entry.isMe ? "#6366f1" : TEXT_SECONDARY,
+                      borderRadius: 3,
+                    }}
+                  />
+                </div>
+                <div
+                  style={{
+                    width: 40,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: entry.isMe
+                      ? "#6366f1"
+                      : (entry.total_reviews ?? 0) > 0
+                        ? TEXT_PRIMARY
+                        : "#444444",
+                    textAlign: "right",
+                    flexShrink: 0,
+                  }}
+                >
+                  {(entry.total_reviews ?? 0).toLocaleString()}
+                </div>
               </div>
-              <div style={{ flex: 1, height: 5, background: "#1a1a1a", borderRadius: 3, overflow: "hidden" }}>
-                <div style={{ width: `${((entry.total_reviews ?? 0) / maxReviews) * 100}%`, height: "100%", background: entry.isMe ? "#6366f1" : TEXT_SECONDARY, borderRadius: 3 }} />
-              </div>
-              <div style={{ width: 40, fontSize: 12, fontWeight: 500, color: entry.isMe ? "#6366f1" : (entry.total_reviews ?? 0) > 0 ? TEXT_PRIMARY : "#444444", textAlign: "right", flexShrink: 0 }}>
-                {(entry.total_reviews ?? 0).toLocaleString()}
-              </div>
-            </div>
-          ))}
+            ))
+          )}
           <div style={{ fontSize: 10, color: "#444444", marginTop: 8 }}>
             {iLeadVolume ? "You lead in review volume" : "You need volume to compete"}
           </div>
@@ -1568,16 +2562,47 @@ export default function BenchmarkingPage() {
           <div style={sectionLabelStyle}>MARKET POSITION</div>
           {myRankInList != null ? (
             <div>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 6, margin: "8px 0" }}>
-                <span style={{ fontSize: 36, fontWeight: 700, color: TEXT_PRIMARY, lineHeight: 1 }}>#{myRankInList}</span>
-                <span style={{ fontSize: 16, fontWeight: 500, color: TEXT_MUTED }}>of {rankingList.length}</span>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 6,
+                  margin: "8px 0",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 36,
+                    fontWeight: 700,
+                    color: TEXT_PRIMARY,
+                    lineHeight: 1,
+                  }}
+                >
+                  #{myRankInList}
+                </span>
+                <span style={{ fontSize: 16, fontWeight: 500, color: TEXT_MUTED }}>
+                  of {rankingList.length}
+                </span>
               </div>
               {marketAvg != null && myAvgRating != null && (
-                <div style={{ fontSize: 13, fontWeight: 500, color: myAvgRating >= marketAvg ? "#4ade80" : "#f87171", marginBottom: 8 }}>
-                  {myAvgRating >= marketAvg ? `+${(myAvgRating - marketAvg).toFixed(2)} above market avg` : `${(myAvgRating - marketAvg).toFixed(2)} below market avg`}
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: myAvgRating >= marketAvg ? "#4ade80" : "#f87171",
+                    marginBottom: 8,
+                  }}
+                >
+                  {myAvgRating >= marketAvg
+                    ? `+${(myAvgRating - marketAvg).toFixed(2)} above market avg`
+                    : `${(myAvgRating - marketAvg).toFixed(2)} below market avg`}
                 </div>
               )}
-              {positionText && <div style={{ fontSize: 11, color: TEXT_SECONDARY, lineHeight: 1.6 }}>{positionText}</div>}
+              {positionText && (
+                <div style={{ fontSize: 11, color: TEXT_SECONDARY, lineHeight: 1.6 }}>
+                  {positionText}
+                </div>
+              )}
             </div>
           ) : (
             <div style={{ fontSize: 13, color: TEXT_MUTED }}>No data yet</div>
@@ -1586,13 +2611,33 @@ export default function BenchmarkingPage() {
       </div>
 
       {/* ── 8. Feature Comparison Table ─────────────────────────────────────── */}
-      {hasAnyAnalysis && (
+      {!loadingAnalysis && hasAnyAnalysis && (
         <div style={{ ...cardStyle, padding: "20px 24px", marginBottom: 12 }}>
           <div style={sectionLabelStyle}>FEATURE COMPARISON</div>
           {/* Header */}
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 100px 160px 80px", gap: 12, padding: "8px 0", borderBottom: `1px solid ${BORDER}`, marginBottom: 4 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "2fr 100px 160px 80px",
+              gap: 12,
+              padding: "8px 0",
+              borderBottom: `1px solid ${BORDER}`,
+              marginBottom: 4,
+            }}
+          >
             {["HOTEL", "PRICE TIER", "TARGET GUEST", "AMENITIES"].map((h) => (
-              <div key={h} style={{ fontSize: 10, fontWeight: 600, color: TEXT_MUTED, letterSpacing: "0.08em", textTransform: "uppercase" }}>{h}</div>
+              <div
+                key={h}
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: TEXT_MUTED,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {h}
+              </div>
             ))}
           </div>
           {featureRows.map((row) => {
@@ -1605,7 +2650,8 @@ export default function BenchmarkingPage() {
                     if (!hasData) return;
                     setExpandedFeatureRows((prev) => {
                       const s = new Set(prev);
-                      if (s.has(row.id)) s.delete(row.id); else s.add(row.id);
+                      if (s.has(row.id)) s.delete(row.id);
+                      else s.add(row.id);
                       return s;
                     });
                   }}
@@ -1618,32 +2664,91 @@ export default function BenchmarkingPage() {
                     alignItems: "center",
                     cursor: hasData ? "pointer" : "default",
                   }}
-                  onMouseEnter={(e) => { if (hasData) e.currentTarget.style.background = "#161616"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                  onMouseEnter={(e) => {
+                    if (hasData) e.currentTarget.style.background = "#161616";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
                 >
                   {/* Name */}
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: row.isMe ? 600 : 400, color: row.isMe ? "#4ade80" : TEXT_PRIMARY }}>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: row.isMe ? 600 : 400,
+                        color: row.isMe ? "#4ade80" : TEXT_PRIMARY,
+                      }}
+                    >
                       {row.isMe ? (hotel?.name ?? "Your hotel") : truncName(row.name, 28)}
                     </span>
-                    {row.isMe && <span style={{ fontSize: 9, fontWeight: 700, color: "#4ade80", background: "#0a1a0a", border: "1px solid #1a3a1a", borderRadius: 3, padding: "1px 5px" }}>YOU</span>}
-                    {hasData && <span style={{ fontSize: 11, color: TEXT_MUTED, marginLeft: "auto" }}>{isExpanded ? "▲" : "▼"}</span>}
-                    {!hasData && <span style={{ fontSize: 10, color: TEXT_MUTED }}>not analyzed</span>}
+                    {row.isMe && (
+                      <span
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          color: "#4ade80",
+                          background: "#0a1a0a",
+                          border: "1px solid #1a3a1a",
+                          borderRadius: 3,
+                          padding: "1px 5px",
+                        }}
+                      >
+                        YOU
+                      </span>
+                    )}
+                    {hasData && (
+                      <span style={{ fontSize: 11, color: TEXT_MUTED, marginLeft: "auto" }}>
+                        {isExpanded ? "▲" : "▼"}
+                      </span>
+                    )}
+                    {!hasData && (
+                      <span style={{ fontSize: 10, color: TEXT_MUTED }}>not analyzed</span>
+                    )}
                   </div>
                   {/* Price tier */}
                   <div>
                     {row.price_tier ? (
-                      <span style={{
-                        background: row.price_tier === "luxury" ? "#1a1200" : row.price_tier === "upscale" ? "#1e1b4b" : row.price_tier === "mid-range" ? "#052e16" : "#1a1a1a",
-                        color: row.price_tier === "luxury" ? "#fbbf24" : row.price_tier === "upscale" ? "#a78bfa" : row.price_tier === "mid-range" ? "#4ade80" : TEXT_SECONDARY,
-                        borderRadius: 3, padding: "2px 7px", fontSize: 10, fontWeight: 600,
-                      }}>
+                      <span
+                        style={{
+                          background:
+                            row.price_tier === "luxury"
+                              ? "#1a1200"
+                              : row.price_tier === "upscale"
+                                ? "#1e1b4b"
+                                : row.price_tier === "mid-range"
+                                  ? "#052e16"
+                                  : "#1a1a1a",
+                          color:
+                            row.price_tier === "luxury"
+                              ? "#fbbf24"
+                              : row.price_tier === "upscale"
+                                ? "#a78bfa"
+                                : row.price_tier === "mid-range"
+                                  ? "#4ade80"
+                                  : TEXT_SECONDARY,
+                          borderRadius: 3,
+                          padding: "2px 7px",
+                          fontSize: 10,
+                          fontWeight: 600,
+                        }}
+                      >
                         {row.price_tier}
                       </span>
-                    ) : <span style={{ fontSize: 11, color: "#444444" }}>—</span>}
+                    ) : (
+                      <span style={{ fontSize: 11, color: "#444444" }}>—</span>
+                    )}
                   </div>
                   {/* Target guest */}
-                  <div style={{ fontSize: 11, color: TEXT_SECONDARY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: TEXT_SECONDARY,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {row.target_guest ?? "—"}
                   </div>
                   {/* Amenity count */}
@@ -1654,36 +2759,137 @@ export default function BenchmarkingPage() {
 
                 {/* Expanded detail */}
                 {isExpanded && hasData && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, padding: "16px 0 8px", borderBottom: `1px solid ${BORDER}` }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr 1fr",
+                      gap: 12,
+                      padding: "16px 0 8px",
+                      borderBottom: `1px solid ${BORDER}`,
+                    }}
+                  >
                     {/* Amenities */}
                     <div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: TEXT_MUTED, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>AMENITIES</div>
-                      {row.amenities.length > 0 ? row.amenities.map((a, i) => (
-                        <div key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 4 }}>
-                          <span style={{ color: "#4ade80", fontSize: 11, flexShrink: 0 }}>✓</span>
-                          <span style={{ fontSize: 12, color: "#cccccc" }}>{a}</span>
-                        </div>
-                      )) : <span style={{ fontSize: 12, color: TEXT_MUTED }}>None listed</span>}
+                      <div
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          color: TEXT_MUTED,
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                          marginBottom: 8,
+                        }}
+                      >
+                        AMENITIES
+                      </div>
+                      {row.amenities.length > 0 ? (
+                        row.amenities.map((a, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                              alignItems: "flex-start",
+                              marginBottom: 4,
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#4ade80",
+                                fontSize: 11,
+                                flexShrink: 0,
+                              }}
+                            >
+                              ✓
+                            </span>
+                            <span style={{ fontSize: 12, color: "#cccccc" }}>{a}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <span style={{ fontSize: 12, color: TEXT_MUTED }}>None listed</span>
+                      )}
                     </div>
                     {/* Strengths */}
                     <div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: TEXT_MUTED, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>STRENGTHS</div>
-                      {row.strengths.length > 0 ? row.strengths.map((s, i) => (
-                        <div key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 4 }}>
-                          <span style={{ color: "#4ade80", fontSize: 11, flexShrink: 0 }}>✓</span>
-                          <span style={{ fontSize: 12, color: "#cccccc" }}>{s}</span>
-                        </div>
-                      )) : <span style={{ fontSize: 12, color: TEXT_MUTED }}>None identified</span>}
+                      <div
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          color: TEXT_MUTED,
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                          marginBottom: 8,
+                        }}
+                      >
+                        STRENGTHS
+                      </div>
+                      {row.strengths.length > 0 ? (
+                        row.strengths.map((s, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                              alignItems: "flex-start",
+                              marginBottom: 4,
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#4ade80",
+                                fontSize: 11,
+                                flexShrink: 0,
+                              }}
+                            >
+                              ✓
+                            </span>
+                            <span style={{ fontSize: 12, color: "#cccccc" }}>{s}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <span style={{ fontSize: 12, color: TEXT_MUTED }}>None identified</span>
+                      )}
                     </div>
                     {/* Weaknesses */}
                     <div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: TEXT_MUTED, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>WEAKNESSES</div>
-                      {row.weaknesses.length > 0 ? row.weaknesses.map((w, i) => (
-                        <div key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 4 }}>
-                          <span style={{ color: "#fbbf24", fontSize: 11, flexShrink: 0 }}>⚠</span>
-                          <span style={{ fontSize: 12, color: "#cccccc" }}>{w}</span>
-                        </div>
-                      )) : <span style={{ fontSize: 12, color: TEXT_MUTED }}>None identified</span>}
+                      <div
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          color: TEXT_MUTED,
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                          marginBottom: 8,
+                        }}
+                      >
+                        WEAKNESSES
+                      </div>
+                      {row.weaknesses.length > 0 ? (
+                        row.weaknesses.map((w, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                              alignItems: "flex-start",
+                              marginBottom: 4,
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#fbbf24",
+                                fontSize: 11,
+                                flexShrink: 0,
+                              }}
+                            >
+                              ⚠
+                            </span>
+                            <span style={{ fontSize: 12, color: "#cccccc" }}>{w}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <span style={{ fontSize: 12, color: TEXT_MUTED }}>None identified</span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1696,9 +2902,26 @@ export default function BenchmarkingPage() {
       {/* ── 9. Tracked Competitors Table ────────────────────────────────────── */}
       <div style={{ ...cardStyle, overflow: "hidden" }}>
         {/* Header */}
-        <div className="bench-table-row" style={{ background: "#111111", padding: "10px 16px", borderBottom: `1px solid ${BORDER}` }}>
+        <div
+          className="bench-table-row"
+          style={{
+            background: "#111111",
+            padding: "10px 16px",
+            borderBottom: `1px solid ${BORDER}`,
+          }}
+        >
           {["COMPETITOR", "RATING", "REVIEWS", "LAST SYNCED", "ANALYZED", "ACTIONS"].map((h) => (
-            <div key={h} className={h === "ANALYZED" ? "bench-table-analyze-col" : ""} style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", color: TEXT_MUTED, textTransform: "uppercase" }}>
+            <div
+              key={h}
+              className={h === "ANALYZED" ? "bench-table-analyze-col" : ""}
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: "0.1em",
+                color: TEXT_MUTED,
+                textTransform: "uppercase",
+              }}
+            >
               {h}
             </div>
           ))}
@@ -1708,57 +2931,179 @@ export default function BenchmarkingPage() {
         <div className="bench-table-wrap">
           {competitors.length === 0 ? (
             <div style={{ padding: "20px 16px", fontSize: 13, color: TEXT_MUTED }}>
-              No competitors yet. Use &ldquo;Find competitors&rdquo; above, or add manually with &ldquo;+ Add competitor&rdquo;.
+              No competitors yet. Use &ldquo;Find competitors&rdquo; above, or add manually with
+              &ldquo;+ Add competitor&rdquo;.
             </div>
-          ) : competitors.map((comp, i) => {
-            const isSyncing = syncingIds.has(comp.id);
-            const isRemoving = removingId === comp.id;
-            const isAnalyzing = analyzingCompetitorIds.has(comp.id);
-            const needsSync = comp.avg_rating == null;
-            const dotColor = needsSync ? "#f87171" : comp.avg_rating != null && comp.avg_rating >= 4.5 ? "#4ade80" : comp.avg_rating != null && comp.avg_rating >= 3.5 ? "#fbbf24" : "#f87171";
+          ) : (
+            competitors.map((comp, i) => {
+              const isSyncing = syncingIds.has(comp.id);
+              const isRemoving = removingId === comp.id;
+              const isAnalyzing = analyzingCompetitorIds.has(comp.id);
+              const needsSync = comp.avg_rating == null;
+              const dotColor = needsSync
+                ? "#f87171"
+                : comp.avg_rating != null && comp.avg_rating >= 4.5
+                  ? "#4ade80"
+                  : comp.avg_rating != null && comp.avg_rating >= 3.5
+                    ? "#fbbf24"
+                    : "#f87171";
 
-            return (
-              <div
-                key={comp.id}
-                className="bench-table-row"
-                style={{ padding: "12px 16px", borderBottom: i < competitors.length - 1 ? "1px solid #1a1a1a" : "none" }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#161616"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-              >
-                {/* Name */}
-                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: dotColor, flexShrink: 0, display: "inline-block", animation: needsSync ? "bench-dot-pulse 1.5s ease-in-out infinite" : "none" }} />
-                  <span style={{ fontSize: 12, fontWeight: 500, color: TEXT_PRIMARY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{comp.name}</span>
+              return (
+                <div
+                  key={comp.id}
+                  className="bench-table-row"
+                  style={{
+                    padding: "12px 16px",
+                    borderBottom: i < competitors.length - 1 ? "1px solid #1a1a1a" : "none",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#161616";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  {/* Name */}
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
+                  >
+                    <span
+                      style={{
+                        width: 5,
+                        height: 5,
+                        borderRadius: "50%",
+                        background: dotColor,
+                        flexShrink: 0,
+                        display: "inline-block",
+                        animation: needsSync
+                          ? "bench-dot-pulse 1.5s ease-in-out infinite"
+                          : "none",
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 500,
+                        color: TEXT_PRIMARY,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {comp.name}
+                    </span>
+                  </div>
+                  {/* Rating */}
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color:
+                        comp.avg_rating != null ? ratingColor(comp.avg_rating) : TEXT_MUTED,
+                    }}
+                  >
+                    {comp.avg_rating != null ? comp.avg_rating.toFixed(1) : "—"}
+                  </div>
+                  {/* Reviews */}
+                  <div style={{ fontSize: 12, color: TEXT_SECONDARY }}>
+                    {comp.total_reviews != null
+                      ? comp.total_reviews.toLocaleString()
+                      : "—"}
+                  </div>
+                  {/* Last synced */}
+                  <div style={{ fontSize: 11, color: "#444444" }}>
+                    {formatTimeAgo(comp.last_synced_at)}
+                  </div>
+                  {/* Analyzed */}
+                  <div
+                    className="bench-table-analyze-col"
+                    style={{
+                      fontSize: 11,
+                      color: comp.last_analyzed_at ? "#4ade80" : TEXT_MUTED,
+                    }}
+                  >
+                    {comp.last_analyzed_at ? formatTimeAgo(comp.last_analyzed_at) : "—"}
+                  </div>
+                  {/* Actions */}
+                  <div style={{ display: "flex", gap: 4, flexWrap: "nowrap" }}>
+                    <button
+                      type="button"
+                      disabled={isSyncing}
+                      onClick={() => void handleSyncOne(comp.id)}
+                      style={{
+                        background: "transparent",
+                        border: `1px solid ${BORDER_SUB}`,
+                        borderRadius: 4,
+                        color: TEXT_SECONDARY,
+                        fontSize: 10,
+                        fontWeight: 500,
+                        cursor: isSyncing ? "not-allowed" : "pointer",
+                        opacity: isSyncing ? 0.5 : 1,
+                        fontFamily: "inherit",
+                        padding: "3px 8px",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {isSyncing ? "Syncing…" : "Sync"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isAnalyzing}
+                      onClick={() => void handleAnalyzeCompetitor(comp.id)}
+                      style={{
+                        background: "transparent",
+                        border: `1px solid ${BORDER_SUB}`,
+                        borderRadius: 4,
+                        color: isAnalyzing ? TEXT_MUTED : "#a78bfa",
+                        fontSize: 10,
+                        fontWeight: 500,
+                        cursor: isAnalyzing ? "not-allowed" : "pointer",
+                        opacity: isAnalyzing ? 0.5 : 1,
+                        fontFamily: "inherit",
+                        padding: "3px 8px",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {isAnalyzing ? "…" : comp.last_analyzed_at ? "Re-analyze" : "Analyze"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isRemoving}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Remove ${comp.name} from your benchmarking list?`,
+                          )
+                        ) {
+                          void handleRemove(comp.id);
+                        }
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: `1px solid ${BORDER_SUB}`,
+                        borderRadius: 4,
+                        color: TEXT_SECONDARY,
+                        fontSize: 10,
+                        fontWeight: 500,
+                        cursor: isRemoving ? "not-allowed" : "pointer",
+                        opacity: isRemoving ? 0.5 : 1,
+                        fontFamily: "inherit",
+                        padding: "3px 8px",
+                        whiteSpace: "nowrap",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isRemoving) e.currentTarget.style.color = "#f87171";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = TEXT_SECONDARY;
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-                {/* Rating */}
-                <div style={{ fontSize: 12, color: comp.avg_rating != null ? ratingColor(comp.avg_rating) : TEXT_MUTED }}>
-                  {comp.avg_rating != null ? comp.avg_rating.toFixed(1) : "—"}
-                </div>
-                {/* Reviews */}
-                <div style={{ fontSize: 12, color: TEXT_SECONDARY }}>
-                  {comp.total_reviews != null ? comp.total_reviews.toLocaleString() : "—"}
-                </div>
-                {/* Last synced */}
-                <div style={{ fontSize: 11, color: "#444444" }}>{formatTimeAgo(comp.last_synced_at)}</div>
-                {/* Analyzed */}
-                <div className="bench-table-analyze-col" style={{ fontSize: 11, color: comp.last_analyzed_at ? "#4ade80" : TEXT_MUTED }}>
-                  {comp.last_analyzed_at ? formatTimeAgo(comp.last_analyzed_at) : "—"}
-                </div>
-                {/* Actions */}
-                <div style={{ display: "flex", gap: 4, flexWrap: "nowrap" }}>
-                  <button type="button" disabled={isSyncing} onClick={() => void handleSyncOne(comp.id)} style={{ background: "transparent", border: `1px solid ${BORDER_SUB}`, borderRadius: 4, color: TEXT_SECONDARY, fontSize: 10, fontWeight: 500, cursor: isSyncing ? "not-allowed" : "pointer", opacity: isSyncing ? 0.5 : 1, fontFamily: "inherit", padding: "3px 8px", whiteSpace: "nowrap" }}>
-                    {isSyncing ? "Syncing…" : "Sync"}
-                  </button>
-                  <button type="button" disabled={isAnalyzing} onClick={() => void handleAnalyzeCompetitor(comp.id)} style={{ background: "transparent", border: `1px solid ${BORDER_SUB}`, borderRadius: 4, color: isAnalyzing ? TEXT_MUTED : "#a78bfa", fontSize: 10, fontWeight: 500, cursor: isAnalyzing ? "not-allowed" : "pointer", opacity: isAnalyzing ? 0.5 : 1, fontFamily: "inherit", padding: "3px 8px", whiteSpace: "nowrap" }}>
-                    {isAnalyzing ? "…" : comp.last_analyzed_at ? "Re-analyze" : "Analyze"}
-                  </button>
-                  <button type="button" disabled={isRemoving} onClick={() => { if (window.confirm(`Remove ${comp.name} from your benchmarking list?`)) { void handleRemove(comp.id); } }} style={{ background: "transparent", border: `1px solid ${BORDER_SUB}`, borderRadius: 4, color: TEXT_SECONDARY, fontSize: 10, fontWeight: 500, cursor: isRemoving ? "not-allowed" : "pointer", opacity: isRemoving ? 0.5 : 1, fontFamily: "inherit", padding: "3px 8px", whiteSpace: "nowrap" }} onMouseEnter={(e) => { if (!isRemoving) e.currentTarget.style.color = "#f87171"; }} onMouseLeave={(e) => { e.currentTarget.style.color = TEXT_SECONDARY; }}>
-                    Remove
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
     </div>

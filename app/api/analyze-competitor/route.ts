@@ -45,17 +45,29 @@ type AnalysisResult = {
 };
 
 function parseJson<T>(text: string): T | null {
-  const cleaned = text.trim().replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+  let jsonText = text;
+
+  // Remove markdown code blocks
+  jsonText = jsonText.replace(/```json\s*/gi, "");
+  jsonText = jsonText.replace(/```\s*/g, "");
+
+  // Find the JSON object by locating first { and last }
+  const firstBrace = jsonText.indexOf("{");
+  const lastBrace = jsonText.lastIndexOf("}");
+
+  if (firstBrace === -1 || lastBrace === -1) {
+    console.error("analyze-competitor: no JSON found in response:", text.slice(0, 200));
+    return null;
+  }
+
+  jsonText = jsonText.slice(firstBrace, lastBrace + 1);
+
   try {
-    return JSON.parse(cleaned) as T;
-  } catch {
-    const m = cleaned.match(/\{[\s\S]*\}/);
-    if (!m) return null;
-    try {
-      return JSON.parse(m[0]) as T;
-    } catch {
-      return null;
-    }
+    return JSON.parse(jsonText) as T;
+  } catch (e) {
+    console.error("analyze-competitor: JSON parse error:", e instanceof Error ? e.message : String(e));
+    console.error("analyze-competitor: tried to parse:", jsonText.slice(0, 200));
+    return null;
   }
 }
 
@@ -231,7 +243,7 @@ Analyze this hotel and respond with JSON:
 
 Be specific and concrete. Use actual details from reviews where available. Avoid generic statements like "good service" — instead say "24-hour front desk with multilingual staff".
 
-Respond ONLY with the JSON object, no preamble or markdown.`;
+CRITICAL: Respond with ONLY the JSON object. No preamble, no explanation, no markdown code blocks. Start your response with { and end with }. Nothing else.`;
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -242,7 +254,7 @@ Respond ONLY with the JSON object, no preamble or markdown.`;
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 1500,
+        max_tokens: 1500, // kept at 1500 per spec
         messages: [{ role: "user", content: prompt }],
       }),
     });

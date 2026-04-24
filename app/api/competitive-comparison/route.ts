@@ -42,18 +42,30 @@ type ComparisonResult = {
   long_term_strategy: string;
 };
 
-function parseJson<T>(text: string): T | null {
-  const cleaned = text.trim().replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+function parseJsonRobust<T>(text: string): { result: T | null; error: string | null } {
+  let jsonText = text;
+
+  // Remove markdown code blocks
+  jsonText = jsonText.replace(/```json\s*/gi, "");
+  jsonText = jsonText.replace(/```\s*/g, "");
+
+  // Find the JSON object by locating first { and last }
+  const firstBrace = jsonText.indexOf("{");
+  const lastBrace = jsonText.lastIndexOf("}");
+
+  if (firstBrace === -1 || lastBrace === -1) {
+    return { result: null, error: `No JSON found in response: ${text.slice(0, 200)}` };
+  }
+
+  jsonText = jsonText.slice(firstBrace, lastBrace + 1);
+
   try {
-    return JSON.parse(cleaned) as T;
-  } catch {
-    const m = cleaned.match(/\{[\s\S]*\}/);
-    if (!m) return null;
-    try {
-      return JSON.parse(m[0]) as T;
-    } catch {
-      return null;
-    }
+    return { result: JSON.parse(jsonText) as T, error: null };
+  } catch (e) {
+    return {
+      result: null,
+      error: `JSON parse error: ${e instanceof Error ? e.message : String(e)} | Tried: ${jsonText.slice(0, 200)}`,
+    };
   }
 }
 
@@ -123,11 +135,15 @@ export async function POST(request: NextRequest) {
 
     const hotel = hotelData as Record<string, unknown>;
     const allCompetitors = (compsData ?? []) as Array<Record<string, unknown>>;
-    const analyzedCompetitors = allCompetitors.filter((c) => c.description);
+    const analyzedCompetitors = allCompetitors.filter((c) => c.description && c.usps);
 
     if (analyzedCompetitors.length === 0) {
       return NextResponse.json(
-        { success: false, error: "At least one analyzed competitor is required. Run 'Analyze competitors' first." },
+        {
+          success: false,
+          error: "No competitors analyzed yet. Please analyze your competitors first.",
+          needs_analysis: true,
+        },
         { status: 400 },
       );
     }
@@ -165,8 +181,6 @@ ${hotelSummary}
 COMPETITORS:
 ${competitorSummaries}
 
-Respond with JSON:
-
 {
   "unique_advantages": [
     {
@@ -203,7 +217,7 @@ Respond with JSON:
 
 Be specific and concrete. Reference actual competitor names and features. Aim for 3 unique_advantages, 3 competitive_gaps, 3 shared_strengths, 3 quick_wins. Avoid generic advice.
 
-Respond ONLY with the JSON object, no markdown.`;
+CRITICAL: Respond with ONLY the JSON object. No preamble, no explanation, no markdown code blocks. Start your response with { and end with }. Nothing else.`;
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -214,7 +228,7 @@ Respond ONLY with the JSON object, no markdown.`;
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 2000,
+        max_tokens: 2500,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -230,9 +244,10 @@ Respond ONLY with the JSON object, no markdown.`;
     }
 
     const text = (data.content ?? []).find((c) => c.type === "text")?.text ?? "";
-    const comparison = parseJson<ComparisonResult>(text);
+    const { result: comparison, error: parseError } = parseJsonRobust<ComparisonResult>(text);
 
     if (!comparison) {
+      console.error("competitive-comparison parse error:", parseError);
       return NextResponse.json(
         { success: false, error: "Could not parse AI comparison response" },
         { status: 502 },
