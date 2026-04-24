@@ -103,7 +103,7 @@ export default function HomePage() {
     checkAuth();
   }, [router]);
 
-  const goSignup = useCallback(() => router.push("/signup"), [router]);
+  const goSignup = useCallback(() => router.push("/pricing"), [router]);
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "Inter, -apple-system, BlinkMacSystemFont, sans-serif" }}>
@@ -135,7 +135,7 @@ export default function HomePage() {
       {/* ── HERO ── */}
       <section className="hp" style={{ padding: "96px 48px 72px", maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
         <div style={{ display: "inline-block", background: C.bgDeep, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, color: C.textMuted, marginBottom: 24 }}>
-          ✦ Built for UK &amp; Ireland boutique hotels
+          ✦ Built for independent boutique hotels worldwide
         </div>
 
         <h1 style={{ fontSize: "clamp(36px,5vw,56px)", fontWeight: 700, letterSpacing: "-2px", lineHeight: 1.08, maxWidth: 900, margin: "0 auto" }}>
@@ -145,7 +145,7 @@ export default function HomePage() {
 
         <p style={{ fontSize: 17, color: C.textSec, maxWidth: 640, lineHeight: 1.7, margin: "20px auto 0" }}>
           GuestPulse pulls reviews from all 6 major platforms, drafts AI responses in 2 seconds, and finds
-          your competitors automatically — set up in under 5 minutes.
+          your competitors automatically — set up in under 5 minutes. Works for hotels worldwide.
         </p>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center", marginTop: 32 }}>
@@ -186,7 +186,7 @@ export default function HomePage() {
           The reviews problem no one talks about
         </h2>
         <p style={{ fontSize: 16, color: C.textSec, textAlign: "center", maxWidth: 600, margin: "0 auto 48px", lineHeight: 1.7 }}>
-          Most UK hotel owners find out about bad reviews days after they&apos;re posted — when the damage is done
+          Most hotel owners find out about bad reviews days after they&apos;re posted — when the damage is done
         </p>
         <div className="hp-pg3">
           {[
@@ -405,7 +405,7 @@ export default function HomePage() {
           </p>
           <div className="hp-row">
             {[
-              { value: "£240", label: "Average UK booking value", sub: "TripAdvisor data", c: C.text },
+              { value: "£240", label: "Average boutique hotel booking", sub: "TripAdvisor data", c: C.text },
               { value: "$99", label: "GuestPulse Professional cost", sub: "per month", c: C.text },
               { value: "£141", label: "Net profit per saved booking", sub: "after plan cost", c: C.green },
             ].map((s) => (
@@ -468,7 +468,7 @@ export default function HomePage() {
           Start protecting your reputation today
         </h2>
         <p style={{ fontSize: 17, color: C.textSec, marginTop: 16, lineHeight: 1.7 }}>
-          Join forward-thinking UK and Ireland boutique hotels using GuestPulse to never miss another review.
+          Join independent boutique hotels worldwide using GuestPulse to never miss another review.
         </p>
         <button type="button" onClick={goSignup} style={{ ...primaryBtn, padding: "14px 28px", fontSize: 15, fontWeight: 600, marginTop: 32 }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "#22c55e"; }}

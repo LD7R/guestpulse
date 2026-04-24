@@ -34,7 +34,7 @@ export default function MarketingFooter() {
               <span style={{ fontSize: 16, fontWeight: 700, color: "#ffffff" }}>GuestPulse</span>
             </div>
             <p style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.7, maxWidth: 280 }}>
-              AI-powered review management built for independent boutique hotels in the UK and Ireland.
+              AI-powered review management built for independent boutique hotels worldwide.
             </p>
           </div>
 
@@ -85,7 +85,7 @@ export default function MarketingFooter() {
           }}
         >
           <div>© 2026 GuestPulse. All rights reserved.</div>
-          <div>Built for independent hotels in the UK and Ireland</div>
+          <div>Built for independent hotels worldwide</div>
         </div>
       </footer>
     </>

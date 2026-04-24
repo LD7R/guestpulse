@@ -232,7 +232,7 @@ export default function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <button type="button" onClick={() => router.push("/signup")}
+              <button type="button" onClick={() => router.push(`/signup?plan=${plan.badge.toLowerCase()}&interval=${period}`)}
                 style={plan.featured
                   ? { ...primaryBtn, width: "100%", padding: "12px", background: C.green, color: "#0d0d0d" }
                   : { ...secondaryBtn, width: "100%", padding: "12px" }}
@@ -319,7 +319,7 @@ export default function PricingPage() {
             Start protecting your reputation today
           </h2>
           <p style={{ fontSize: 16, color: C.textSec, marginTop: 14, lineHeight: 1.7 }}>
-            Join forward-thinking UK and Ireland boutique hotels using GuestPulse.
+            Join independent boutique hotels worldwide using GuestPulse.
             7-day free trial. No credit card. Set up in 5 minutes.
           </p>
           <button type="button" onClick={() => router.push("/signup")} style={{ ...primaryBtn, padding: "14px 28px", fontSize: 15, marginTop: 28 }}

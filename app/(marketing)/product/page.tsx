@@ -50,7 +50,7 @@ export default function ProductPage() {
         <p style={{ fontSize: 17, color: C.textSec, maxWidth: 600, margin: "0 auto 32px", lineHeight: 1.7 }}>
           The complete review management platform built for modern boutique hotels. One dashboard, all your reviews, AI-powered responses.
         </p>
-        <button type="button" onClick={() => router.push("/signup")} style={{ ...primaryBtn, padding: "13px 26px", fontSize: 14 }}
+        <button type="button" onClick={() => router.push("/pricing")} style={{ ...primaryBtn, padding: "13px 26px", fontSize: 14 }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "#22c55e"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = C.green; }}>
           Start 7-day free trial →
@@ -271,7 +271,7 @@ export default function ProductPage() {
         <p style={{ fontSize: 17, color: C.textSec, marginTop: 16, lineHeight: 1.7 }}>
           Start your free trial today. No credit card required. Set up in under 5 minutes.
         </p>
-        <button type="button" onClick={() => router.push("/signup")} style={{ ...primaryBtn, padding: "14px 28px", fontSize: 15, marginTop: 32 }}
+        <button type="button" onClick={() => router.push("/pricing")} style={{ ...primaryBtn, padding: "14px 28px", fontSize: 15, marginTop: 32 }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "#22c55e"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = C.green; }}>
           Start 7-day free trial →

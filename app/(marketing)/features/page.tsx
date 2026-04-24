@@ -160,7 +160,7 @@ export default function FeaturesPage() {
           Try every feature free for 7 days
         </h2>
         <p style={{ fontSize: 17, color: C.textSec, marginTop: 16, lineHeight: 1.7 }}>No credit card required. No setup fees. Cancel anytime.</p>
-        <button type="button" onClick={() => router.push("/signup")} style={{ ...primaryBtn, padding: "14px 28px", fontSize: 15, marginTop: 32 }}
+        <button type="button" onClick={() => router.push("/pricing")} style={{ ...primaryBtn, padding: "14px 28px", fontSize: 15, marginTop: 32 }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "#22c55e"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = C.green; }}>
           Start 7-day free trial →

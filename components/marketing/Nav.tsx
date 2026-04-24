@@ -59,7 +59,7 @@ export default function MarketingNav() {
           </Link>
           <button
             type="button"
-            onClick={() => router.push("/signup")}
+            onClick={() => router.push("/pricing")}
             style={{
               background: "#4ade80",
               color: "#0d0d0d",

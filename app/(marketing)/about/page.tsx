@@ -129,8 +129,8 @@ export default function AboutPage() {
             <div style={{ fontSize: 18, fontWeight: 600, color: C.text }}>Leonardo</div>
             <div style={{ fontSize: 13, color: C.green, marginTop: 4, marginBottom: 12 }}>Founder &amp; Builder</div>
             <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.7 }}>
-              Building GuestPulse from Amsterdam. Spent years watching independent hotels lose bookings to
-              avoidable reputation problems. Decided to do something about it.
+              Building GuestPulse for independent hotels worldwide. Spent years watching boutique properties lose
+              bookings to avoidable reputation problems. Decided to do something about it.
             </p>
             <p style={{ fontSize: 13, color: C.textMuted, marginTop: 10 }}>
               Questions? <a href="mailto:hello@guestpulse.com" style={{ color: C.green, textDecoration: "none" }}>hello@guestpulse.com</a>
@@ -171,7 +171,7 @@ export default function AboutPage() {
         <p style={{ fontSize: 17, color: C.textSec, marginTop: 16, lineHeight: 1.7 }}>
           7-day free trial. No credit card. Set up in 5 minutes.
         </p>
-        <button type="button" onClick={() => router.push("/signup")} style={{ ...primaryBtn, padding: "14px 28px", fontSize: 15, marginTop: 32 }}
+        <button type="button" onClick={() => router.push("/pricing")} style={{ ...primaryBtn, padding: "14px 28px", fontSize: 15, marginTop: 32 }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "#22c55e"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = C.green; }}>
           Start 7-day free trial →
