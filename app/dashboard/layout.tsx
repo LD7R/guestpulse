@@ -345,7 +345,6 @@ export default function DashboardLayout({
 
         <div style={labelStyle}>Reviews</div>
         <NavLink href="/dashboard/reviews" icon="☰" label="Review inbox" badge={inboxUnrespondedCount} />
-        <NavLink href="/dashboard/reviews" icon="◷" label="Response drafts" />
 
         <div style={labelStyle}>Intelligence</div>
         <NavLink href="/dashboard/sentiment" icon="∿" label="Sentiment trends" />
