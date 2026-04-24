@@ -11,7 +11,7 @@ const MapComponent = dynamic(() => import("./MapComponent"), {
   loading: () => (
     <div
       style={{
-        height: 400,
+        height: 280,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -82,7 +82,7 @@ type InsightJson = {
   rating_gap: string;
 };
 
-// ─── Constants (defined outside component to avoid re-creation) ───────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 const INSIGHT_CARDS: Array<{
   key: keyof InsightJson;
   icon: string;
@@ -123,12 +123,6 @@ function ratingColor(r: number | null | undefined): string {
   if (v >= 4.5) return "#4ade80";
   if (v >= 4.0) return "#84cc16";
   if (v >= 3.5) return "#fbbf24";
-  return "#f87171";
-}
-
-function rankColor(rank: number): string {
-  if (rank <= 2) return "#4ade80";
-  if (rank <= 4) return "#fbbf24";
   return "#f87171";
 }
 
@@ -174,7 +168,7 @@ const sectionLabelStyle: CSSProperties = {
   letterSpacing: "0.1em",
   textTransform: "uppercase",
   color: TEXT_MUTED,
-  marginBottom: 10,
+  marginBottom: 12,
 };
 
 function primaryBtnStyle(disabled = false): CSSProperties {
@@ -219,14 +213,6 @@ const inputStyle: CSSProperties = {
   fontFamily: "inherit",
   width: "100%",
   boxSizing: "border-box",
-};
-
-const barContainerStyle: CSSProperties = {
-  flex: 1,
-  background: "#1a1a1a",
-  height: 6,
-  borderRadius: 3,
-  overflow: "hidden",
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -344,7 +330,6 @@ export default function BenchmarkingPage() {
 
     setHotel(hotelData as Hotel);
 
-    // Fetch my reviews for avg rating calculation
     const { data: reviewsData } = await sb
       .from("reviews")
       .select("rating")
@@ -364,7 +349,6 @@ export default function BenchmarkingPage() {
     setMyAvgRating(myAvg);
     setMyTotalReviews(myTotal);
 
-    // Fetch competitors
     const { data: compsData, error: compsError } = await sb
       .from("competitors")
       .select(COMP_SELECT)
@@ -385,7 +369,6 @@ export default function BenchmarkingPage() {
         setLoading(true);
         setError(null);
         const result = await loadBenchmarking();
-        // Auto-generate insights if synced competitors exist
         if (result.hotel && result.comps.some((c) => c.avg_rating != null)) {
           await doGenerateInsights(result.hotel, result.myAvg, result.myTotal, result.comps);
         }
@@ -610,7 +593,7 @@ export default function BenchmarkingPage() {
           setCompetitors([...updatedComps]);
         }
       } catch {
-        // ignore sync error, competitor was still added
+        // ignore sync error
       }
 
       setAddProgress((prev) => new Map([...prev, [idx, "Done"]]));
@@ -771,29 +754,51 @@ export default function BenchmarkingPage() {
 
   const leader = rankingList[0] ?? null;
   const hasSyncedCompetitors = competitors.some((c) => c.avg_rating != null);
+  const iLeadVolume = myTotalReviews > 0 && myTotalReviews >= maxReviews;
+
+  const positionText = useMemo(() => {
+    if (myRankInList === 1) return "You lead the market. Keep focus on review volume to stay ahead.";
+    if (myRankInList !== null && myRankInList <= 3) {
+      if (leader && !leader.isMe) {
+        const behind = (leader.total_reviews ?? 0) - myTotalReviews;
+        if (behind > 0) return `${behind.toLocaleString()} reviews behind the leader. Focus on review volume to overtake.`;
+      }
+      return "Focus on review volume to climb the rankings.";
+    }
+    if (myRankInList !== null) {
+      return "Biggest opportunity: improve your average rating to climb the rankings.";
+    }
+    return null;
+  }, [myRankInList, leader, myTotalReviews]);
 
   // ─────────────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div
-        style={{
-          background: "#0d0d0d",
-          minHeight: "100vh",
-          padding: "24px 28px",
-          color: TEXT_SECONDARY,
-          fontSize: 13,
-        }}
-      >
-        Loading…
+      <div style={{ background: PAGE_BG, minHeight: "100vh", padding: "24px 28px" }}>
+        <style>{`@keyframes bench-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+          <div>
+            <div style={{ width: 200, height: 22, background: "#1a1a1a", borderRadius: 4, animation: "bench-pulse 1.5s ease-in-out infinite" }} />
+            <div style={{ width: 140, height: 14, background: "#1a1a1a", borderRadius: 4, marginTop: 6, animation: "bench-pulse 1.5s ease-in-out infinite" }} />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ width: 120, height: 32, background: "#1a1a1a", borderRadius: 6, animation: "bench-pulse 1.5s ease-in-out infinite" }} />
+            <div style={{ width: 80, height: 32, background: "#1a1a1a", borderRadius: 6, animation: "bench-pulse 1.5s ease-in-out infinite" }} />
+          </div>
+        </div>
+        <div style={{ height: 280, background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, animation: "bench-pulse 1.5s ease-in-out infinite", marginBottom: 12 }} />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 12 }}>
+          {[0,1,2,3,4].map(i => (
+            <div key={i} style={{ height: 100, background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, animation: "bench-pulse 1.5s ease-in-out infinite" }} />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div
-        style={{ background: "#0d0d0d", minHeight: "100vh", padding: "24px 28px", color: "#f87171" }}
-      >
+      <div style={{ background: PAGE_BG, minHeight: "100vh", padding: "24px 28px", color: "#f87171" }}>
         {error}
       </div>
     );
@@ -808,6 +813,27 @@ export default function BenchmarkingPage() {
         boxSizing: "border-box",
       }}
     >
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes bench-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        @keyframes bench-dot-pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        .bench-map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .bench-analysis-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .bench-insights-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .bench-table-wrap { overflow-x: auto; }
+        .bench-table-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 130px; gap: 12px; align-items: center; }
+        @media (max-width: 1000px) {
+          .bench-insights-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .bench-insights-grid > *:last-child { grid-column: 1 / -1; }
+        }
+        @media (max-width: 768px) {
+          .bench-map-grid { grid-template-columns: 1fr !important; }
+          .bench-analysis-grid { grid-template-columns: 1fr !important; }
+          .bench-insights-grid { grid-template-columns: 1fr !important; }
+          .bench-insights-grid > *:last-child { grid-column: auto; }
+          .bench-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        }
+      ` }} />
+
       {/* ── 1. Page Header ─────────────────────────────────────────────────── */}
       <header
         style={{
@@ -818,7 +844,7 @@ export default function BenchmarkingPage() {
         }}
       >
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: TEXT_PRIMARY, margin: 0 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 500, color: TEXT_PRIMARY, margin: 0 }}>
             Competitor benchmarking
           </h1>
           <p style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 2, marginBottom: 0 }}>
@@ -826,8 +852,14 @@ export default function BenchmarkingPage() {
           </p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 11, color: "#444444" }}>~$0.002 per sync</span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={() => setShowManual(!showManual)}
+              style={secondaryBtnStyle()}
+            >
+              + Add competitor
+            </button>
             <button
               type="button"
               disabled={syncingAll || !hotel?.id}
@@ -846,384 +878,360 @@ export default function BenchmarkingPage() {
         </div>
       </header>
 
-      {/* ── 2. Find Competitors Card ────────────────────────────────────────── */}
-      <div style={{ ...cardStyle, padding: "16px 20px", marginBottom: 16 }}>
-        {finding ? (
-          /* Loading steps */
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: TEXT_PRIMARY, marginBottom: 12 }}>
-              Finding competitors…
+      {/* ── 2. Manual Add Form ──────────────────────────────────────────────── */}
+      {showManual && (
+        <div style={{ ...cardStyle, padding: "16px 20px", marginBottom: 12 }}>
+          <div style={{ ...sectionLabelStyle, marginBottom: 12 }}>ADD COMPETITOR MANUALLY</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+            <div style={{ flex: 1 }}>
+              <input
+                type="text"
+                placeholder="Hotel name *"
+                value={manualName}
+                onChange={(e) => setManualName(e.target.value)}
+                style={inputStyle}
+              />
             </div>
-            {findSteps.map((step, i) => (
-              <div
-                key={i}
-                style={{
-                  fontSize: 12,
-                  color: TEXT_SECONDARY,
-                  marginBottom: 4,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                <span style={{ color: "#4ade80" }}>✓</span>
-                {step}
-              </div>
-            ))}
-            <div style={{ fontSize: 12, color: "#444444", marginTop: 6 }}>
-              This may take 30–60 seconds…
+            <div style={{ flex: 1.5 }}>
+              <input
+                type="text"
+                placeholder="Google Maps URL"
+                value={manualGoogleUrl}
+                onChange={(e) => setManualGoogleUrl(e.target.value)}
+                style={inputStyle}
+              />
             </div>
-          </div>
-        ) : suggestions.length > 0 ? (
-          /* Suggestions grid */
-          <div>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: TEXT_PRIMARY }}>
-                AI found {suggestions.length} nearby competitor{suggestions.length !== 1 ? "s" : ""}
-              </div>
-              <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 2 }}>
-                Click to select hotels to add to your benchmarking list
-              </div>
+            <div style={{ flex: 1.5 }}>
+              <input
+                type="text"
+                placeholder="TripAdvisor URL (optional)"
+                value={manualTAUrl}
+                onChange={(e) => setManualTAUrl(e.target.value)}
+                style={inputStyle}
+              />
             </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 10,
-                marginBottom: 14,
-              }}
+            <button
+              type="button"
+              disabled={addingManual || !manualName.trim()}
+              onClick={() => void handleManualAdd()}
+              style={primaryBtnStyle(addingManual || !manualName.trim())}
             >
-              {suggestions.map((s, i) => {
-                const isSelected = selectedIdxs.has(i);
-                const progress = addProgress.get(i);
-                return (
-                  <div
-                    key={i}
-                    onClick={() => {
-                      if (addingSelected || progress) return;
-                      if (isSelected) {
-                        setSelectedIdxs((prev) => {
-                          const n = new Set(prev);
-                          n.delete(i);
-                          return n;
-                        });
-                      } else if (selectedIdxs.size < 5) {
-                        setSelectedIdxs((prev) => new Set([...prev, i]));
-                      }
-                    }}
-                    style={{
-                      background: isSelected ? "#0a1a0a" : CARD,
-                      border: `1px solid ${isSelected ? "#4ade80" : BORDER}`,
-                      borderRadius: 6,
-                      padding: "12px 14px",
-                      cursor: addingSelected || progress ? "default" : "pointer",
-                    }}
-                  >
-                    {progress && (
-                      <div
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 600,
-                          color:
-                            progress === "Done"
-                              ? "#4ade80"
-                              : progress === "Error"
-                                ? "#f87171"
-                                : TEXT_MUTED,
-                          marginBottom: 4,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                        }}
-                      >
-                        {progress}
-                      </div>
-                    )}
+              {addingManual ? "Adding…" : "Add"}
+            </button>
+          </div>
+          {manualError && (
+            <div style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{manualError}</div>
+          )}
+        </div>
+      )}
+
+      {/* ── 3. Find Competitors Card (only if < 3 tracked) ─────────────────── */}
+      {competitors.length < 3 && (
+        <div
+          style={{
+            background: finding ? CARD : "#0a1a0a",
+            border: `1px solid ${finding ? BORDER : "#1a3a1a"}`,
+            borderRadius: 8,
+            padding: "14px 18px",
+            marginBottom: 12,
+          }}
+        >
+          {finding ? (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: TEXT_PRIMARY, marginBottom: 10 }}>
+                Finding competitors…
+              </div>
+              {findSteps.map((step, i) => (
+                <div
+                  key={i}
+                  style={{ fontSize: 12, color: TEXT_SECONDARY, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}
+                >
+                  <span style={{ color: "#4ade80" }}>✓</span>
+                  {step}
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: "#444444", marginTop: 6 }}>
+                This may take 30–60 seconds…
+              </div>
+            </div>
+          ) : suggestions.length > 0 ? (
+            <div>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: TEXT_PRIMARY }}>
+                  AI found {suggestions.length} nearby competitor{suggestions.length !== 1 ? "s" : ""}
+                </div>
+                <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>
+                  Click to select hotels to add to your benchmarking list
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
+                {suggestions.map((s, i) => {
+                  const isSelected = selectedIdxs.has(i);
+                  const progress = addProgress.get(i);
+                  return (
                     <div
-                      style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY, marginBottom: 4 }}
-                    >
-                      {s.name}
-                    </div>
-                    <div
+                      key={i}
+                      onClick={() => {
+                        if (addingSelected || progress) return;
+                        if (isSelected) {
+                          setSelectedIdxs((prev) => { const n = new Set(prev); n.delete(i); return n; });
+                        } else if (selectedIdxs.size < 5) {
+                          setSelectedIdxs((prev) => new Set([...prev, i]));
+                        }
+                      }}
                       style={{
-                        fontSize: 20,
-                        fontWeight: 700,
-                        color: ratingColor(s.avg_rating),
-                        marginBottom: 2,
-                        lineHeight: 1,
+                        background: isSelected ? "#0a1a0a" : CARD,
+                        border: `1px solid ${isSelected ? "#4ade80" : BORDER}`,
+                        borderRadius: 6,
+                        padding: "12px 14px",
+                        cursor: addingSelected || progress ? "default" : "pointer",
                       }}
                     >
-                      {s.avg_rating ? s.avg_rating.toFixed(1) : "—"}
-                    </div>
-                    <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 4 }}>
-                      {s.total_reviews.toLocaleString()} reviews
-                    </div>
-                    {s.reason && (
-                      <div style={{ fontSize: 11, color: TEXT_MUTED, fontStyle: "italic" }}>
-                        {s.reason}
+                      {progress && (
+                        <div style={{ fontSize: 10, fontWeight: 600, color: progress === "Done" ? "#4ade80" : progress === "Error" ? "#f87171" : TEXT_MUTED, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          {progress}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 13, fontWeight: 600, color: TEXT_PRIMARY, marginBottom: 4 }}>{s.name}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: ratingColor(s.avg_rating), marginBottom: 2, lineHeight: 1 }}>
+                        {s.avg_rating ? s.avg_rating.toFixed(1) : "—"}
                       </div>
-                    )}
+                      <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 4 }}>{s.total_reviews.toLocaleString()} reviews</div>
+                      {s.reason && <div style={{ fontSize: 11, color: TEXT_MUTED, fontStyle: "italic" }}>{s.reason}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {selectedIdxs.size > 0 && (
+                  <button type="button" disabled={addingSelected} onClick={() => void handleAddSelected()} style={primaryBtnStyle(addingSelected)}>
+                    {addingSelected ? "Adding…" : `Add selected (${selectedIdxs.size})`}
+                  </button>
+                )}
+                <span style={{ fontSize: 12, color: TEXT_MUTED }}>{selectedIdxs.size} / 5 selected</span>
+                <button type="button" onClick={() => { setSuggestions([]); setSelectedIdxs(new Set()); setAddProgress(new Map()); }} style={secondaryBtnStyle({ marginLeft: "auto" })}>
+                  Clear
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: TEXT_PRIMARY }}>
+                  Find competitors automatically
+                </div>
+                <div style={{ fontSize: 11, color: "#4ade80", marginTop: 2 }}>
+                  AI finds hotels in your area with similar rating and service class
+                </div>
+                {findError && (
+                  <div style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{findError}</div>
+                )}
+              </div>
+              <button
+                type="button"
+                disabled={!hotel?.id}
+                onClick={() => void handleFindCompetitors()}
+                style={primaryBtnStyle(!hotel?.id)}
+              >
+                Find competitors
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 4. Map + Ranking ────────────────────────────────────────────────── */}
+      <div className="bench-map-grid" style={{ marginBottom: 12 }}>
+        {/* Map card */}
+        <div
+          style={{
+            ...cardStyle,
+            height: 280,
+            overflow: "hidden",
+            position: "relative",
+          }}
+        >
+          <MapComponent
+            center={mapCenter}
+            zoom={14}
+            myHotel={mapHotel}
+            competitors={mapCompetitors}
+            height={280}
+          />
+        </div>
+
+        {/* Ranking card */}
+        <div
+          style={{
+            ...cardStyle,
+            height: 280,
+            padding: "20px",
+            overflowY: "auto",
+          }}
+        >
+          <div style={sectionLabelStyle}>
+            YOUR RANKING · {rankingList.length} HOTEL{rankingList.length !== 1 ? "S" : ""} TRACKED
+          </div>
+
+          {rankingList.length === 0 ? (
+            <div style={{ fontSize: 13, color: TEXT_MUTED }}>No hotels yet</div>
+          ) : (
+            <div>
+              {rankingList.map((entry, idx) => {
+                const rank = idx + 1;
+                const delta = marketAvg != null && entry.avg_rating != null
+                  ? entry.avg_rating - marketAvg
+                  : null;
+                const deltaText = delta == null
+                  ? null
+                  : Math.abs(delta) < 0.05
+                  ? "no change"
+                  : delta > 0
+                  ? `+${delta.toFixed(1)}`
+                  : delta.toFixed(1);
+                const deltaColor = delta == null || Math.abs(delta) < 0.05
+                  ? TEXT_MUTED
+                  : delta > 0
+                  ? "#4ade80"
+                  : "#f87171";
+
+                const ratingVal = entry.avg_rating;
+                const rColor = ratingVal == null
+                  ? TEXT_MUTED
+                  : ratingVal >= 4.5
+                  ? "#4ade80"
+                  : ratingVal >= 3.5
+                  ? TEXT_PRIMARY
+                  : "#fbbf24";
+
+                return (
+                  <div
+                    key={entry.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: entry.isMe ? "10px 12px" : "10px 0",
+                      margin: entry.isMe ? "0 -12px" : 0,
+                      background: entry.isMe ? "#0a1a0a" : "transparent",
+                      borderRadius: entry.isMe ? 6 : 0,
+                      borderBottom: entry.isMe ? "1px solid #1a3a1a" : `1px solid ${BORDER}`,
+                    }}
+                  >
+                    {/* Rank */}
+                    <div
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 600,
+                        width: 24,
+                        flexShrink: 0,
+                        color: rank === 1 ? "#fbbf24" : entry.isMe ? "#4ade80" : TEXT_MUTED,
+                      }}
+                    >
+                      #{rank}
+                    </div>
+
+                    {/* Name + meta */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: TEXT_PRIMARY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {truncName(entry.name, 20)}
+                        </span>
+                        {entry.isMe && (
+                          <span style={{ fontSize: 10, fontWeight: 600, color: "#4ade80", flexShrink: 0 }}>YOU</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>
+                        {(entry.total_reviews ?? 0).toLocaleString()} reviews
+                      </div>
+                    </div>
+
+                    {/* Rating + delta */}
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontSize: 18, fontWeight: 600, color: rColor, lineHeight: 1 }}>
+                        {ratingVal != null ? ratingVal.toFixed(1) : "—"}
+                      </div>
+                      {deltaText && (
+                        <div style={{ fontSize: 11, color: deltaColor, marginTop: 2 }}>
+                          {deltaText}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              {selectedIdxs.size > 0 && (
-                <button
-                  type="button"
-                  disabled={addingSelected}
-                  onClick={() => void handleAddSelected()}
-                  style={primaryBtnStyle(addingSelected)}
-                >
-                  {addingSelected ? "Adding…" : `Add selected (${selectedIdxs.size})`}
-                </button>
-              )}
-              <span style={{ fontSize: 12, color: TEXT_MUTED }}>
-                {selectedIdxs.size} / 5 selected
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setSuggestions([]);
-                  setSelectedIdxs(new Set());
-                  setAddProgress(new Map());
-                }}
-                style={secondaryBtnStyle({ marginLeft: "auto" })}
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* Default state */
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: TEXT_PRIMARY, marginBottom: 4 }}>
-                Find competitors automatically
-              </div>
-              <div style={{ fontSize: 12, color: TEXT_MUTED }}>
-                AI finds hotels in your area with similar rating and service class
-              </div>
-              {findError && (
-                <div style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{findError}</div>
-              )}
-            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 5. AI Insights Row ──────────────────────────────────────────────── */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={sectionLabelStyle as CSSProperties & { marginBottom: number }}>AI INSIGHTS</div>
+          {insights && !insightsLoading && (
             <button
               type="button"
-              disabled={!hotel?.id}
-              onClick={() => void handleFindCompetitors()}
-              style={primaryBtnStyle(!hotel?.id)}
+              onClick={() => hotel && void doGenerateInsights(hotel, myAvgRating, myTotalReviews, competitors)}
+              style={secondaryBtnStyle({ fontSize: 11, padding: "4px 10px" })}
             >
-              Find competitors
+              Regenerate insights
             </button>
-          </div>
-        )}
-      </div>
-
-      {/* ── 3. Ranking Strip ────────────────────────────────────────────────── */}
-      <div
-        style={{
-          ...cardStyle,
-          padding: "12px 16px",
-          marginBottom: 16,
-          overflowX: "auto",
-          display: "flex",
-          gap: 8,
-          scrollbarWidth: "none",
-        }}
-      >
-        {rankingList.length === 0 ? (
-          <div style={{ fontSize: 13, color: TEXT_MUTED }}>No hotels yet</div>
-        ) : (
-          rankingList.map((entry, idx) => (
-            <div
-              key={entry.id}
-              style={{
-                background: entry.isMe ? "#0a1a0a" : CARD,
-                border: `1px solid ${entry.isMe ? "#4ade80" : BORDER}`,
-                borderLeft: entry.isMe
-                  ? "3px solid #4ade80"
-                  : `1px solid ${BORDER}`,
-                borderRadius: 6,
-                padding: "10px 14px",
-                minWidth: 150,
-                flexShrink: 0,
-              }}
-            >
-              <div style={{ fontSize: 10, color: TEXT_MUTED, marginBottom: 2 }}>#{idx + 1}</div>
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: TEXT_PRIMARY,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                {truncName(entry.name, 18)}
-                {entry.isMe && (
-                  <span style={{ color: "#4ade80", fontSize: 9, fontWeight: 700 }}>YOU</span>
-                )}
-              </div>
-              <div
-                style={{
-                  fontSize: 24,
-                  fontWeight: 700,
-                  color: TEXT_PRIMARY,
-                  marginTop: 4,
-                  lineHeight: 1,
-                }}
-              >
-                {entry.avg_rating != null ? entry.avg_rating.toFixed(1) : "—"}
-              </div>
-              <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 4 }}>
-                ({(entry.total_reviews ?? 0).toLocaleString()} reviews)
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* ── 4. Map ──────────────────────────────────────────────────────────── */}
-      <div style={{ ...cardStyle, overflow: "hidden", marginBottom: 16, height: 400 }}>
-        <MapComponent
-          center={mapCenter}
-          zoom={14}
-          myHotel={mapHotel}
-          competitors={mapCompetitors}
-          height={400}
-        />
-      </div>
-
-      {/* ── 5. AI Insights ──────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={sectionLabelStyle}>AI INSIGHTS</div>
+          )}
+        </div>
 
         {!hasSyncedCompetitors ? (
-          <div
-            style={{
-              background: CARD,
-              border: "1px solid #2a1a00",
-              borderRadius: 8,
-              padding: "14px 18px",
-            }}
-          >
+          <div style={{ ...cardStyle, padding: "14px 18px" }}>
             <span style={{ fontSize: 13, color: "#fbbf24" }}>
               Sync competitors to generate AI insights
             </span>
           </div>
         ) : insightsLoading ? (
-          <div
-            style={{
-              background: CARD,
-              border: `1px solid ${BORDER}`,
-              borderRadius: 8,
-              padding: "14px 18px",
-            }}
-          >
-            <span style={{ fontSize: 13, color: TEXT_MUTED }}>Generating insights…</span>
+          <div className="bench-insights-grid">
+            {INSIGHT_CARDS.map(({ key }) => (
+              <div
+                key={key}
+                style={{ ...cardStyle, padding: "16px 18px", animation: "bench-pulse 1.5s ease-in-out infinite" }}
+              >
+                <div style={{ width: "60%", height: 10, background: "#1e1e1e", borderRadius: 3, marginBottom: 8 }} />
+                <div style={{ width: "100%", height: 8, background: "#1e1e1e", borderRadius: 3, marginBottom: 4 }} />
+                <div style={{ width: "80%", height: 8, background: "#1e1e1e", borderRadius: 3 }} />
+              </div>
+            ))}
           </div>
         ) : insightsError ? (
-          <div
-            style={{
-              background: CARD,
-              border: `1px solid ${BORDER}`,
-              borderRadius: 8,
-              padding: "14px 18px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
+          <div style={{ ...cardStyle, padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 13, color: "#f87171" }}>{insightsError}</span>
             <button
               type="button"
-              onClick={() =>
-                hotel &&
-                void doGenerateInsights(hotel, myAvgRating, myTotalReviews, competitors)
-              }
+              onClick={() => hotel && void doGenerateInsights(hotel, myAvgRating, myTotalReviews, competitors)}
               style={secondaryBtnStyle()}
             >
               Retry
             </button>
           </div>
         ) : insights ? (
-          <div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                gap: 10,
-                marginBottom: 8,
-              }}
-            >
-              {INSIGHT_CARDS.map(({ key, icon, label, color }) => (
-                <div
-                  key={key}
-                  style={{
-                    background: CARD,
-                    border: `1px solid ${BORDER}`,
-                    borderRadius: 8,
-                    padding: "14px 16px",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <span style={{ color, fontSize: 14 }}>{icon}</span>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 600,
-                        letterSpacing: "0.1em",
-                        color: TEXT_MUTED,
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {label}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 13, color: "#cccccc", lineHeight: 1.6 }}>
-                    {insights[key] || "—"}
-                  </div>
+          <div className="bench-insights-grid">
+            {INSIGHT_CARDS.map(({ key, icon, label, color }) => (
+              <div key={key} style={{ ...cardStyle, padding: "16px 18px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ color, fontSize: 14 }}>{icon}</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", color: TEXT_MUTED, textTransform: "uppercase" }}>
+                    {label}
+                  </span>
                 </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                hotel &&
-                void doGenerateInsights(hotel, myAvgRating, myTotalReviews, competitors)
-              }
-              style={secondaryBtnStyle({ fontSize: 11 })}
-            >
-              Regenerate insights
-            </button>
+                <div style={{ fontSize: 12, color: "#cccccc", lineHeight: 1.5 }}>
+                  {insights[key] || "—"}
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
-          <div
-            style={{
-              background: CARD,
-              border: `1px solid ${BORDER}`,
-              borderRadius: 8,
-              padding: "14px 18px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
+          <div style={{ ...cardStyle, padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 13, color: TEXT_MUTED }}>Ready to generate AI insights</span>
             <button
               type="button"
-              onClick={() =>
-                hotel &&
-                void doGenerateInsights(hotel, myAvgRating, myTotalReviews, competitors)
-              }
+              onClick={() => hotel && void doGenerateInsights(hotel, myAvgRating, myTotalReviews, competitors)}
               style={primaryBtnStyle()}
             >
               Generate insights
@@ -1232,137 +1240,126 @@ export default function BenchmarkingPage() {
         )}
       </div>
 
-      {/* ── 6. Analysis Row ─────────────────────────────────────────────────── */}
-      <div
-        style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}
-      >
-        {/* Card A — Rating Overview */}
-        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: "16px 18px" }}>
+      {/* ── 6. Analysis Cards ───────────────────────────────────────────────── */}
+      <div className="bench-analysis-grid" style={{ marginBottom: 12 }}>
+        {/* Card A — Rating overview */}
+        <div style={{ ...cardStyle, padding: "16px 18px" }}>
           <div style={sectionLabelStyle}>RATING OVERVIEW</div>
-          {rankingList.map((entry) => (
-            <div
-              key={entry.id}
-              style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}
-            >
-              <div
-                style={{
-                  width: 130,
-                  fontSize: 12,
-                  color: TEXT_SECONDARY,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  flexShrink: 0,
-                }}
-              >
-                {truncName(entry.name, 16)}
+          {rankingList.length === 0 ? (
+            <div style={{ fontSize: 12, color: TEXT_MUTED }}>No data yet</div>
+          ) : (
+            rankingList.map((entry) => (
+              <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <div
+                  style={{
+                    width: 100,
+                    fontSize: 12,
+                    color: entry.isMe ? "#4ade80" : TEXT_SECONDARY,
+                    fontWeight: entry.isMe ? 600 : 400,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  {entry.isMe ? "You" : truncName(entry.name, 13)}
+                </div>
+                <div style={{ flex: 1, height: 5, background: "#1a1a1a", borderRadius: 3, overflow: "hidden" }}>
+                  {entry.avg_rating != null && (
+                    <div
+                      style={{
+                        width: `${(entry.avg_rating / 5) * 100}%`,
+                        height: "100%",
+                        background: entry.isMe ? "#6366f1" : ratingColor(entry.avg_rating),
+                        borderRadius: 3,
+                      }}
+                    />
+                  )}
+                </div>
+                <div
+                  style={{
+                    width: 40,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: entry.isMe ? "#6366f1" : entry.avg_rating != null ? TEXT_PRIMARY : "#444444",
+                    textAlign: "right",
+                    flexShrink: 0,
+                  }}
+                >
+                  {entry.avg_rating != null ? entry.avg_rating.toFixed(1) : <span style={{ fontSize: 10, color: "#444444" }}>N/S</span>}
+                </div>
               </div>
-              <div style={barContainerStyle}>
-                {entry.avg_rating != null ? (
+            ))
+          )}
+          {marketAvg != null && (
+            <div style={{ fontSize: 10, color: "#444444", marginTop: 8 }}>
+              Market avg: {marketAvg.toFixed(2)}★
+            </div>
+          )}
+        </div>
+
+        {/* Card B — Review volume */}
+        <div style={{ ...cardStyle, padding: "16px 18px" }}>
+          <div style={sectionLabelStyle}>REVIEW VOLUME</div>
+          {rankingList.length === 0 ? (
+            <div style={{ fontSize: 12, color: TEXT_MUTED }}>No data yet</div>
+          ) : (
+            rankingList.map((entry) => (
+              <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <div
+                  style={{
+                    width: 100,
+                    fontSize: 12,
+                    color: entry.isMe ? "#4ade80" : TEXT_SECONDARY,
+                    fontWeight: entry.isMe ? 600 : 400,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  {entry.isMe ? "You" : truncName(entry.name, 13)}
+                </div>
+                <div style={{ flex: 1, height: 5, background: "#1a1a1a", borderRadius: 3, overflow: "hidden" }}>
                   <div
                     style={{
-                      width: `${(entry.avg_rating / 5) * 100}%`,
+                      width: `${((entry.total_reviews ?? 0) / maxReviews) * 100}%`,
                       height: "100%",
-                      background: entry.isMe ? "#4ade80" : ratingColor(entry.avg_rating),
+                      background: entry.isMe ? "#6366f1" : TEXT_SECONDARY,
                       borderRadius: 3,
                     }}
                   />
-                ) : (
-                  <div style={{ width: 0 }} />
-                )}
-              </div>
-              <div
-                style={{
-                  width: 36,
-                  fontSize: 12,
-                  color: entry.avg_rating != null ? TEXT_PRIMARY : "#444444",
-                  textAlign: "right",
-                  flexShrink: 0,
-                }}
-              >
-                {entry.avg_rating != null ? (
-                  entry.avg_rating.toFixed(1)
-                ) : (
-                  <span style={{ fontSize: 10, color: "#444444" }}>N/S</span>
-                )}
-              </div>
-            </div>
-          ))}
-          {marketAvg != null && (
-            <div style={{ marginTop: 8, fontSize: 11, color: "#444444" }}>
-              Market avg: {marketAvg.toFixed(1)}★
-            </div>
-          )}
-          {rankingList.length === 0 && (
-            <div style={{ fontSize: 12, color: TEXT_MUTED }}>No data yet</div>
-          )}
-        </div>
-
-        {/* Card B — Review Volume */}
-        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: "16px 18px" }}>
-          <div style={sectionLabelStyle}>REVIEW VOLUME</div>
-          {rankingList.map((entry) => (
-            <div
-              key={entry.id}
-              style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}
-            >
-              <div
-                style={{
-                  width: 130,
-                  fontSize: 12,
-                  color: TEXT_SECONDARY,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  flexShrink: 0,
-                }}
-              >
-                {truncName(entry.name, 16)}
-              </div>
-              <div style={barContainerStyle}>
+                </div>
                 <div
                   style={{
-                    width: `${((entry.total_reviews ?? 0) / maxReviews) * 100}%`,
-                    height: "100%",
-                    background: entry.isMe ? "#4ade80" : "#2a2a2a",
-                    borderRadius: 3,
+                    width: 40,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: entry.isMe ? "#6366f1" : (entry.total_reviews ?? 0) > 0 ? TEXT_PRIMARY : "#444444",
+                    textAlign: "right",
+                    flexShrink: 0,
                   }}
-                />
+                >
+                  {(entry.total_reviews ?? 0).toLocaleString()}
+                </div>
               </div>
-              <div
-                style={{
-                  width: 36,
-                  fontSize: 12,
-                  color: (entry.total_reviews ?? 0) > 0 ? TEXT_PRIMARY : "#444444",
-                  textAlign: "right",
-                  flexShrink: 0,
-                }}
-              >
-                {(entry.total_reviews ?? 0).toLocaleString()}
-              </div>
-            </div>
-          ))}
-          {rankingList.length === 0 && (
-            <div style={{ fontSize: 12, color: TEXT_MUTED }}>No data yet</div>
+            ))
           )}
+          <div style={{ fontSize: 10, color: "#444444", marginTop: 8 }}>
+            {iLeadVolume ? "You lead in review volume" : "You need volume to compete"}
+          </div>
         </div>
 
-        {/* Card C — Market Position */}
-        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: "16px 18px" }}>
+        {/* Card C — Market position */}
+        <div style={{ ...cardStyle, padding: "16px 18px" }}>
           <div style={sectionLabelStyle}>MARKET POSITION</div>
           {myRankInList != null ? (
             <div>
-              <div
-                style={{
-                  fontSize: 28,
-                  fontWeight: 700,
-                  color: rankColor(myRankInList),
-                  lineHeight: 1,
-                  marginBottom: 8,
-                }}
-              >
-                #{myRankInList}{" "}
-                <span style={{ fontSize: 16, fontWeight: 400, color: TEXT_MUTED }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, margin: "8px 0" }}>
+                <span style={{ fontSize: 36, fontWeight: 700, color: TEXT_PRIMARY, lineHeight: 1 }}>
+                  #{myRankInList}
+                </span>
+                <span style={{ fontSize: 16, fontWeight: 500, color: TEXT_MUTED }}>
                   of {rankingList.length}
                 </span>
               </div>
@@ -1370,20 +1367,19 @@ export default function BenchmarkingPage() {
                 <div
                   style={{
                     fontSize: 13,
+                    fontWeight: 500,
                     color: myAvgRating >= marketAvg ? "#4ade80" : "#f87171",
-                    marginBottom: 6,
+                    marginBottom: 8,
                   }}
                 >
                   {myAvgRating >= marketAvg
-                    ? `+${(myAvgRating - marketAvg).toFixed(1)} above market average`
-                    : `${(myAvgRating - marketAvg).toFixed(1)} below market average`}
+                    ? `+${(myAvgRating - marketAvg).toFixed(2)} above market avg`
+                    : `${(myAvgRating - marketAvg).toFixed(2)} below market avg`}
                 </div>
               )}
-              {leader && !leader.isMe && (
-                <div style={{ fontSize: 12, color: TEXT_SECONDARY }}>
-                  {myTotalReviews < (leader.total_reviews ?? 0)
-                    ? `${((leader.total_reviews ?? 0) - myTotalReviews).toLocaleString()} reviews behind leader`
-                    : `${(myTotalReviews - (leader.total_reviews ?? 0)).toLocaleString()} reviews ahead of 2nd`}
+              {positionText && (
+                <div style={{ fontSize: 11, color: TEXT_SECONDARY, lineHeight: 1.6 }}>
+                  {positionText}
                 </div>
               )}
             </div>
@@ -1394,19 +1390,17 @@ export default function BenchmarkingPage() {
       </div>
 
       {/* ── 7. Tracked Competitors Table ────────────────────────────────────── */}
-      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, overflow: "hidden" }}>
+      <div style={{ ...cardStyle, overflow: "hidden" }}>
         {/* Table header */}
         <div
+          className="bench-table-row"
           style={{
-            background: CARD,
-            padding: "10px 18px",
+            background: "#111111",
+            padding: "10px 16px",
             borderBottom: `1px solid ${BORDER}`,
-            display: "grid",
-            gridTemplateColumns: "2fr 1fr 1fr 1fr 130px",
-            gap: 8,
           }}
         >
-          {["NAME", "RATING", "REVIEWS", "LAST SYNCED", "ACTIONS"].map((h) => (
+          {["COMPETITOR", "RATING", "REVIEWS", "LAST SYNCED", "ACTIONS"].map((h) => (
             <div
               key={h}
               style={{
@@ -1423,159 +1417,119 @@ export default function BenchmarkingPage() {
         </div>
 
         {/* Rows */}
-        {competitors.length === 0 ? (
-          <div style={{ padding: "20px 18px" }}>
-            <div style={{ fontSize: 13, color: TEXT_MUTED }}>
-              No competitors yet. Use Find competitors above, or add manually below.
+        <div className="bench-table-wrap">
+          {competitors.length === 0 ? (
+            <div style={{ padding: "20px 16px", fontSize: 13, color: TEXT_MUTED }}>
+              No competitors yet. Use &ldquo;Find competitors&rdquo; above, or add manually with &ldquo;+ Add competitor&rdquo;.
             </div>
-          </div>
-        ) : (
-          competitors.map((comp, i) => {
-            const isSyncing = syncingIds.has(comp.id);
-            const isRemoving = removingId === comp.id;
-            return (
-              <div
-                key={comp.id}
-                style={{
-                  padding: "12px 18px",
-                  borderBottom: i < competitors.length - 1 ? `1px solid ${BORDER}` : "none",
-                  display: "grid",
-                  gridTemplateColumns: "2fr 1fr 1fr 1fr 130px",
-                  gap: 8,
-                  alignItems: "center",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "#1a1a1a";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent";
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: TEXT_PRIMARY,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {comp.name}
-                </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color:
-                      comp.avg_rating != null ? ratingColor(comp.avg_rating) : "#fbbf24",
-                  }}
-                >
-                  {comp.avg_rating != null ? comp.avg_rating.toFixed(1) : "—"}
-                </div>
-                <div style={{ fontSize: 13, color: TEXT_SECONDARY }}>
-                  {comp.total_reviews != null
-                    ? comp.total_reviews.toLocaleString()
-                    : "—"}
-                </div>
-                <div style={{ fontSize: 11, color: "#444444" }}>
-                  {formatTimeAgo(comp.last_synced_at)}
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button
-                    type="button"
-                    disabled={isSyncing}
-                    onClick={() => void handleSyncOne(comp.id)}
-                    style={secondaryBtnStyle({
-                      opacity: isSyncing ? 0.5 : 1,
-                      cursor: isSyncing ? "not-allowed" : "pointer",
-                    })}
-                  >
-                    {isSyncing ? "Syncing…" : "Sync"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isRemoving}
-                    onClick={() => void handleRemove(comp.id)}
-                    style={secondaryBtnStyle({
-                      opacity: isRemoving ? 0.5 : 1,
-                      cursor: isRemoving ? "not-allowed" : "pointer",
-                    })}
-                    onMouseEnter={(e) => {
-                      if (!isRemoving) e.currentTarget.style.color = "#f87171";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = TEXT_SECONDARY;
-                    }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        )}
+          ) : (
+            competitors.map((comp, i) => {
+              const isSyncing = syncingIds.has(comp.id);
+              const isRemoving = removingId === comp.id;
+              const needsSync = comp.avg_rating == null;
+              const dotColor = needsSync
+                ? "#f87171"
+                : comp.avg_rating != null && comp.avg_rating >= 4.5
+                ? "#4ade80"
+                : comp.avg_rating != null && comp.avg_rating >= 3.5
+                ? "#fbbf24"
+                : "#f87171";
 
-        {/* Manual add */}
-        <div style={{ padding: "12px 18px", borderTop: `1px solid ${BORDER}` }}>
-          <button
-            type="button"
-            onClick={() => setShowManual(!showManual)}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: 12,
-              color: TEXT_MUTED,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              padding: 0,
-            }}
-          >
-            Add manually ↓
-          </button>
-
-          {showManual && (
-            <div style={{ marginTop: 10 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-                <div style={{ flex: 1 }}>
-                  <input
-                    type="text"
-                    placeholder="Hotel name *"
-                    value={manualName}
-                    onChange={(e) => setManualName(e.target.value)}
-                    style={inputStyle}
-                  />
-                </div>
-                <div style={{ flex: 1.5 }}>
-                  <input
-                    type="text"
-                    placeholder="Google Maps URL"
-                    value={manualGoogleUrl}
-                    onChange={(e) => setManualGoogleUrl(e.target.value)}
-                    style={inputStyle}
-                  />
-                </div>
-                <div style={{ flex: 1.5 }}>
-                  <input
-                    type="text"
-                    placeholder="TripAdvisor URL (optional)"
-                    value={manualTAUrl}
-                    onChange={(e) => setManualTAUrl(e.target.value)}
-                    style={inputStyle}
-                  />
-                </div>
-                <button
-                  type="button"
-                  disabled={addingManual || !manualName.trim()}
-                  onClick={() => void handleManualAdd()}
-                  style={primaryBtnStyle(addingManual || !manualName.trim())}
+              return (
+                <div
+                  key={comp.id}
+                  className="bench-table-row"
+                  style={{
+                    padding: "12px 16px",
+                    borderBottom: i < competitors.length - 1 ? `1px solid #1a1a1a` : "none",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#161616"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                 >
-                  {addingManual ? "Adding…" : "Add"}
-                </button>
-              </div>
-              {manualError && (
-                <div style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{manualError}</div>
-              )}
-            </div>
+                  {/* Name */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <span
+                      style={{
+                        width: 5,
+                        height: 5,
+                        borderRadius: "50%",
+                        background: dotColor,
+                        flexShrink: 0,
+                        animation: needsSync ? "bench-dot-pulse 1.5s ease-in-out infinite" : "none",
+                      }}
+                    />
+                    <span style={{ fontSize: 12, fontWeight: 500, color: TEXT_PRIMARY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {comp.name}
+                    </span>
+                  </div>
+
+                  {/* Rating */}
+                  <div style={{ fontSize: 12, color: comp.avg_rating != null ? ratingColor(comp.avg_rating) : TEXT_MUTED }}>
+                    {comp.avg_rating != null ? comp.avg_rating.toFixed(1) : "—"}
+                  </div>
+
+                  {/* Reviews */}
+                  <div style={{ fontSize: 12, color: TEXT_SECONDARY }}>
+                    {comp.total_reviews != null ? comp.total_reviews.toLocaleString() : "—"}
+                  </div>
+
+                  {/* Last synced */}
+                  <div style={{ fontSize: 11, color: "#444444" }}>
+                    {formatTimeAgo(comp.last_synced_at)}
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button
+                      type="button"
+                      disabled={isSyncing}
+                      onClick={() => void handleSyncOne(comp.id)}
+                      style={{
+                        background: "transparent",
+                        border: `1px solid ${BORDER_SUB}`,
+                        borderRadius: 4,
+                        color: TEXT_SECONDARY,
+                        fontSize: 10,
+                        fontWeight: 500,
+                        cursor: isSyncing ? "not-allowed" : "pointer",
+                        opacity: isSyncing ? 0.5 : 1,
+                        fontFamily: "inherit",
+                        padding: "3px 8px",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {isSyncing ? "Syncing…" : "Sync"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isRemoving}
+                      onClick={() => {
+                        if (window.confirm(`Remove ${comp.name} from your benchmarking list?`)) {
+                          void handleRemove(comp.id);
+                        }
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: `1px solid ${BORDER_SUB}`,
+                        borderRadius: 4,
+                        color: TEXT_SECONDARY,
+                        fontSize: 10,
+                        fontWeight: 500,
+                        cursor: isRemoving ? "not-allowed" : "pointer",
+                        opacity: isRemoving ? 0.5 : 1,
+                        fontFamily: "inherit",
+                        padding: "3px 8px",
+                        whiteSpace: "nowrap",
+                      }}
+                      onMouseEnter={(e) => { if (!isRemoving) e.currentTarget.style.color = "#f87171"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = TEXT_SECONDARY; }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       </div>
