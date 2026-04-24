@@ -254,6 +254,36 @@ function formatTimeAgo(iso: string | null | undefined): string {
   return `${Math.floor(d / 7)}w ago`;
 }
 
+function getRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const diffMs = Date.now() - date.getTime();
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+  if (days === 0 && hours < 1) return "just now";
+  if (days === 0) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days} days ago`;
+  return `${Math.floor(days / 30)} month${Math.floor(days / 30) !== 1 ? "s" : ""} ago`;
+}
+
+function getExpiresIn(dateStr: string): { text: string; color: string } {
+  const date = new Date(dateStr);
+  const diffMs = date.getTime() - Date.now();
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (days <= 0) return { text: "expired", color: "#f87171" };
+  if (days === 1) return { text: "1 day", color: "#f87171" };
+  if (days <= 3) return { text: `${days} days`, color: "#f87171" };
+  if (days < 7) return { text: `${days} days`, color: "#fbbf24" };
+  if (days < 30) return { text: `${days} days`, color: TEXT_MUTED };
+  return { text: `${Math.floor(days / 30)} month${Math.floor(days / 30) !== 1 ? "s" : ""}`, color: TEXT_MUTED };
+}
+
+function isAnalysisExpired(lastAnalyzedAt: string | null | undefined): boolean {
+  if (!lastAnalyzedAt) return false;
+  const daysSince = (Date.now() - new Date(lastAnalyzedAt).getTime()) / (1000 * 60 * 60 * 24);
+  return daysSince > 30;
+}
+
 function toStringArray(val: unknown): string[] {
   if (!Array.isArray(val)) return [];
   return val.filter((x): x is string => typeof x === "string");
@@ -377,7 +407,10 @@ export default function BenchmarkingPage() {
   const [comparison, setComparison] = useState<ComparisonResult | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
-  const [comparisonUpdatedAt, setComparisonUpdatedAt] = useState<string | null>(null);
+  const [comparisonMeta, setComparisonMeta] = useState<{
+    generated_at?: string;
+    expires_at?: string;
+  }>({});
 
   // Feature comparison expanded rows
   const [expandedFeatureRows, setExpandedFeatureRows] = useState<Set<string>>(new Set());
@@ -523,10 +556,15 @@ export default function BenchmarkingPage() {
         comparison?: ComparisonResult;
         error?: string;
         needs_analysis?: boolean;
+        generated_at?: string;
+        expires_at?: string;
       };
       if (data.success && data.comparison) {
         setComparison(data.comparison);
-        setComparisonUpdatedAt(new Date().toISOString());
+        setComparisonMeta({
+          generated_at: data.generated_at ?? new Date().toISOString(),
+          expires_at: data.expires_at,
+        });
       } else {
         setComparisonError(data.error ?? "Failed to generate comparison");
       }
@@ -535,6 +573,29 @@ export default function BenchmarkingPage() {
     } finally {
       setComparisonLoading(false);
       setAnalysisToast(null);
+    }
+  }
+
+  // ── Load saved comparison from DB ────────────────────────────────────────
+  async function loadSavedComparison(hotelId: string) {
+    try {
+      const res = await fetch(`/api/competitive-comparison/get?hotel_id=${hotelId}`);
+      const data = (await res.json()) as {
+        exists?: boolean;
+        comparison?: ComparisonResult;
+        generated_at?: string;
+        expires_at?: string;
+        error?: string;
+      };
+      if (data.exists && data.comparison) {
+        setComparison(data.comparison);
+        setComparisonMeta({
+          generated_at: data.generated_at,
+          expires_at: data.expires_at,
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load comparison:", err);
     }
   }
 
@@ -641,10 +702,26 @@ export default function BenchmarkingPage() {
           setCompetitors((prev) =>
             prev.map((c) => {
               const a = analysisMap.get(c.id);
-              return a ? { ...c, ...(a as Partial<Competitor>) } : c;
+              if (!a) return c;
+              const merged = { ...c, ...(a as Partial<Competitor>) };
+              // Treat competitor analyses older than 30 days as expired
+              if (isAnalysisExpired(merged.last_analyzed_at)) {
+                return {
+                  ...merged,
+                  description: null,
+                  usps: null,
+                  strengths: null,
+                  weaknesses: null,
+                  amenities: null,
+                };
+              }
+              return merged;
             }),
           );
         }
+
+        // Load saved competitive analysis from DB
+        void loadSavedComparison(hotelId);
       } catch {
         // Analysis fields are non-critical — silently ignore
       } finally {
@@ -1853,11 +1930,21 @@ export default function BenchmarkingPage() {
           >
             <div>
               <div style={sectionLabelStyle}>COMPETITIVE INTELLIGENCE</div>
-              {comparisonUpdatedAt && (
-                <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: -8 }}>
-                  Last updated {formatTimeAgo(comparisonUpdatedAt)}
-                </div>
-              )}
+              <div style={{ display: "flex", gap: 16, marginTop: -8, flexWrap: "wrap" }}>
+                {comparisonMeta.generated_at && (
+                  <span style={{ fontSize: 11, color: TEXT_MUTED }}>
+                    Last analyzed: {getRelativeTime(comparisonMeta.generated_at)}
+                  </span>
+                )}
+                {comparisonMeta.expires_at && (() => {
+                  const exp = getExpiresIn(comparisonMeta.expires_at);
+                  return (
+                    <span style={{ fontSize: 11, color: exp.color }}>
+                      Expires in: {exp.text}
+                    </span>
+                  );
+                })()}
+              </div>
             </div>
             <button
               type="button"
@@ -2697,6 +2784,11 @@ export default function BenchmarkingPage() {
                         YOU
                       </span>
                     )}
+                    {hasData && row.last_analyzed_at && (
+                      <span style={{ fontSize: 10, color: TEXT_MUTED }}>
+                        analyzed {getRelativeTime(row.last_analyzed_at)}
+                      </span>
+                    )}
                     {hasData && (
                       <span style={{ fontSize: 11, color: TEXT_MUTED, marginLeft: "auto" }}>
                         {isExpanded ? "▲" : "▼"}
@@ -2940,6 +3032,7 @@ export default function BenchmarkingPage() {
               const isRemoving = removingId === comp.id;
               const isAnalyzing = analyzingCompetitorIds.has(comp.id);
               const needsSync = comp.avg_rating == null;
+              const analysisExpired = isAnalysisExpired(comp.last_analyzed_at);
               const dotColor = needsSync
                 ? "#f87171"
                 : comp.avg_rating != null && comp.avg_rating >= 4.5
@@ -3014,14 +3107,30 @@ export default function BenchmarkingPage() {
                     {formatTimeAgo(comp.last_synced_at)}
                   </div>
                   {/* Analyzed */}
-                  <div
-                    className="bench-table-analyze-col"
-                    style={{
-                      fontSize: 11,
-                      color: comp.last_analyzed_at ? "#4ade80" : TEXT_MUTED,
-                    }}
-                  >
-                    {comp.last_analyzed_at ? formatTimeAgo(comp.last_analyzed_at) : "—"}
+                  <div className="bench-table-analyze-col">
+                    {comp.last_analyzed_at ? (
+                      analysisExpired ? (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: "#fbbf24",
+                            background: "#1a1200",
+                            border: "1px solid #2a2000",
+                            borderRadius: 3,
+                            padding: "2px 6px",
+                          }}
+                        >
+                          expired
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 11, color: "#4ade80" }}>
+                          {formatTimeAgo(comp.last_analyzed_at)}
+                        </span>
+                      )
+                    ) : (
+                      <span style={{ fontSize: 11, color: TEXT_MUTED }}>—</span>
+                    )}
                   </div>
                   {/* Actions */}
                   <div style={{ display: "flex", gap: 4, flexWrap: "nowrap" }}>
@@ -3063,7 +3172,13 @@ export default function BenchmarkingPage() {
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {isAnalyzing ? "…" : comp.last_analyzed_at ? "Re-analyze" : "Analyze"}
+                      {isAnalyzing
+                        ? "…"
+                        : analysisExpired
+                          ? "Regenerate"
+                          : comp.last_analyzed_at
+                            ? "Re-analyze"
+                            : "Analyze"}
                     </button>
                     <button
                       type="button"

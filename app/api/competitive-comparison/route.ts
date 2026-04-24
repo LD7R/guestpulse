@@ -2,7 +2,40 @@
  * POST { hotel_id: string }
  * Compares the user's hotel to all analyzed competitors and returns
  * unique advantages, competitive gaps, quick wins, and market positioning.
- * Requires that at least one competitor has been analyzed via /api/analyze-competitor.
+ * Saves the result to competitive_analyses table (30-day TTL).
+ *
+ * -- Run in Supabase:
+ * -- create table if not exists public.competitive_analyses (
+ * --   id uuid primary key default gen_random_uuid(),
+ * --   hotel_id uuid references public.hotels(id) on delete cascade,
+ * --   user_id uuid references auth.users(id),
+ * --   analysis jsonb not null,
+ * --   generated_at timestamp with time zone default now(),
+ * --   expires_at timestamp with time zone
+ * --     default (now() + interval '30 days')
+ * -- );
+ * --
+ * -- create index if not exists idx_competitive_analyses_hotel
+ * --   on public.competitive_analyses(hotel_id);
+ * -- create index if not exists idx_competitive_analyses_expires
+ * --   on public.competitive_analyses(expires_at);
+ * --
+ * -- alter table public.competitive_analyses enable row level security;
+ * --
+ * -- drop policy if exists "Users view own analyses" on public.competitive_analyses;
+ * -- create policy "Users view own analyses" on public.competitive_analyses
+ * --   for select using (auth.uid() = user_id);
+ * --
+ * -- drop policy if exists "Users create own analyses" on public.competitive_analyses;
+ * -- create policy "Users create own analyses" on public.competitive_analyses
+ * --   for insert with check (auth.uid() = user_id);
+ * --
+ * -- drop policy if exists "Users delete own analyses" on public.competitive_analyses;
+ * -- create policy "Users delete own analyses" on public.competitive_analyses
+ * --   for delete using (auth.uid() = user_id);
+ * --
+ * -- grant all on public.competitive_analyses to authenticated;
+ * -- grant all on public.competitive_analyses to service_role;
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase";
@@ -254,7 +287,35 @@ CRITICAL: Respond with ONLY the JSON object. No preamble, no explanation, no mar
       );
     }
 
-    return NextResponse.json({ success: true, comparison });
+    // Delete any existing analysis for this hotel
+    await supabase.from("competitive_analyses").delete().eq("hotel_id", hotelId);
+
+    // Save new analysis with 30-day TTL
+    const generatedAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: saved, error: saveError } = await supabase
+      .from("competitive_analyses")
+      .insert({
+        hotel_id: hotelId,
+        user_id: user.id,
+        analysis: comparison,
+        generated_at: generatedAt,
+        expires_at: expiresAt,
+      })
+      .select()
+      .single();
+
+    if (saveError) {
+      console.error("Failed to save analysis:", saveError);
+    }
+
+    return NextResponse.json({
+      success: true,
+      comparison,
+      generated_at: (saved as Record<string, unknown> | null)?.generated_at as string | undefined ?? generatedAt,
+      expires_at: (saved as Record<string, unknown> | null)?.expires_at as string | undefined ?? expiresAt,
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
