@@ -9,13 +9,16 @@
  *   add column if not exists brand_examples jsonb default '[]',
  *   add column if not exists brand_guidelines text default '',
  *   add column if not exists response_language_mode text default 'match-guest',
- *   add column if not exists brand_voice_completed_at timestamptz;
+ *   add column if not exists brand_voice_completed_at timestamptz,
+ *   add column if not exists brand_voice_draft jsonb default null,
+ *   add column if not exists brand_voice_draft_step integer default 1,
+ *   add column if not exists brand_voice_draft_updated_at timestamptz;
  */
 
 import { createBrowserClient } from "@supabase/ssr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // ─── Design constants ─────────────────────────────────────────────────────────
 
@@ -170,6 +173,14 @@ export default function BrandVoicePage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
+  // Autosave
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const autosaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasMountedRef = useRef(false);
+
+  // Resume notice
+  const [showResumeNotice, setShowResumeNotice] = useState(false);
+
   // Preview
   const [previewSample, setPreviewSample] = useState("5star");
   const [previewOutput, setPreviewOutput] = useState("");
@@ -199,7 +210,7 @@ export default function BrandVoicePage() {
         const { data: hotel } = await supabase
           .from("hotels")
           .select(
-            "id, name, response_signature, brand_voice_tone, brand_voice_traits, response_length, brand_examples, brand_guidelines, response_language_mode, brand_voice_completed_at",
+            "id, name, response_signature, brand_voice_tone, brand_voice_traits, response_length, brand_examples, brand_guidelines, response_language_mode, brand_voice_completed_at, brand_voice_draft, brand_voice_draft_step, brand_voice_draft_updated_at",
           )
           .eq("user_id", user.id)
           .maybeSingle();
@@ -208,24 +219,64 @@ export default function BrandVoicePage() {
           const h = hotel as Record<string, unknown>;
           setHotelId(h.id as string);
 
-          // Always pre-fill from DB (not just in edit mode)
-          const traits = Array.isArray(h.brand_voice_traits) ? (h.brand_voice_traits as string[]) : [];
-          const examplesArr = Array.isArray(h.brand_examples) ? (h.brand_examples as string[]) : [];
-          const rawTone = (h.brand_voice_tone as string | null) ?? "";
-          const wizardTone = TONES.some((t) => t.id === rawTone) ? rawTone : "";
-
-          setAnswers({
-            tone: wizardTone,
-            traits,
-            responseLength: (h.response_length as string | null) ?? "medium",
-            examples: examplesArr.filter(Boolean).join("\n\n---\n\n"),
-            guidelines: (h.brand_guidelines as string | null) ?? "",
-            languageMode: (h.response_language_mode as string | null) ?? "match-guest",
-          });
-
           const completedAt = h.brand_voice_completed_at as string | null;
           setIsEditMode(!!completedAt);
           setLastUpdated(completedAt);
+
+          if (completedAt) {
+            // EDIT MODE — load saved final answers
+            const traits = Array.isArray(h.brand_voice_traits) ? (h.brand_voice_traits as string[]) : [];
+            const examplesArr = Array.isArray(h.brand_examples) ? (h.brand_examples as string[]) : [];
+            const rawTone = (h.brand_voice_tone as string | null) ?? "";
+            const wizardTone = TONES.some((t) => t.id === rawTone) ? rawTone : "";
+
+            setAnswers({
+              tone: wizardTone,
+              traits,
+              responseLength: (h.response_length as string | null) ?? "medium",
+              examples: examplesArr.filter(Boolean).join("\n\n---\n\n"),
+              guidelines: (h.brand_guidelines as string | null) ?? "",
+              languageMode: (h.response_language_mode as string | null) ?? "match-guest",
+            });
+          } else if (h.brand_voice_draft) {
+            // DRAFT MODE — resume from autosaved state
+            const draft = h.brand_voice_draft as Record<string, unknown>;
+            const draftTraits = Array.isArray(draft.traits) ? (draft.traits as string[]) : [];
+            const rawTone = (draft.tone as string | null) ?? "";
+            const wizardTone = TONES.some((t) => t.id === rawTone) ? rawTone : "";
+
+            setAnswers({
+              tone: wizardTone,
+              traits: draftTraits,
+              responseLength: (draft.responseLength as string | null) ?? "medium",
+              examples: (draft.examples as string | null) ?? "",
+              guidelines: (draft.guidelines as string | null) ?? "",
+              languageMode: (draft.languageMode as string | null) ?? "match-guest",
+            });
+
+            const savedStep = (h.brand_voice_draft_step as number | null) ?? 1;
+            setStep(Math.max(1, Math.min(6, savedStep)));
+
+            if (h.brand_voice_draft_updated_at) {
+              setShowResumeNotice(true);
+              window.setTimeout(() => setShowResumeNotice(false), 4000);
+            }
+          } else {
+            // No draft, no completed — keep defaults but load any partial DB values
+            const traits = Array.isArray(h.brand_voice_traits) ? (h.brand_voice_traits as string[]) : [];
+            const examplesArr = Array.isArray(h.brand_examples) ? (h.brand_examples as string[]) : [];
+            const rawTone = (h.brand_voice_tone as string | null) ?? "";
+            const wizardTone = TONES.some((t) => t.id === rawTone) ? rawTone : "";
+
+            setAnswers({
+              tone: wizardTone,
+              traits,
+              responseLength: (h.response_length as string | null) ?? "medium",
+              examples: examplesArr.filter(Boolean).join("\n\n---\n\n"),
+              guidelines: (h.brand_guidelines as string | null) ?? "",
+              languageMode: (h.response_language_mode as string | null) ?? "match-guest",
+            });
+          }
         }
       } finally {
         setLoading(false);
@@ -233,6 +284,105 @@ export default function BrandVoicePage() {
     }
     void load();
   }, []);
+
+  // ── Autosave (debounced, 1.5s) ────────────────────────────────────────────────
+  const triggerAutosave = useCallback((currentStep: number) => {
+    if (!hotelId) return;
+    if (isEditMode) return; // Don't autosave if already completed; use normal save
+
+    if (autosaveRef.current) clearTimeout(autosaveRef.current);
+
+    setAutosaveStatus("saving");
+
+    autosaveRef.current = setTimeout(async () => {
+      try {
+        const supabase = createBrowserClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        );
+        const { error } = await supabase
+          .from("hotels")
+          .update({
+            brand_voice_draft: {
+              tone: answers.tone,
+              traits: answers.traits,
+              responseLength: answers.responseLength,
+              examples: answers.examples,
+              guidelines: answers.guidelines,
+              languageMode: answers.languageMode,
+            },
+            brand_voice_draft_step: currentStep,
+            brand_voice_draft_updated_at: new Date().toISOString(),
+          })
+          .eq("id", hotelId);
+
+        if (error) throw error;
+
+        setAutosaveStatus("saved");
+        window.setTimeout(() => setAutosaveStatus("idle"), 2000);
+      } catch (err) {
+        setAutosaveStatus("error");
+        console.error("Autosave failed:", err);
+      }
+    }, 1500);
+  }, [hotelId, isEditMode, answers]);
+
+  // Trigger autosave whenever answers or step change (skip first render)
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    triggerAutosave(step);
+  }, [answers, step, triggerAutosave]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autosaveRef.current) clearTimeout(autosaveRef.current);
+    };
+  }, []);
+
+  // ── Step navigation (with immediate save on step change) ─────────────────────
+  async function goToStep(newStep: number) {
+    setStep(newStep);
+
+    if (!hotelId || isEditMode) return;
+
+    // Cancel pending debounced save
+    if (autosaveRef.current) {
+      clearTimeout(autosaveRef.current);
+      autosaveRef.current = null;
+    }
+
+    // Immediate save on step change
+    try {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      );
+      await supabase
+        .from("hotels")
+        .update({
+          brand_voice_draft: {
+            tone: answers.tone,
+            traits: answers.traits,
+            responseLength: answers.responseLength,
+            examples: answers.examples,
+            guidelines: answers.guidelines,
+            languageMode: answers.languageMode,
+          },
+          brand_voice_draft_step: newStep,
+          brand_voice_draft_updated_at: new Date().toISOString(),
+        })
+        .eq("id", hotelId);
+
+      setAutosaveStatus("saved");
+      window.setTimeout(() => setAutosaveStatus("idle"), 2000);
+    } catch {
+      // Silent — don't block navigation on autosave failure
+    }
+  }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   function canAdvance(): boolean {
@@ -299,6 +449,10 @@ export default function BrandVoicePage() {
           response_language_mode: answers.languageMode,
           brand_voice_enabled: true,
           brand_voice_completed_at: new Date().toISOString(),
+          // Clear draft state
+          brand_voice_draft: null,
+          brand_voice_draft_step: null,
+          brand_voice_draft_updated_at: null,
         })
         .eq("id", hotelId);
 
@@ -403,6 +557,7 @@ export default function BrandVoicePage() {
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes bv-spin { to { transform: rotate(360deg); } }
         @keyframes bv-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes bv-pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
         .bv-step { animation: bv-fade 0.22s ease; }
       ` }} />
 
@@ -434,6 +589,44 @@ export default function BrandVoicePage() {
         </p>
       </div>
 
+      {/* Resume notice */}
+      {showResumeNotice && (
+        <div style={{
+          background: "#0a1a0a",
+          border: "1px solid #1a3a1a",
+          borderRadius: 6,
+          padding: "10px 14px",
+          marginBottom: 16,
+          fontSize: 12,
+          color: C.green,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          animation: "bv-fade 0.2s ease",
+        }}>
+          <span>✓ Resumed from where you left off</span>
+          <button
+            type="button"
+            onClick={() => {
+              setAnswers(DEFAULT_ANSWERS);
+              setStep(1);
+              setShowResumeNotice(false);
+            }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: C.green,
+              fontSize: 11,
+              cursor: "pointer",
+              textDecoration: "underline",
+              fontFamily: "inherit",
+            }}
+          >
+            Start over
+          </button>
+        </div>
+      )}
+
       {/* No hotel warning */}
       {!hotelId && (
         <div style={{ background: "#1a0505", border: "1px solid #3a1010", borderRadius: 8, padding: 16, marginBottom: 20, fontSize: 13, color: C.red }}>
@@ -451,9 +644,32 @@ export default function BrandVoicePage() {
           <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 500 }}>
             Step {step} of {STEPS.length}
           </span>
-          <span style={{ fontSize: 12, color: C.textSecondary }}>
-            {STEPS[step - 1]}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {/* Autosave status indicator */}
+            {autosaveStatus === "saving" && (
+              <span style={{ fontSize: 11, color: C.textMuted, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <span style={{
+                  width: 6, height: 6, borderRadius: "50%",
+                  background: C.amber,
+                  display: "inline-block",
+                  animation: "bv-pulse 1s ease infinite",
+                }} />
+                Saving…
+              </span>
+            )}
+            {autosaveStatus === "saved" && (
+              <span style={{ fontSize: 11, color: C.green, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, display: "inline-block" }} />
+                Saved
+              </span>
+            )}
+            {autosaveStatus === "error" && (
+              <span style={{ fontSize: 11, color: C.red }}>Save failed</span>
+            )}
+            <span style={{ fontSize: 12, color: C.textSecondary }}>
+              {STEPS[step - 1]}
+            </span>
+          </div>
         </div>
         <div style={{ height: 3, background: "#1e1e1e", borderRadius: 3, overflow: "hidden", marginBottom: 14 }}>
           <div style={{
@@ -904,7 +1120,7 @@ export default function BrandVoicePage() {
       }}>
         <button
           type="button"
-          onClick={() => setStep((s) => Math.max(1, s - 1))}
+          onClick={() => void goToStep(Math.max(1, step - 1))}
           disabled={step === 1}
           style={{
             background: "transparent", border: `1px solid ${C.border}`,
@@ -919,7 +1135,7 @@ export default function BrandVoicePage() {
         {step < 6 && (
           <button
             type="button"
-            onClick={() => canAdvance() && setStep((s) => Math.min(6, s + 1))}
+            onClick={() => canAdvance() && void goToStep(Math.min(6, step + 1))}
             disabled={!canAdvance()}
             style={{
               background: canAdvance() ? C.textPrimary : "#1e1e1e",
