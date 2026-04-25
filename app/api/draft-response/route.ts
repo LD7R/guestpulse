@@ -38,7 +38,7 @@ type BrandVoiceExample = {
 
 type HotelBrandVoice = {
   name?: string | null;
-  brand_voice_enabled?: boolean | null;
+  brand_voice_completed_at?: string | null;
   brand_voice_examples?: unknown;
   brand_voice_locked_opening?: string | null;
   brand_voice_locked_closing?: string | null;
@@ -315,9 +315,7 @@ export async function POST(req: NextRequest) {
       });
       const { data } = await supabase
         .from("hotels")
-        .select(
-          "name, brand_voice_enabled, brand_voice_examples, brand_voice_locked_opening, brand_voice_locked_closing, brand_voice_tone, brand_voice_dos, brand_voice_donts, default_response_language, supported_response_languages, brand_voice_traits, response_length, brand_examples, brand_guidelines, response_language_mode",
-        )
+        .select("*")
         .eq("id", hotel_id)
         .maybeSingle();
 
@@ -352,9 +350,8 @@ export async function POST(req: NextRequest) {
         const legacyExamples = safeArray<BrandVoiceExample>(hotelData.brand_voice_examples);
         examplesCount = wizardExamples.length > 0 ? wizardExamples.length : legacyExamples.length;
         brandVoiceUsed = !!(
-          hotelData.brand_voice_enabled &&
-          (examplesCount >= 1 ||
-            safeArray<string>(hotelData.brand_voice_traits).length >= 1)
+          examplesCount >= 1 ||
+          safeArray<string>(hotelData.brand_voice_traits).length >= 1
         );
       }
     }

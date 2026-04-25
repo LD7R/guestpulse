@@ -348,7 +348,6 @@ export default function ReviewsInboxPage() {
   // Hotel context (cached so we don't re-fetch on every draft)
   const [cachedHotelId, setCachedHotelId] = useState<string | null>(null);
   const [cachedSignature, setCachedSignature] = useState<string>("The Management Team");
-  const [cachedExamplesCount, setCachedExamplesCount] = useState(0);
   const [defaultResponseLanguage, setDefaultResponseLanguage] = useState("match-guest");
   // Language override for drafts — null means use hotel default
   const [draftLanguageOverride, setDraftLanguageOverride] = useState<string | null>(null);
@@ -780,7 +779,7 @@ export default function ReviewsInboxPage() {
 
       const { data: hotels, error: hotelsError } = await supabase
         .from("hotels")
-        .select("id, response_signature, brand_voice_enabled, brand_voice_examples, default_response_language, brand_voice_completed_at")
+        .select("id, response_signature, brand_voice_completed_at")
         .eq("user_id", user.id);
       if (hotelsError) { if (!cancelled) { setError(hotelsError.message); setLoading(false); } return; }
 
@@ -789,9 +788,6 @@ export default function ReviewsInboxPage() {
         const h = hotels[0] as Record<string, unknown>;
         setCachedHotelId((h.id as string | null) ?? null);
         setCachedSignature((h.response_signature as string | null)?.trim() || "The Management Team");
-        const exArr = Array.isArray(h.brand_voice_examples) ? h.brand_voice_examples as unknown[] : [];
-        setCachedExamplesCount(exArr.length);
-        setDefaultResponseLanguage((h.default_response_language as string | null) ?? "match-guest");
         setCachedBrandVoiceCompletedAt((h.brand_voice_completed_at as string | null) ?? null);
       }
 

@@ -447,7 +447,6 @@ export default function BrandVoicePage() {
           brand_examples: examplesAsArray(),
           brand_guidelines: answers.guidelines.trim() || null,
           response_language_mode: answers.languageMode,
-          brand_voice_enabled: true,
           brand_voice_completed_at: new Date().toISOString(),
           // Clear draft state
           brand_voice_draft: null,
@@ -491,7 +490,6 @@ export default function BrandVoicePage() {
           brand_examples: examplesAsArray(),
           brand_guidelines: answers.guidelines.trim() || null,
           response_language_mode: answers.languageMode,
-          brand_voice_enabled: true,
         })
         .eq("id", hotelId);
 
