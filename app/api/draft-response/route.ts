@@ -1,3 +1,19 @@
+/**
+ * POST /api/draft-response
+ *
+ * -- Run in Supabase:
+ * -- alter table public.hotels
+ * --   add column if not exists brand_voice_enabled boolean default false,
+ * --   add column if not exists brand_voice_examples jsonb default '[]',
+ * --   add column if not exists brand_voice_signature text default '',
+ * --   add column if not exists brand_voice_locked_opening text default '',
+ * --   add column if not exists brand_voice_locked_closing text default '',
+ * --   add column if not exists brand_voice_tone text default 'warm-professional',
+ * --   add column if not exists brand_voice_dos jsonb default '[]',
+ * --   add column if not exists brand_voice_donts jsonb default '[]',
+ * --   add column if not exists default_response_language text default 'match-guest',
+ * --   add column if not exists supported_response_languages jsonb default '["en"]';
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -8,7 +24,100 @@ type AnthropicMessageResponse = {
   error?: { type?: string; message?: string };
 };
 
+type BrandVoiceExample = {
+  review_text: string;
+  response_text: string;
+  rating: number;
+};
+
+type HotelBrandVoice = {
+  name?: string | null;
+  brand_voice_enabled?: boolean | null;
+  brand_voice_examples?: unknown;
+  brand_voice_locked_opening?: string | null;
+  brand_voice_locked_closing?: string | null;
+  brand_voice_tone?: string | null;
+  brand_voice_dos?: unknown;
+  brand_voice_donts?: unknown;
+  default_response_language?: string | null;
+  supported_response_languages?: unknown;
+};
+
 const ESSENTIAL_DRAFT_LIMIT = 10;
+
+const TONE_INSTRUCTIONS: Record<string, string> = {
+  "warm-professional": "Friendly but maintain professional distance.",
+  "casual-friendly": "Conversational, like talking to a friend.",
+  "formal": "Traditional luxury hotel formality.",
+  "boutique-playful": "Warm with personality and character.",
+  "direct-minimal": "Concise and to the point.",
+  "heartfelt-sincere": "Emotional and grateful tone.",
+};
+
+const LANG_NAMES: Record<string, string> = {
+  en: "English", nl: "Dutch", de: "German", fr: "French",
+  es: "Spanish", it: "Italian", pt: "Portuguese", id: "Indonesian",
+  zh: "Chinese", ja: "Japanese", ko: "Korean", ru: "Russian",
+  th: "Thai", vi: "Vietnamese", ar: "Arabic",
+};
+
+function safeArray<T>(val: unknown): T[] {
+  if (!Array.isArray(val)) return [];
+  return val as T[];
+}
+
+function buildSystemPrompt(
+  hotel: HotelBrandVoice,
+  responseSignature: string,
+  responseLanguage: string,
+  brandVoiceUsed: boolean,
+): string {
+  const hotelName = hotel.name || "our hotel";
+  const tone = (hotel.brand_voice_tone as string) || "warm-professional";
+
+  let sys = `You are drafting a response to a hotel review on behalf of "${hotelName}". Write a genuine, helpful response under 80 words. Do not start with "Dear valued guest". Reference specific details from the review.`;
+
+  sys += `\n\nTONE: ${TONE_INSTRUCTIONS[tone] ?? TONE_INSTRUCTIONS["warm-professional"]}`;
+
+  if (brandVoiceUsed) {
+    const examples = safeArray<BrandVoiceExample>(hotel.brand_voice_examples);
+    if (examples.length > 0) {
+      sys += "\n\nLEARN FROM THESE EXAMPLES OF HOW THE HOTEL MANAGER ACTUALLY RESPONDS:\n";
+      examples.forEach((ex, i) => {
+        sys += `\n--- Example ${i + 1} ---\nGUEST WROTE (${ex.rating}★): "${ex.review_text}"\nHOTEL RESPONDED: "${ex.response_text}"\n`;
+      });
+      sys += "\nMatch this voice, vocabulary, sentence structure, and personality EXACTLY. This is the brand voice you must replicate.";
+    }
+  }
+
+  const dos = safeArray<string>(hotel.brand_voice_dos);
+  if (dos.length > 0) {
+    sys += "\n\nALWAYS DO:\n" + dos.map((d) => `- ${d}`).join("\n");
+  }
+
+  const donts = safeArray<string>(hotel.brand_voice_donts);
+  if (donts.length > 0) {
+    sys += "\n\nNEVER DO:\n" + donts.map((d) => `- ${d}`).join("\n");
+  }
+
+  if (hotel.brand_voice_locked_opening?.trim()) {
+    sys += `\n\nMUST START WITH EXACTLY: "${hotel.brand_voice_locked_opening.trim()}"`;
+  }
+
+  if (hotel.brand_voice_locked_closing?.trim()) {
+    sys += `\n\nMUST END WITH EXACTLY: "${hotel.brand_voice_locked_closing.trim()}"`;
+  } else {
+    sys += `\n\nEnd with this sign-off on a new line: "Kind regards, ${responseSignature}"`;
+  }
+
+  sys += `\n\nRESPOND IN: ${responseLanguage}`;
+  if (responseLanguage !== "en") {
+    const langName = LANG_NAMES[responseLanguage] ?? responseLanguage;
+    sys += ` (${langName}). The response must be entirely in this language, including the signature.`;
+  }
+
+  return sys;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,9 +128,23 @@ export async function POST(req: NextRequest) {
       platform?: string | null;
       signature?: string | null;
       user_id?: string | null;
+      hotel_id?: string | null;
+      response_language_override?: string | null;
+      original_language?: string | null;
     };
 
-    const { review_text, rating, reviewer_name, platform, signature, user_id } = body;
+    const {
+      review_text,
+      rating,
+      reviewer_name,
+      platform,
+      signature,
+      user_id,
+      hotel_id,
+      response_language_override,
+      original_language,
+    } = body;
+
     const responseSignature =
       signature && String(signature).trim() !== ""
         ? String(signature).trim()
@@ -42,10 +165,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Plan check ────────────────────────────────────────────────────────────
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+    // ── Plan check ────────────────────────────────────────────────────────────
     let isEssential = false;
     let currentDraftsUsed = 0;
 
@@ -64,7 +187,6 @@ export async function POST(req: NextRequest) {
       const status = (profile?.subscription_status as string | null) ?? "free";
       const isActive = status === "active" || status === "trialing";
 
-      // Free plan: no AI drafts
       if (!isActive) {
         return NextResponse.json(
           {
@@ -82,7 +204,6 @@ export async function POST(req: NextRequest) {
         const draftsUsed = (profile?.ai_drafts_used as number | null) ?? 0;
         const resetAt = profile?.ai_drafts_reset_at as string | null;
 
-        // Reset counter if more than 30 days since last reset
         const daysSinceReset = resetAt
           ? Math.floor((Date.now() - new Date(resetAt).getTime()) / 86400000)
           : 999;
@@ -111,11 +232,89 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Fetch brand voice + language settings ─────────────────────────────────
+    let hotelData: HotelBrandVoice | null = null;
+    let brandVoiceUsed = false;
+    let examplesCount = 0;
+    let responseLanguage = "en";
+
+    if (hotel_id && supabaseUrl && serviceRoleKey) {
+      const supabase = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { persistSession: false },
+      });
+      const { data } = await supabase
+        .from("hotels")
+        .select(
+          "name, brand_voice_enabled, brand_voice_examples, brand_voice_locked_opening, brand_voice_locked_closing, brand_voice_tone, brand_voice_dos, brand_voice_donts, default_response_language, supported_response_languages",
+        )
+        .eq("id", hotel_id)
+        .maybeSingle();
+
+      if (data) {
+        hotelData = data as HotelBrandVoice;
+
+        // Determine response language
+        const guestLang = original_language || "en";
+        const defaultLang = hotelData.default_response_language || "match-guest";
+
+        if (response_language_override) {
+          responseLanguage = response_language_override;
+        } else if (defaultLang === "match-guest") {
+          responseLanguage = guestLang;
+        } else if (defaultLang === "auto") {
+          const supported = safeArray<string>(hotelData.supported_response_languages);
+          responseLanguage = supported.includes(guestLang) ? guestLang : "en";
+        } else {
+          responseLanguage = defaultLang;
+        }
+
+        // Brand voice
+        const examples = safeArray<BrandVoiceExample>(hotelData.brand_voice_examples);
+        examplesCount = examples.length;
+        brandVoiceUsed = !!(hotelData.brand_voice_enabled && examplesCount >= 1);
+      }
+    }
+
     // ── Generate draft ────────────────────────────────────────────────────────
     const reviewerName = reviewer_name ?? "Guest";
     const ratingLabel =
       rating !== null && rating !== undefined && rating !== "" ? String(rating) : "—";
     const platformLabel = platform ?? "unknown";
+
+    let requestBody: Record<string, unknown>;
+
+    if (hotelData) {
+      // Brand voice / language aware prompt using system + user
+      const systemPrompt = buildSystemPrompt(
+        hotelData,
+        responseSignature,
+        responseLanguage,
+        brandVoiceUsed,
+      );
+      requestBody = {
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 350,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: `Reviewer: ${reviewerName}\nRating: ${ratingLabel}/5\nPlatform: ${platformLabel}\nReview: ${review_text}`,
+          },
+        ],
+      };
+    } else {
+      // Legacy prompt (no hotel_id)
+      requestBody = {
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 300,
+        messages: [
+          {
+            role: "user",
+            content: `You are a professional hotel manager writing a response to a guest review. Write a warm genuine response under 80 words. Reference specific details they mentioned. Do not start with "Dear valued guest". End with exactly this sign-off on a new line: "Kind regards, ${responseSignature}"\n\nReviewer: ${reviewerName}\nRating: ${ratingLabel}/5\nPlatform: ${platformLabel}\nReview: ${review_text}`,
+          },
+        ],
+      };
+    }
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -124,21 +323,7 @@ export async function POST(req: NextRequest) {
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
       },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 300,
-        messages: [
-          {
-            role: "user",
-            content: `You are a professional hotel manager writing a response to a guest review. Write a warm genuine response under 80 words. Reference specific details they mentioned. Do not start with "Dear valued guest". End with exactly this sign-off on a new line: "Kind regards, ${responseSignature}"
-
-Reviewer: ${reviewerName}
-Rating: ${ratingLabel}/5
-Platform: ${platformLabel}
-Review: ${review_text}`,
-          },
-        ],
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const data = (await res.json()) as AnthropicMessageResponse;
@@ -167,7 +352,13 @@ Review: ${review_text}`,
         .eq("id", user_id);
     }
 
-    return NextResponse.json({ success: true, response: text });
+    return NextResponse.json({
+      success: true,
+      response: text,
+      brand_voice_used: brandVoiceUsed,
+      examples_count: examplesCount,
+      response_language: responseLanguage,
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ success: false, error: message }, { status: 500 });

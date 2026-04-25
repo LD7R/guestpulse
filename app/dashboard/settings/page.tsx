@@ -62,6 +62,8 @@ type HotelRow = {
   locked_until: string | null;
   lock_started_at: string | null;
   last_sync_at: string | null;
+  default_response_language: string | null;
+  supported_response_languages: unknown;
 };
 
 type ActivePlatforms = {
@@ -195,6 +197,10 @@ export default function SettingsPage() {
   const [country, setCountry] = useState("");
   const [postalCode, setPostalCode] = useState("");
 
+  // Language preferences
+  const [defaultRespLang, setDefaultRespLang] = useState("match-guest");
+  const [supportedLangs, setSupportedLangs] = useState<string[]>(["en"]);
+
   // Platform URLs
   const [tripadvisorUrl, setTripadvisorUrl] = useState("");
   const [googleUrl, setGoogleUrl] = useState("");
@@ -315,6 +321,10 @@ export default function SettingsPage() {
           setExpediaUrl(h.expedia_url ?? "");
           setYelpUrl(h.yelp_url ?? "");
           setResponseSignature(h.response_signature?.trim() || "The Management Team");
+          setDefaultRespLang(h.default_response_language ?? "match-guest");
+          if (Array.isArray(h.supported_response_languages)) {
+            setSupportedLangs(h.supported_response_languages as string[]);
+          }
           if (h.active_platforms) {
             try {
               const ap = typeof h.active_platforms === "string" ? JSON.parse(h.active_platforms) as ActivePlatforms : h.active_platforms as ActivePlatforms;
@@ -387,7 +397,7 @@ export default function SettingsPage() {
       const lockUntil = new Date(now + 28 * 24 * 60 * 60 * 1000).toISOString();
       const lockStartedAt = new Date(now).toISOString();
 
-      const alwaysEditable = { address: address.trim() || null, city: city.trim() || null, country: country.trim() || null, postal_code: postalCode.trim() || null, phone: phone.trim() || null, website: website.trim() || null };
+      const alwaysEditable = { address: address.trim() || null, city: city.trim() || null, country: country.trim() || null, postal_code: postalCode.trim() || null, phone: phone.trim() || null, website: website.trim() || null, default_response_language: defaultRespLang, supported_response_languages: supportedLangs };
       const lockedFields = { name: hotelName.trim(), room_count };
 
       let saveError;
@@ -848,6 +858,72 @@ export default function SettingsPage() {
                 )}
               </div>
             )}
+
+            {/* ── Language preferences ── */}
+            <div style={{ ...card, padding: 28, marginBottom: 16 }}>
+              <SectionLabel>Language preferences</SectionLabel>
+              <p style={{ fontSize: 12, color: "#555555", margin: "0 0 16px 0" }}>Default behavior for AI response drafts</p>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", fontSize: 13, color: "#888888", marginBottom: 6 }}>
+                  Default response language
+                </label>
+                <select
+                  value={defaultRespLang}
+                  onChange={(e) => setDefaultRespLang(e.target.value)}
+                  style={{ ...inp, height: 38, padding: "0 12px", cursor: "pointer" }}
+                >
+                  <option value="match-guest">Match the guest&apos;s language (recommended)</option>
+                  <option value="en">Always English</option>
+                  <option value="auto">Auto: guest&apos;s language if supported, else English</option>
+                </select>
+              </div>
+
+              {defaultRespLang === "auto" && (
+                <div>
+                  <label style={{ display: "block", fontSize: 13, color: "#888888", marginBottom: 10 }}>
+                    Languages I&apos;m comfortable responding in:
+                  </label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {[
+                      { code: "en", label: "English" },
+                      { code: "nl", label: "Dutch" },
+                      { code: "de", label: "German" },
+                      { code: "fr", label: "French" },
+                      { code: "es", label: "Spanish" },
+                      { code: "it", label: "Italian" },
+                      { code: "pt", label: "Portuguese" },
+                      { code: "id", label: "Indonesian" },
+                    ].map(({ code, label }) => {
+                      const isChecked = supportedLangs.includes(code);
+                      const isEnglish = code === "en";
+                      return (
+                        <label key={code} style={{ display: "flex", alignItems: "center", gap: 8, cursor: isEnglish ? "default" : "pointer", fontSize: 13, color: "#f0f0f0" }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={isEnglish}
+                            onChange={(e) => {
+                              if (isEnglish) return;
+                              if (e.target.checked) {
+                                setSupportedLangs((prev) => [...prev, code]);
+                              } else {
+                                setSupportedLangs((prev) => prev.filter((l) => l !== code));
+                              }
+                            }}
+                            style={{ width: 14, height: 14, cursor: isEnglish ? "default" : "pointer" }}
+                          />
+                          {label} {isEnglish && <span style={{ fontSize: 11, color: "#555555" }}>(always included)</span>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p style={{ fontSize: 12, color: "#444444", marginTop: 12, marginBottom: 0, lineHeight: 1.6 }}>
+                    Reviews in unsupported languages will get English responses.
+                  </p>
+                </div>
+              )}
+            </div>
 
             <SaveRow saving={savingHotel} label="Save hotel details" />
           </form>

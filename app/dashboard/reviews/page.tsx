@@ -319,6 +319,17 @@ export default function ReviewsInboxPage() {
   const { draftResponses, patchDraftResponse, removeDraft } = useDraftResponses();
   const draftAbortRef = useRef<AbortController | null>(null);
 
+  // Hotel context (cached so we don't re-fetch on every draft)
+  const [cachedHotelId, setCachedHotelId] = useState<string | null>(null);
+  const [cachedSignature, setCachedSignature] = useState<string>("The Management Team");
+  const [cachedBrandVoiceEnabled, setCachedBrandVoiceEnabled] = useState(false);
+  const [cachedExamplesCount, setCachedExamplesCount] = useState(0);
+  const [defaultResponseLanguage, setDefaultResponseLanguage] = useState("match-guest");
+  // Language override for drafts — null means use hotel default
+  const [draftLanguageOverride, setDraftLanguageOverride] = useState<string | null>(null);
+  // brand_voice_used per review id
+  const [brandVoiceMap, setBrandVoiceMap] = useState<Record<string, { used: boolean; count: number }>>({});
+
   const [syncing, setSyncing] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [classifyRemaining, setClassifyRemaining] = useState(0);
@@ -475,14 +486,6 @@ export default function ReviewsInboxPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) throw new Error("You must be signed in.");
 
-      const { data: hotelData } = await supabase
-        .from("hotels")
-        .select("response_signature")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      const signature = hotelData?.response_signature?.trim() || "The Management Team";
-
       const res = await fetch("/api/draft-response", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -491,13 +494,22 @@ export default function ReviewsInboxPage() {
           rating: review.rating ?? review.stars ?? null,
           reviewer_name: review.reviewer_name ?? review.name ?? null,
           platform: review.platform ?? review.source ?? null,
-          signature,
-          user_id: user?.id ?? null,
+          signature: cachedSignature,
+          user_id: user.id,
+          hotel_id: cachedHotelId,
+          response_language_override: draftLanguageOverride,
         }),
         signal: controller.signal,
       });
 
-      const json = (await res.json()) as { success?: boolean; response?: string; error?: string; upgrade_required?: boolean };
+      const json = (await res.json()) as {
+        success?: boolean;
+        response?: string;
+        error?: string;
+        upgrade_required?: boolean;
+        brand_voice_used?: boolean;
+        examples_count?: number;
+      };
       if (controller.signal.aborted) return;
       if (json.upgrade_required) {
         patchDraftResponse(id, { isOpen: false, status: "idle" });
@@ -506,6 +518,12 @@ export default function ReviewsInboxPage() {
       }
       if (!res.ok || json.success !== true || !json.response) throw new Error(json.error ?? "Failed to generate draft");
       patchDraftResponse(id, { status: "done", text: json.response });
+      if (json.brand_voice_used !== undefined) {
+        setBrandVoiceMap((prev) => ({
+          ...prev,
+          [id]: { used: json.brand_voice_used ?? false, count: json.examples_count ?? 0 },
+        }));
+      }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
       patchDraftResponse(id, { status: "error", text: err instanceof Error ? err.message : "Failed to generate draft" });
@@ -730,8 +748,22 @@ export default function ReviewsInboxPage() {
       if (!user?.id) { if (!cancelled) { setError("You must be signed in."); setLoading(false); } return; }
 
       const { data: hotels, error: hotelsError } = await supabase
-        .from("hotels").select("id").eq("user_id", user.id);
+        .from("hotels")
+        .select("id, response_signature, brand_voice_enabled, brand_voice_examples, default_response_language")
+        .eq("user_id", user.id);
       if (hotelsError) { if (!cancelled) { setError(hotelsError.message); setLoading(false); } return; }
+
+      // Cache hotel context for draft generation
+      if (!cancelled && hotels && hotels.length > 0) {
+        const h = hotels[0] as Record<string, unknown>;
+        setCachedHotelId((h.id as string | null) ?? null);
+        setCachedSignature((h.response_signature as string | null)?.trim() || "The Management Team");
+        const bvEnabled = !!(h.brand_voice_enabled);
+        setCachedBrandVoiceEnabled(bvEnabled);
+        const exArr = Array.isArray(h.brand_voice_examples) ? h.brand_voice_examples as unknown[] : [];
+        setCachedExamplesCount(exArr.length);
+        setDefaultResponseLanguage((h.default_response_language as string | null) ?? "match-guest");
+      }
 
       const hotelIds = (hotels ?? []).map((h: Hotel) => h.id).filter(Boolean);
       if (hotelIds.length === 0) { if (!cancelled) { setReviews([]); setLoading(false); } return; }
@@ -889,7 +921,41 @@ export default function ReviewsInboxPage() {
             {summary.total} reviews · {summary.needingResponse} need response
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {/* Language dropdown for AI drafts */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.textMuted }}>
+            <span style={{ flexShrink: 0 }}>Draft in:</span>
+            <select
+              value={draftLanguageOverride ?? defaultResponseLanguage}
+              onChange={(e) => {
+                const v = e.target.value;
+                setDraftLanguageOverride(v === defaultResponseLanguage ? null : v);
+              }}
+              style={{
+                background: "#111111",
+                border: "1px solid #2a2a2a",
+                borderRadius: 5,
+                padding: "4px 8px",
+                color: C.textSecondary,
+                fontSize: 12,
+                outline: "none",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              <option value="match-guest">Guest&apos;s language</option>
+              <option value="en">English</option>
+              <option value="nl">Dutch</option>
+              <option value="de">German</option>
+              <option value="fr">French</option>
+              <option value="es">Spanish</option>
+              <option value="it">Italian</option>
+              <option value="pt">Portuguese</option>
+              <option value="id">Indonesian</option>
+              <option value="zh">Chinese</option>
+              <option value="ja">Japanese</option>
+            </select>
+          </div>
           <button
             type="button"
             disabled={classifying || syncing}
@@ -1429,6 +1495,27 @@ export default function ReviewsInboxPage() {
                         {draft.markError && (
                           <p style={{ fontSize: 12, color: C.red, marginTop: 6, marginBottom: 0 }}>{draft.markError}</p>
                         )}
+                        {/* Brand voice indicator */}
+                        {(() => {
+                          const bv = brandVoiceMap[reviewId];
+                          if (bv?.used) {
+                            return (
+                              <p style={{ fontSize: 11, color: C.green, marginTop: 8, marginBottom: 0 }}>
+                                ✓ Trained on your brand voice ({bv.count} example{bv.count !== 1 ? "s" : ""})
+                              </p>
+                            );
+                          }
+                          if (!cachedBrandVoiceEnabled) {
+                            return (
+                              <p style={{ fontSize: 11, color: C.textMuted, marginTop: 8, marginBottom: 0 }}>
+                                <a href="/dashboard/brand-voice" style={{ color: C.textMuted, textDecoration: "underline" }}>
+                                  Enable brand voice for personalized responses →
+                                </a>
+                              </p>
+                            );
+                          }
+                          return null;
+                        })()}
                       </>
                     )}
                   </div>
