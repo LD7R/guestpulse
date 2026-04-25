@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { useRouter } from "next/navigation";
 
 import { defaultDraftResponse, useDraftResponses } from "@/lib/useDraftResponses";
+import Spinner from "@/app/components/Spinner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Hotel = {
@@ -647,9 +648,18 @@ export default function ReviewsInboxPage() {
       for (const { platform } of platformsToSync) progressInit[platform] = "syncing";
       setSyncProgress(progressInit);
 
+      // Dispatch sync-start event for layout terminal card
+      window.dispatchEvent(new CustomEvent("gp:sync-start", {
+        detail: { platforms: platformsToSync.map((p) => p.platform) },
+      }));
+
       const tasks = platformsToSync.map(({ platform, url }) =>
         syncPlatform(platform, url, hotel.id).then((result) => {
           setSyncProgress((prev) => ({ ...prev, [platform]: result.error ? "error" : "done" }));
+          // Dispatch per-platform progress event
+          window.dispatchEvent(new CustomEvent("gp:sync-progress", {
+            detail: { platform, status: result.error ? "error" : "done" },
+          }));
           return result;
         }),
       );
@@ -662,6 +672,12 @@ export default function ReviewsInboxPage() {
         .from("reviews")
         .select("*", { count: "exact", head: true })
         .eq("hotel_id", hotel.id);
+
+      const errorCount = results.filter((r) => r.error !== null).length;
+      // Dispatch sync-end event for layout toast + terminal card
+      window.dispatchEvent(new CustomEvent("gp:sync-end", {
+        detail: { totalNew, errorCount },
+      }));
 
       setSyncResult({
         timestamp: new Date(),
@@ -915,9 +931,9 @@ export default function ReviewsInboxPage() {
             type="button"
             disabled={classifying || syncing}
             onClick={() => void handleAutoClassify()}
-            style={secondaryBtn({ opacity: classifying || syncing ? 0.5 : 1, cursor: classifying || syncing ? "not-allowed" : "pointer" })}
+            style={{ ...secondaryBtn({ opacity: classifying || syncing ? 0.5 : 1, cursor: classifying || syncing ? "not-allowed" : "pointer" }), display: "flex", alignItems: "center", gap: 6 }}
           >
-            {classifying ? "Classifying…" : "✦ Auto-classify"}
+            {classifying ? <><Spinner size={12} color="#f0f0f0" /> Classifying…</> : "✦ Auto-classify"}
           </button>
           {classifyRemaining > 0 && !classifying && (
             <button
@@ -933,9 +949,9 @@ export default function ReviewsInboxPage() {
             type="button"
             disabled={syncing || classifying}
             onClick={() => void handleSyncAllReviews()}
-            style={primaryBtn(syncing || classifying)}
+            style={{ ...primaryBtn(syncing || classifying), display: "flex", alignItems: "center", gap: 6 }}
           >
-            {syncing ? "Syncing…" : "Sync all reviews"}
+            {syncing ? <><Spinner size={12} color="#0d0d0d" /> Syncing…</> : "Sync all reviews"}
           </button>
         </div>
       </header>

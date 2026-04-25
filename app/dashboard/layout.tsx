@@ -3,8 +3,10 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
+import PageLoadingBar from "@/app/components/PageLoadingBar";
+import TerminalSyncCard, { type SyncPlatformStatus } from "@/app/components/TerminalSyncCard";
 
 const labelStyle: CSSProperties = {
   fontSize: "10px",
@@ -77,6 +79,21 @@ export default function DashboardLayout({
   const [inboxUnrespondedCount, setInboxUnrespondedCount] = useState(0);
   const [primaryHotel, setPrimaryHotel] = useState<HotelSync | null>(null);
   const [autoSyncing, setAutoSyncing] = useState(false);
+
+  // Page loading bar
+  const [pageLoading, setPageLoading] = useState(false);
+  const prevPathname = useRef(pathname);
+
+  // Terminal sync card
+  const [syncState, setSyncState] = useState<{
+    active: boolean;
+    platforms: SyncPlatformStatus[];
+    startTime?: number;
+  }>({ active: false, platforms: [] });
+
+  // Toast
+  const [toast, setToast] = useState<{ message: string; type: "success" | "warning" } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     async function loadUser() {
@@ -156,6 +173,68 @@ export default function DashboardLayout({
     }
     void loadInboxBadge();
   }, [pathname]);
+
+  // Page loading bar: trigger on pathname change
+  useEffect(() => {
+    if (prevPathname.current !== pathname) {
+      prevPathname.current = pathname;
+      setPageLoading(true);
+      const t = setTimeout(() => setPageLoading(false), 600);
+      return () => clearTimeout(t);
+    }
+  }, [pathname]);
+
+  // Sync event bus listeners
+  useEffect(() => {
+    function onSyncStart(e: Event) {
+      const detail = (e as CustomEvent<{ platforms: string[] }>).detail;
+      const platforms: SyncPlatformStatus[] = (detail?.platforms ?? []).map((p) => ({
+        platform: p,
+        status: "syncing" as const,
+      }));
+      setSyncState({ active: true, platforms, startTime: Date.now() });
+    }
+
+    function onSyncProgress(e: Event) {
+      const detail = (e as CustomEvent<{ platform: string; status: "done" | "error" }>).detail;
+      if (!detail?.platform) return;
+      setSyncState((prev) => ({
+        ...prev,
+        platforms: prev.platforms.map((p) =>
+          p.platform === detail.platform ? { ...p, status: detail.status } : p,
+        ),
+      }));
+    }
+
+    function onSyncEnd(e: Event) {
+      const detail = (e as CustomEvent<{ totalNew: number; errorCount: number }>).detail;
+      const totalNew = detail?.totalNew ?? 0;
+      const errorCount = detail?.errorCount ?? 0;
+
+      // Show toast
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (errorCount > 0) {
+        setToast({ message: `Sync finished · ${errorCount} platform${errorCount > 1 ? "s" : ""} failed`, type: "warning" });
+      } else if (totalNew > 0) {
+        setToast({ message: `Sync complete · ${totalNew} new review${totalNew > 1 ? "s" : ""}`, type: "success" });
+      } else {
+        setToast({ message: "Sync complete · No new reviews", type: "success" });
+      }
+      toastTimerRef.current = setTimeout(() => setToast(null), 4000);
+
+      // Clear sync card after 2s
+      setTimeout(() => setSyncState({ active: false, platforms: [] }), 2000);
+    }
+
+    window.addEventListener("gp:sync-start", onSyncStart);
+    window.addEventListener("gp:sync-progress", onSyncProgress);
+    window.addEventListener("gp:sync-end", onSyncEnd);
+    return () => {
+      window.removeEventListener("gp:sync-start", onSyncStart);
+      window.removeEventListener("gp:sync-progress", onSyncProgress);
+      window.removeEventListener("gp:sync-end", onSyncEnd);
+    };
+  }, []);
 
   // Auto-sync when hotel is first loaded or hotel changes
   useEffect(() => {
@@ -356,7 +435,18 @@ export default function DashboardLayout({
         <NavLink href="/dashboard/pricing" icon="◈" label="Pricing" />
         <NavLink href="/dashboard/settings" icon="✉" label="Notifications" />
 
-        <div style={{ marginTop: "auto", padding: "16px" }}>
+        {/* Terminal sync card */}
+        {syncState.active && (
+          <div style={{ padding: "0 8px", marginTop: "auto" }}>
+            <TerminalSyncCard
+              visible={syncState.active}
+              platforms={syncState.platforms}
+              startTime={syncState.startTime}
+            />
+          </div>
+        )}
+
+        <div style={{ marginTop: syncState.active ? 0 : "auto", padding: "16px" }}>
           {primaryHotel?.locked_until &&
             new Date(primaryHotel.locked_until) > new Date() && (
               <div
@@ -480,7 +570,55 @@ export default function DashboardLayout({
         </div>
       </header>
 
-      <main className="main-content">{children}</main>
+      <main className="main-content" style={{ position: "relative" }}>
+        <PageLoadingBar loading={pageLoading} />
+        {children}
+      </main>
+
+      {/* Toast notification */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            right: 24,
+            zIndex: 1000,
+            background: toast.type === "success" ? "#052e16" : "#1c1200",
+            border: `1px solid ${toast.type === "success" ? "#166534" : "#3a2800"}`,
+            borderRadius: 8,
+            padding: "12px 16px",
+            fontSize: 13,
+            color: toast.type === "success" ? "#4ade80" : "#fbbf24",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+            animation: "gpFadeInUp 0.25s ease",
+            maxWidth: 320,
+          }}
+        >
+          <span style={{ fontSize: 14 }}>{toast.type === "success" ? "✓" : "⚠"}</span>
+          <span>{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            style={{
+              marginLeft: "auto",
+              background: "none",
+              border: "none",
+              color: "inherit",
+              opacity: 0.5,
+              cursor: "pointer",
+              fontSize: 14,
+              padding: 0,
+              lineHeight: 1,
+            }}
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <nav className="bottom-nav" aria-label="Mobile navigation">
         {[
@@ -520,6 +658,10 @@ export default function DashboardLayout({
             @keyframes sync-pulse {
               0%, 100% { opacity: 0.5; }
               50% { opacity: 1; }
+            }
+            @keyframes gpFadeInUp {
+              from { opacity: 0; transform: translateY(8px); }
+              to { opacity: 1; transform: translateY(0); }
             }
             .main-content {
               margin-left: 220px;
