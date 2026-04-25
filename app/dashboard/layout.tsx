@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -40,6 +40,7 @@ type HotelSync = {
   first_sync_completed: boolean | null;
   last_sync_at: string | null;
   locked_until: string | null;
+  brand_voice_completed_at: string | null;
 };
 
 function computeInitials(fullName: string | null | undefined, email: string | null | undefined): string {
@@ -130,7 +131,7 @@ export default function DashboardLayout({
       }
       const { data } = await supabase
         .from("hotels")
-        .select("id, name, tripadvisor_url, google_url, booking_url, first_sync_completed, last_sync_at, locked_until")
+        .select("id, name, tripadvisor_url, google_url, booking_url, first_sync_completed, last_sync_at, locked_until, brand_voice_completed_at")
         .eq("user_id", user.id)
         .maybeSingle();
       setPrimaryHotel((data as HotelSync | null) ?? null);
@@ -303,7 +304,7 @@ export default function DashboardLayout({
     );
     const { data } = await supabase
       .from("hotels")
-      .select("id, name, tripadvisor_url, google_url, booking_url, first_sync_completed, last_sync_at, locked_until")
+      .select("id, name, tripadvisor_url, google_url, booking_url, first_sync_completed, last_sync_at, locked_until, brand_voice_completed_at")
       .eq("id", hotel.id)
       .maybeSingle();
     if (data) setPrimaryHotel(data as HotelSync);
@@ -348,11 +349,13 @@ export default function DashboardLayout({
     icon,
     label,
     badge,
+    setupBadge,
   }: {
     href: string;
-    icon: string;
+    icon: ReactNode;
     label: string;
     badge?: number;
+    setupBadge?: boolean;
   }) => {
     const active = isActive(href);
     return (
@@ -364,11 +367,28 @@ export default function DashboardLayout({
           color: active ? "#f0f0f0" : "#888888",
         }}
       >
-        <span style={{ width: 18, textAlign: "center", opacity: 0.9 }} aria-hidden>
+        <span style={{ width: 18, textAlign: "center", opacity: 0.9, display: "flex", alignItems: "center", justifyContent: "center" }} aria-hidden>
           {icon}
         </span>
         <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
-        {badge != null && badge > 0 ? (
+        {setupBadge ? (
+          <span
+            style={{
+              marginLeft: "auto",
+              padding: "1px 6px",
+              borderRadius: 3,
+              background: "#1a3a1a",
+              color: "#4ade80",
+              fontSize: 9,
+              fontWeight: 700,
+              textAlign: "center",
+              lineHeight: 1.4,
+              letterSpacing: "0.04em",
+            }}
+          >
+            SETUP
+          </span>
+        ) : badge != null && badge > 0 ? (
           <span
             style={{
               marginLeft: "auto",
@@ -429,7 +449,16 @@ export default function DashboardLayout({
         <div style={labelStyle}>Intelligence</div>
         <NavLink href="/dashboard/sentiment" icon="∿" label="Sentiment trends" />
         <NavLink href="/dashboard/benchmarking" icon="◎" label="Competitors" />
-        <NavLink href="/dashboard/brand-voice" icon="◉" label="Brand voice" />
+        <NavLink
+          href="/dashboard/brand-voice"
+          icon={
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          }
+          label="Brand voice"
+          setupBadge={!!primaryHotel && !primaryHotel.brand_voice_completed_at}
+        />
 
         <div style={labelStyle}>Settings</div>
         <NavLink href="/dashboard/settings" icon="⚙" label="Settings" />

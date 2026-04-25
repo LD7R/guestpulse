@@ -30,6 +30,7 @@ type Hotel = {
   historical_avg_rating?: number | null;
   historical_review_count?: number | null;
   active_platforms?: unknown;
+  brand_voice_completed_at?: string | null;
 };
 
 type ReviewRow = {
@@ -337,7 +338,7 @@ function DashboardOverviewContent() {
 
     const { data: hotels, error: hotelsError } = await supabase
       .from("hotels")
-      .select("id, name, tripadvisor_url, google_url, booking_url, trip_url, expedia_url, yelp_url, response_signature, first_sync_completed, last_sync_at, historical_avg_rating, historical_review_count")
+      .select("id, name, tripadvisor_url, google_url, booking_url, trip_url, expedia_url, yelp_url, response_signature, first_sync_completed, last_sync_at, historical_avg_rating, historical_review_count, brand_voice_completed_at")
       .eq("user_id", user.id);
 
     if (hotelsError) throw hotelsError;
@@ -1308,6 +1309,46 @@ function DashboardOverviewContent() {
             }}
           >
             Upgrade to Professional for unlimited →
+          </button>
+        </div>
+      )}
+
+      {/* Brand voice setup prompt */}
+      {hasHotel && primaryHotel && !primaryHotel.brand_voice_completed_at && (
+        <div
+          style={{
+            background: "#0a1a0a",
+            border: "1px solid #1a3a1a",
+            borderRadius: 6,
+            padding: "10px 16px",
+            marginBottom: 16,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <span style={{ fontSize: 13, color: "#4ade80" }}>
+            💡 Train your AI voice — takes 3 minutes
+          </span>
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard/brand-voice")}
+            style={{
+              background: "transparent",
+              border: "1px solid #2a5a2a",
+              borderRadius: 4,
+              padding: "5px 12px",
+              fontSize: 11,
+              color: "#4ade80",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              fontFamily: "inherit",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "#0d1a0d"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+          >
+            Set up brand voice →
           </button>
         </div>
       )}

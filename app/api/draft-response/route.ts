@@ -12,7 +12,13 @@
  * --   add column if not exists brand_voice_dos jsonb default '[]',
  * --   add column if not exists brand_voice_donts jsonb default '[]',
  * --   add column if not exists default_response_language text default 'match-guest',
- * --   add column if not exists supported_response_languages jsonb default '["en"]';
+ * --   add column if not exists supported_response_languages jsonb default '["en"]',
+ * --   add column if not exists brand_voice_traits jsonb default '[]',
+ * --   add column if not exists response_length text default 'medium',
+ * --   add column if not exists brand_examples jsonb default '[]',
+ * --   add column if not exists brand_guidelines text default '',
+ * --   add column if not exists response_language_mode text default 'match-guest',
+ * --   add column if not exists brand_voice_completed_at timestamptz;
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -41,9 +47,21 @@ type HotelBrandVoice = {
   brand_voice_donts?: unknown;
   default_response_language?: string | null;
   supported_response_languages?: unknown;
+  // Wizard-trained fields
+  brand_voice_traits?: unknown;
+  response_length?: string | null;
+  brand_examples?: unknown;
+  brand_guidelines?: string | null;
+  response_language_mode?: string | null;
 };
 
 const ESSENTIAL_DRAFT_LIMIT = 10;
+
+const LENGTH_GUIDE: Record<string, string> = {
+  brief: "Write a brief, punchy response under 60 words.",
+  medium: "Write a balanced response of 60–100 words.",
+  detailed: "Write a thorough, personal response of 100+ words.",
+};
 
 const TONE_INSTRUCTIONS: Record<string, string> = {
   "warm-professional": "Friendly but maintain professional distance.",
@@ -75,21 +93,45 @@ function buildSystemPrompt(
   const hotelName = hotel.name || "our hotel";
   const tone = (hotel.brand_voice_tone as string) || "warm-professional";
 
-  let sys = `You are drafting a response to a hotel review on behalf of "${hotelName}". Write a genuine, helpful response under 80 words. Do not start with "Dear valued guest". Reference specific details from the review.`;
+  // Length guidance — wizard field takes priority
+  const lengthKey = (hotel.response_length as string | null) ?? "medium";
+  const lengthGuide = LENGTH_GUIDE[lengthKey] ?? "Write a genuine, helpful response under 80 words.";
+
+  let sys = `You are drafting a response to a hotel review on behalf of "${hotelName}". ${lengthGuide} Do not start with "Dear valued guest". Reference specific details from the review.`;
 
   sys += `\n\nTONE: ${TONE_INSTRUCTIONS[tone] ?? TONE_INSTRUCTIONS["warm-professional"]}`;
 
-  if (brandVoiceUsed) {
+  // Personality traits from wizard
+  const traits = safeArray<string>(hotel.brand_voice_traits);
+  if (traits.length > 0) {
+    sys += `\n\nPERSONALITY TRAITS TO EMBODY: ${traits.join(", ")}. Let these traits shape every word choice.`;
+  }
+
+  // Wizard-trained examples (simple strings)
+  const brandExamples = safeArray<string>(hotel.brand_examples);
+  if (brandExamples.length > 0) {
+    sys += "\n\nEXAMPLES OF HOW THIS HOTEL ACTUALLY RESPONDS (replicate this voice exactly):\n";
+    brandExamples.slice(0, 3).forEach((ex, i) => {
+      sys += `\n--- Example ${i + 1} ---\n"${ex}"\n`;
+    });
+  } else if (brandVoiceUsed) {
+    // Fall back to legacy examples format
     const examples = safeArray<BrandVoiceExample>(hotel.brand_voice_examples);
     if (examples.length > 0) {
       sys += "\n\nLEARN FROM THESE EXAMPLES OF HOW THE HOTEL MANAGER ACTUALLY RESPONDS:\n";
       examples.forEach((ex, i) => {
         sys += `\n--- Example ${i + 1} ---\nGUEST WROTE (${ex.rating}★): "${ex.review_text}"\nHOTEL RESPONDED: "${ex.response_text}"\n`;
       });
-      sys += "\nMatch this voice, vocabulary, sentence structure, and personality EXACTLY. This is the brand voice you must replicate.";
+      sys += "\nMatch this voice, vocabulary, sentence structure, and personality EXACTLY.";
     }
   }
 
+  // Free-form brand guidelines from wizard
+  if (hotel.brand_guidelines?.trim()) {
+    sys += `\n\nBRAND GUIDELINES:\n${hotel.brand_guidelines.trim()}`;
+  }
+
+  // Legacy dos / donts
   const dos = safeArray<string>(hotel.brand_voice_dos);
   if (dos.length > 0) {
     sys += "\n\nALWAYS DO:\n" + dos.map((d) => `- ${d}`).join("\n");
@@ -245,7 +287,7 @@ export async function POST(req: NextRequest) {
       const { data } = await supabase
         .from("hotels")
         .select(
-          "name, brand_voice_enabled, brand_voice_examples, brand_voice_locked_opening, brand_voice_locked_closing, brand_voice_tone, brand_voice_dos, brand_voice_donts, default_response_language, supported_response_languages",
+          "name, brand_voice_enabled, brand_voice_examples, brand_voice_locked_opening, brand_voice_locked_closing, brand_voice_tone, brand_voice_dos, brand_voice_donts, default_response_language, supported_response_languages, brand_voice_traits, response_length, brand_examples, brand_guidelines, response_language_mode",
         )
         .eq("id", hotel_id)
         .maybeSingle();
@@ -253,12 +295,20 @@ export async function POST(req: NextRequest) {
       if (data) {
         hotelData = data as HotelBrandVoice;
 
-        // Determine response language
+        // Determine response language (wizard field takes priority over legacy)
         const guestLang = original_language || "en";
+        const langMode = (hotelData.response_language_mode as string | null) ?? null;
         const defaultLang = hotelData.default_response_language || "match-guest";
 
         if (response_language_override) {
           responseLanguage = response_language_override;
+        } else if (langMode === "always-english") {
+          responseLanguage = "en";
+        } else if (langMode === "match-guest") {
+          responseLanguage = guestLang;
+        } else if (langMode === "auto") {
+          const supported = safeArray<string>(hotelData.supported_response_languages);
+          responseLanguage = supported.includes(guestLang) ? guestLang : "en";
         } else if (defaultLang === "match-guest") {
           responseLanguage = guestLang;
         } else if (defaultLang === "auto") {
@@ -268,10 +318,15 @@ export async function POST(req: NextRequest) {
           responseLanguage = defaultLang;
         }
 
-        // Brand voice
-        const examples = safeArray<BrandVoiceExample>(hotelData.brand_voice_examples);
-        examplesCount = examples.length;
-        brandVoiceUsed = !!(hotelData.brand_voice_enabled && examplesCount >= 1);
+        // Brand voice: wizard examples + legacy examples
+        const wizardExamples = safeArray<string>(hotelData.brand_examples);
+        const legacyExamples = safeArray<BrandVoiceExample>(hotelData.brand_voice_examples);
+        examplesCount = wizardExamples.length > 0 ? wizardExamples.length : legacyExamples.length;
+        brandVoiceUsed = !!(
+          hotelData.brand_voice_enabled &&
+          (examplesCount >= 1 ||
+            safeArray<string>(hotelData.brand_voice_traits).length >= 1)
+        );
       }
     }
 
