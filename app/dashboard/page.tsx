@@ -75,15 +75,6 @@ type TimeSeriesReview = {
   responded?: boolean | null;
 };
 
-type SyncResult = {
-  timestamp: Date;
-  platforms: { platform: string; count: number; error: string | null }[];
-  totalNew: number;
-  totalReviews: number;
-};
-
-type SyncProgress = Record<string, "idle" | "syncing" | "done" | "error">;
-
 function normalizeRating(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   const n = typeof value === "number" ? value : Number(value);
@@ -319,9 +310,6 @@ function DashboardOverviewContent() {
   const [aiDraftsUsed, setAiDraftsUsed] = useState<number>(0);
   const [pdfToast, setPdfToast] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
-  const [syncProgress, setSyncProgress] = useState<SyncProgress>({ tripadvisor: "idle", google: "idle", booking: "idle", trip: "idle", expedia: "idle", yelp: "idle" });
-  const [activeSyncPlatforms, setActiveSyncPlatforms] = useState<string[]>([]);
 
   const [urgentReviewsList, setUrgentReviewsList] = useState<ReviewRow[]>([]);
   const [competitorReviewsForTrend, setCompetitorReviewsForTrend] = useState<
@@ -704,7 +692,6 @@ function DashboardOverviewContent() {
   }
 
   async function handleSyncAllReviews() {
-    setSyncResult(null);
     if (!primaryHotel?.id) return;
 
     const activePlatforms = primaryHotel.active_platforms
@@ -721,21 +708,20 @@ function DashboardOverviewContent() {
     if (primaryHotel.expedia_url?.trim() && activePlatforms.expedia !== false) platformsToSync.push({ platform: "expedia", url: primaryHotel.expedia_url.trim() });
     if (primaryHotel.yelp_url?.trim() && activePlatforms.yelp !== false) platformsToSync.push({ platform: "yelp", url: primaryHotel.yelp_url.trim() });
 
-    if (platformsToSync.length === 0) {
-      setSyncResult({ timestamp: new Date(), platforms: [], totalNew: 0, totalReviews: totalReviews });
-      return;
-    }
+    if (platformsToSync.length === 0) return;
 
-    setActiveSyncPlatforms(platformsToSync.map((p) => p.platform));
-    const progressInit: SyncProgress = { tripadvisor: "idle", google: "idle", booking: "idle", trip: "idle", expedia: "idle", yelp: "idle" };
-    for (const { platform } of platformsToSync) progressInit[platform] = "syncing";
-    setSyncProgress(progressInit);
+    // Dispatch sync-start event for layout terminal card
+    window.dispatchEvent(new CustomEvent("gp:sync-start", {
+      detail: { platforms: platformsToSync.map((p) => p.platform) },
+    }));
 
     setSyncing(true);
     try {
       const tasks = platformsToSync.map(({ platform, url }) =>
         syncPlatform(platform, url, primaryHotel.id).then((result) => {
-          setSyncProgress((prev) => ({ ...prev, [platform]: result.error ? "error" : "done" }));
+          window.dispatchEvent(new CustomEvent("gp:sync-progress", {
+            detail: { platform, status: result.error ? "error" : "done" },
+          }));
           return result;
         }),
       );
@@ -743,29 +729,18 @@ function DashboardOverviewContent() {
       const settled = await Promise.allSettled(tasks);
       const results = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
       const totalNew = results.reduce((s, r) => s + r.count, 0);
+      const errorCount = results.filter((r) => r.error !== null).length;
+
+      window.dispatchEvent(new CustomEvent("gp:sync-end", {
+        detail: { totalNew, errorCount },
+      }));
 
       await loadDashboard();
       router.refresh();
-
-      setSyncResult({
-        timestamp: new Date(),
-        platforms: results.map((r) => ({ platform: r.platform, count: r.count, error: r.error })),
-        totalNew,
-        totalReviews: totalReviews + totalNew,
-      });
     } finally {
       setSyncing(false);
     }
   }
-
-  // Auto-dismiss sync result panel if 0 new reviews after 5s
-  useEffect(() => {
-    if (!syncResult || syncResult.totalNew > 0) return;
-    const hasFailed = syncResult.platforms.some((p) => p.error);
-    if (hasFailed) return;
-    const timer = setTimeout(() => setSyncResult(null), 5000);
-    return () => clearTimeout(timer);
-  }, [syncResult]);
 
   async function handleMarkResponded(reviewId: string) {
     const supabase = createBrowserClient(
@@ -1193,105 +1168,6 @@ function DashboardOverviewContent() {
           </div>
         </div>
       </header>
-
-      {/* ── Sync progress panel ─────────────────────────────────────────── */}
-      {syncing && activeSyncPlatforms.length > 0 && (
-        <div style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, padding: "14px 18px", marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: "#888888", marginBottom: 10 }}>Syncing reviews...</div>
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            {activeSyncPlatforms.map((platform) => {
-              const status = syncProgress[platform];
-              if (status === "idle") return null;
-              const platformLabel = platform === "tripadvisor" ? "TripAdvisor" : platform === "google" ? "Google" : platform === "booking" ? "Booking" : platform === "trip" ? "Trip.com" : platform === "expedia" ? "Expedia" : platform === "yelp" ? "Yelp" : platform;
-              const platformColor = platform === "tripadvisor" ? "#4ade80" : platform === "google" ? "#60a5fa" : platform === "booking" ? "#a78bfa" : platform === "trip" ? "#60a5fa" : platform === "expedia" ? "#a78bfa" : "#f87171";
-              return (
-                <div key={platform} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {status === "syncing" ? (
-                    <span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #333", borderTopColor: "#4ade80", borderRadius: "50%", animation: "dash-spin 0.8s linear infinite" }} />
-                  ) : status === "done" ? (
-                    <span style={{ color: "#4ade80", fontSize: 12, fontWeight: 600 }}>✓</span>
-                  ) : (
-                    <span style={{ color: "#f87171", fontSize: 12, fontWeight: 600 }}>✗</span>
-                  )}
-                  <span style={{ fontSize: 12, color: platformColor, fontWeight: 600 }}>{platformLabel}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Sync result panel ───────────────────────────────────────────── */}
-      {syncResult && !syncing && (() => {
-        const failedCount = syncResult.platforms.filter((p) => p.error).length;
-        const succeededCount = syncResult.platforms.filter((p) => !p.error).length;
-        const totalLine =
-          failedCount > 0 && succeededCount === 0
-            ? { text: "All platforms failed — check your URLs in Settings", color: "#f87171" }
-            : failedCount > 0
-              ? { text: `${succeededCount} platform${succeededCount !== 1 ? "s" : ""} synced · ${failedCount} failed — check your URLs in Settings`, color: "#fbbf24" }
-              : syncResult.totalNew === 0
-                ? { text: "No new reviews found · All platforms up to date", color: "#555555" }
-                : { text: `${syncResult.totalNew} new review${syncResult.totalNew !== 1 ? "s" : ""} added · ${syncResult.totalReviews} total in inbox`, color: "#888888" };
-        const secAgo = Math.floor((Date.now() - syncResult.timestamp.getTime()) / 1000);
-        const tsLabel = secAgo < 60 ? "Just now" : secAgo < 3600 ? `${Math.floor(secAgo / 60)} min ago` : `${Math.floor(secAgo / 3600)}h ago`;
-        return (
-          <div style={{ background: "#0a1a0a", border: "1px solid #1a3a1a", borderRadius: 8, padding: "14px 18px", marginBottom: 16, position: "relative", overflow: "hidden", animation: "dash-sync-fadein 0.3s ease" }}>
-            <style dangerouslySetInnerHTML={{ __html: "@keyframes dash-spin { to { transform: rotate(360deg); } } @keyframes dash-sync-fadein { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } } @keyframes dash-countdown { from { width:100%; } to { width:0%; } }" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#4ade80" }}>✓ Sync complete</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 11, color: "#444444" }}>{tsLabel}</span>
-                <button
-                  type="button"
-                  onClick={() => setSyncResult(null)}
-                  style={{ border: "none", background: "transparent", color: "#444444", fontSize: 16, cursor: "pointer", lineHeight: 1, fontFamily: "inherit" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "#888888"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "#444444"; }}
-                >×</button>
-              </div>
-            </div>
-            {syncResult.platforms.length > 0 && (
-              <div style={{ display: "flex", gap: 16, marginTop: 10, flexWrap: "wrap" }}>
-                {syncResult.platforms.map((p) => {
-                  const badgeStyle = p.platform === "tripadvisor"
-                    ? { background: "#052e16", color: "#4ade80" }
-                    : p.platform === "google"
-                      ? { background: "#172554", color: "#60a5fa" }
-                      : p.platform === "booking"
-                        ? { background: "#1e1b4b", color: "#a78bfa" }
-                        : p.platform === "trip"
-                          ? { background: "#1e1b4b", color: "#60a5fa" }
-                          : p.platform === "expedia"
-                            ? { background: "#1a0a2e", color: "#a78bfa" }
-                            : p.platform === "yelp"
-                              ? { background: "#2d0a0a", color: "#f87171" }
-                              : { background: "#1e1e1e", color: "#888888" };
-                  const label = p.platform === "tripadvisor" ? "TripAdvisor" : p.platform === "google" ? "Google" : p.platform === "booking" ? "Booking" : p.platform === "trip" ? "Trip.com" : p.platform === "expedia" ? "Expedia" : p.platform === "yelp" ? "Yelp" : p.platform;
-                  return (
-                    <div key={p.platform} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ ...badgeStyle, borderRadius: 3, padding: "2px 7px", fontSize: 11, fontWeight: 600 }}>{label}</span>
-                      {p.error ? (
-                        <span style={{ fontSize: 12, color: "#f87171" }}>Failed</span>
-                      ) : p.count > 0 ? (
-                        <span style={{ fontSize: 12, color: "#4ade80", fontWeight: 600 }}>+{p.count} new</span>
-                      ) : (
-                        <span style={{ fontSize: 12, color: "#444444" }}>0 new</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <div style={{ fontSize: 12, color: totalLine.color, marginTop: 8 }}>{totalLine.text}</div>
-            {syncResult.totalNew === 0 && failedCount === 0 && (
-              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 2, background: "#1a3a1a" }}>
-                <div style={{ height: "100%", background: "#4ade80", animation: "dash-countdown 5s linear forwards" }} />
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
       {/* Upgrade toast after checkout */}
       {upgradeToast && (

@@ -20,15 +20,6 @@ type Hotel = {
   active_platforms?: unknown;
 };
 
-type SyncResult = {
-  timestamp: Date;
-  platforms: { platform: string; count: number; error: string | null }[];
-  totalNew: number;
-  totalReviews: number;
-};
-
-type SyncProgress = Record<string, "idle" | "syncing" | "done" | "error">;
-
 type Review = {
   id?: string;
   hotel_id?: string;
@@ -333,9 +324,6 @@ export default function ReviewsInboxPage() {
   const [classifyRemaining, setClassifyRemaining] = useState(0);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
-  const [syncProgress, setSyncProgress] = useState<SyncProgress>({ tripadvisor: "idle", google: "idle", booking: "idle", trip: "idle", expedia: "idle", yelp: "idle" });
-  const [activeSyncPlatforms, setActiveSyncPlatforms] = useState<string[]>([]);
 
   const [platformFilter, setPlatformFilter] = useState("all");
   const [sentimentFilter, setSentimentFilter] = useState("all");
@@ -601,7 +589,6 @@ export default function ReviewsInboxPage() {
   }
 
   async function handleSyncAllReviews() {
-    setSyncResult(null);
     setSyncMessage(null);
     setSyncError(null);
     try {
@@ -639,14 +626,8 @@ export default function ReviewsInboxPage() {
       if (hotel.yelp_url?.trim() && activePlatforms.yelp !== false) platformsToSync.push({ platform: "yelp", url: hotel.yelp_url });
 
       if (platformsToSync.length === 0) {
-        setSyncResult({ timestamp: new Date(), platforms: [], totalNew: 0, totalReviews: reviews.length });
         return;
       }
-
-      setActiveSyncPlatforms(platformsToSync.map((p) => p.platform));
-      const progressInit: SyncProgress = { tripadvisor: "idle", google: "idle", booking: "idle", trip: "idle", expedia: "idle", yelp: "idle" };
-      for (const { platform } of platformsToSync) progressInit[platform] = "syncing";
-      setSyncProgress(progressInit);
 
       // Dispatch sync-start event for layout terminal card
       window.dispatchEvent(new CustomEvent("gp:sync-start", {
@@ -655,7 +636,6 @@ export default function ReviewsInboxPage() {
 
       const tasks = platformsToSync.map(({ platform, url }) =>
         syncPlatform(platform, url, hotel.id).then((result) => {
-          setSyncProgress((prev) => ({ ...prev, [platform]: result.error ? "error" : "done" }));
           // Dispatch per-platform progress event
           window.dispatchEvent(new CustomEvent("gp:sync-progress", {
             detail: { platform, status: result.error ? "error" : "done" },
@@ -679,13 +659,6 @@ export default function ReviewsInboxPage() {
         detail: { totalNew, errorCount },
       }));
 
-      setSyncResult({
-        timestamp: new Date(),
-        platforms: results.map((r) => ({ platform: r.platform, count: r.count, error: r.error })),
-        totalNew,
-        totalReviews: totalCount ?? reviews.length,
-      });
-
       setRefreshKey((k) => k + 1);
     } catch (err) {
       setSyncError(err instanceof Error ? err.message : "Failed to sync reviews.");
@@ -697,7 +670,6 @@ export default function ReviewsInboxPage() {
   async function handleAutoClassify() {
     setSyncError(null);
     setSyncMessage(null);
-    setSyncResult(null);
     setClassifyRemaining(0);
     try {
       setClassifying(true);
@@ -742,15 +714,6 @@ export default function ReviewsInboxPage() {
       setClassifying(false);
     }
   }
-
-  // Auto-dismiss sync result panel if 0 new reviews after 5s
-  useEffect(() => {
-    if (!syncResult || syncResult.totalNew > 0) return;
-    const hasFailed = syncResult.platforms.some((p) => p.error);
-    if (hasFailed) return;
-    const timer = setTimeout(() => setSyncResult(null), 5000);
-    return () => clearTimeout(timer);
-  }, [syncResult]);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -955,84 +918,6 @@ export default function ReviewsInboxPage() {
           </button>
         </div>
       </header>
-
-      {/* ── Sync progress panel ─────────────────────────────────────────── */}
-      {syncing && activeSyncPlatforms.length > 0 && (
-        <div style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, padding: "14px 18px", marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: C.textSecondary, marginBottom: 10 }}>Syncing reviews...</div>
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            {activeSyncPlatforms.map((platform) => {
-              const status = syncProgress[platform];
-              if (status === "idle") return null;
-              return (
-                <div key={platform} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {status === "syncing" ? (
-                    <span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #333", borderTopColor: C.green, borderRadius: "50%", animation: "rvspin 0.8s linear infinite" }} />
-                  ) : status === "done" ? (
-                    <span style={{ color: C.green, fontSize: 12, fontWeight: 600 }}>✓</span>
-                  ) : (
-                    <span style={{ color: C.red, fontSize: 12, fontWeight: 600 }}>✗</span>
-                  )}
-                  <PlatformBadge platform={platform} />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Sync result panel ───────────────────────────────────────────── */}
-      {syncResult && !syncing && (() => {
-        const failedCount = syncResult.platforms.filter((p) => p.error).length;
-        const succeededCount = syncResult.platforms.filter((p) => !p.error).length;
-        const totalLine =
-          failedCount > 0 && succeededCount === 0
-            ? { text: "All platforms failed — check your URLs in Settings", color: C.red }
-            : failedCount > 0
-              ? { text: `${succeededCount} platform${succeededCount !== 1 ? "s" : ""} synced · ${failedCount} failed — check your URLs in Settings`, color: C.amber }
-              : syncResult.totalNew === 0
-                ? { text: "No new reviews found · All platforms up to date", color: "#555555" }
-                : { text: `${syncResult.totalNew} new review${syncResult.totalNew !== 1 ? "s" : ""} added · ${syncResult.totalReviews} total in inbox`, color: C.textSecondary };
-        return (
-          <div style={{ background: "#0a1a0a", border: "1px solid #1a3a1a", borderRadius: 8, padding: "14px 18px", marginBottom: 16, position: "relative", overflow: "hidden", animation: "sync-fadein 0.3s ease" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: C.green }}>✓ Sync complete</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 11, color: "#444444" }}>{formatRelativeTime(syncResult.timestamp.toISOString())}</span>
-                <button
-                  type="button"
-                  onClick={() => setSyncResult(null)}
-                  style={{ border: "none", background: "transparent", color: "#444444", fontSize: 16, cursor: "pointer", lineHeight: 1, fontFamily: "inherit" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "#888888"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "#444444"; }}
-                >×</button>
-              </div>
-            </div>
-            {syncResult.platforms.length > 0 && (
-              <div style={{ display: "flex", gap: 16, marginTop: 10, flexWrap: "wrap" }}>
-                {syncResult.platforms.map((p) => (
-                  <div key={p.platform} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <PlatformBadge platform={p.platform} />
-                    {p.error ? (
-                      <span style={{ fontSize: 12, color: C.red }}>Failed</span>
-                    ) : p.count > 0 ? (
-                      <span style={{ fontSize: 12, color: C.green, fontWeight: 600 }}>+{p.count} new</span>
-                    ) : (
-                      <span style={{ fontSize: 12, color: "#444444" }}>0 new</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div style={{ fontSize: 12, color: totalLine.color, marginTop: 8 }}>{totalLine.text}</div>
-            {syncResult.totalNew === 0 && failedCount === 0 && (
-              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 2, background: "#1a3a1a" }}>
-                <div style={{ height: "100%", background: C.green, animation: "countdown-bar 5s linear forwards" }} />
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
       {/* ── 2. Stat Cards ──────────────────────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
