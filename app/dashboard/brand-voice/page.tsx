@@ -397,25 +397,15 @@ export default function BrandVoicePage() {
       )}
 
       {/* Page header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 500, color: C.textPrimary, margin: "0 0 4px" }}>
-            {isEditMode ? "Re-train brand voice" : "Brand voice trainer"}
-          </h1>
-          <p style={{ fontSize: 12, color: C.textMuted, margin: 0 }}>
-            {isEditMode && lastUpdated
-              ? `Last updated ${new Date(lastUpdated).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
-              : "6 quick questions — takes about 3 minutes"}
-          </p>
-        </div>
-        <Link
-          href="/dashboard"
-          style={{ fontSize: 12, color: C.textMuted, textDecoration: "none" }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = C.textSecondary; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = C.textMuted; }}
-        >
-          Skip for now →
-        </Link>
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 500, color: C.textPrimary, margin: "0 0 4px" }}>
+          {isEditMode ? "Re-train brand voice" : "Brand voice trainer"}
+        </h1>
+        <p style={{ fontSize: 12, color: C.textMuted, margin: 0 }}>
+          {isEditMode && lastUpdated
+            ? `Last updated ${new Date(lastUpdated).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+            : "Answer a few questions so AI responses sound exactly like your hotel"}
+        </p>
       </div>
 
       {/* No hotel warning */}
