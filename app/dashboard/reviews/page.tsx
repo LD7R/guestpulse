@@ -8,6 +8,15 @@ import { defaultDraftResponse, useDraftResponses } from "@/lib/useDraftResponses
 import Spinner from "@/app/components/Spinner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+type DraftMetadata = {
+  language: string;
+  tone: string;
+  length: string;
+  used_examples: number;
+  used_traits: number;
+  addressed_by_name: boolean;
+};
+
 type Hotel = {
   id: string;
   name?: string | null;
@@ -47,6 +56,23 @@ type Review = {
   review_date?: string | null;
   review_url?: string | null;
   topic_type?: string | null;
+};
+
+const TONE_LABELS: Record<string, string> = {
+  "warm-professional": "Warm & Professional",
+  "casual-friendly": "Casual & Friendly",
+  "refined-elegant": "Refined & Elegant",
+  "formal": "Formal",
+  "boutique-playful": "Boutique & Playful",
+  "direct-minimal": "Direct & Minimal",
+  "heartfelt-sincere": "Heartfelt & Sincere",
+};
+
+const LANG_LABELS: Record<string, string> = {
+  en: "English", nl: "Dutch", de: "German", fr: "French",
+  es: "Spanish", it: "Italian", pt: "Portuguese", id: "Indonesian",
+  zh: "Chinese", ja: "Japanese", ko: "Korean", ru: "Russian",
+  th: "Thai", vi: "Vietnamese", ar: "Arabic",
 };
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -322,13 +348,14 @@ export default function ReviewsInboxPage() {
   // Hotel context (cached so we don't re-fetch on every draft)
   const [cachedHotelId, setCachedHotelId] = useState<string | null>(null);
   const [cachedSignature, setCachedSignature] = useState<string>("The Management Team");
-  const [cachedBrandVoiceEnabled, setCachedBrandVoiceEnabled] = useState(false);
   const [cachedExamplesCount, setCachedExamplesCount] = useState(0);
   const [defaultResponseLanguage, setDefaultResponseLanguage] = useState("match-guest");
   // Language override for drafts — null means use hotel default
   const [draftLanguageOverride, setDraftLanguageOverride] = useState<string | null>(null);
   // brand_voice_used per review id
   const [brandVoiceMap, setBrandVoiceMap] = useState<Record<string, { used: boolean; count: number }>>({});
+  const [draftMetadata, setDraftMetadata] = useState<Record<string, DraftMetadata>>({});
+  const [cachedBrandVoiceCompletedAt, setCachedBrandVoiceCompletedAt] = useState<string | null>(null);
 
   const [syncing, setSyncing] = useState(false);
   const [classifying, setClassifying] = useState(false);
@@ -509,6 +536,7 @@ export default function ReviewsInboxPage() {
         upgrade_required?: boolean;
         brand_voice_used?: boolean;
         examples_count?: number;
+        metadata?: DraftMetadata;
       };
       if (controller.signal.aborted) return;
       if (json.upgrade_required) {
@@ -523,6 +551,9 @@ export default function ReviewsInboxPage() {
           ...prev,
           [id]: { used: json.brand_voice_used ?? false, count: json.examples_count ?? 0 },
         }));
+      }
+      if (json.metadata) {
+        setDraftMetadata((prev) => ({ ...prev, [id]: json.metadata! }));
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
@@ -749,7 +780,7 @@ export default function ReviewsInboxPage() {
 
       const { data: hotels, error: hotelsError } = await supabase
         .from("hotels")
-        .select("id, response_signature, brand_voice_enabled, brand_voice_examples, default_response_language")
+        .select("id, response_signature, brand_voice_enabled, brand_voice_examples, default_response_language, brand_voice_completed_at")
         .eq("user_id", user.id);
       if (hotelsError) { if (!cancelled) { setError(hotelsError.message); setLoading(false); } return; }
 
@@ -758,11 +789,10 @@ export default function ReviewsInboxPage() {
         const h = hotels[0] as Record<string, unknown>;
         setCachedHotelId((h.id as string | null) ?? null);
         setCachedSignature((h.response_signature as string | null)?.trim() || "The Management Team");
-        const bvEnabled = !!(h.brand_voice_enabled);
-        setCachedBrandVoiceEnabled(bvEnabled);
         const exArr = Array.isArray(h.brand_voice_examples) ? h.brand_voice_examples as unknown[] : [];
         setCachedExamplesCount(exArr.length);
         setDefaultResponseLanguage((h.default_response_language as string | null) ?? "match-guest");
+        setCachedBrandVoiceCompletedAt((h.brand_voice_completed_at as string | null) ?? null);
       }
 
       const hotelIds = (hotels ?? []).map((h: Hotel) => h.id).filter(Boolean);
@@ -1448,6 +1478,36 @@ export default function ReviewsInboxPage() {
                       <p style={{ fontSize: 13, color: C.red, margin: 0 }}>{draft.text}</p>
                     ) : (
                       <>
+                        {/* Metadata row */}
+                        {(() => {
+                          const meta = draftMetadata[reviewId];
+                          if (!meta) return null;
+                          const tags: string[] = [];
+                          tags.push(`✓ Voice: ${TONE_LABELS[meta.tone] ?? meta.tone}`);
+                          tags.push(`✓ Length: ${meta.length}`);
+                          tags.push(`✓ Language: ${LANG_LABELS[meta.language] ?? meta.language}`);
+                          if (meta.used_examples > 0) tags.push(`✓ Trained on ${meta.used_examples} example${meta.used_examples !== 1 ? "s" : ""}`);
+                          if (meta.addressed_by_name) {
+                            const firstName = reviewerName !== "Anonymous" ? reviewerName.split(" ")[0] : null;
+                            if (firstName) tags.push(`✓ Addressed ${firstName}`);
+                          }
+                          return (
+                            <div style={{
+                              background: "#0a1a0a",
+                              border: "1px solid #1a3a1a",
+                              borderRadius: 4,
+                              padding: "6px 10px",
+                              marginBottom: 8,
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: 12,
+                            }}>
+                              {tags.map((t) => (
+                                <span key={t} style={{ fontSize: 11, color: C.green }}>{t}</span>
+                              ))}
+                            </div>
+                          );
+                        })()}
                         <textarea
                           value={draft.text}
                           onChange={(e) => patchDraftResponse(reviewId, { text: e.target.value })}
@@ -1495,22 +1555,31 @@ export default function ReviewsInboxPage() {
                         {draft.markError && (
                           <p style={{ fontSize: 12, color: C.red, marginTop: 6, marginBottom: 0 }}>{draft.markError}</p>
                         )}
-                        {/* Brand voice indicator */}
+                        {/* Brand voice indicator / default voice warning */}
                         {(() => {
                           const bv = brandVoiceMap[reviewId];
+                          if (!cachedBrandVoiceCompletedAt) {
+                            return (
+                              <div style={{
+                                background: "#1a1200",
+                                border: "1px solid #2a2000",
+                                borderRadius: 4,
+                                padding: "8px 12px",
+                                marginTop: 8,
+                                fontSize: 12,
+                                color: C.amber,
+                              }}>
+                                ⚡ Using default voice.{" "}
+                                <a href="/dashboard/brand-voice" style={{ color: C.amber, textDecoration: "underline" }}>
+                                  Train your brand voice for better responses →
+                                </a>
+                              </div>
+                            );
+                          }
                           if (bv?.used) {
                             return (
                               <p style={{ fontSize: 11, color: C.green, marginTop: 8, marginBottom: 0 }}>
                                 ✓ Trained on your brand voice ({bv.count} example{bv.count !== 1 ? "s" : ""})
-                              </p>
-                            );
-                          }
-                          if (!cachedBrandVoiceEnabled) {
-                            return (
-                              <p style={{ fontSize: 11, color: C.textMuted, marginTop: 8, marginBottom: 0 }}>
-                                <a href="/dashboard/brand-voice" style={{ color: C.textMuted, textDecoration: "underline" }}>
-                                  Enable brand voice for personalized responses →
-                                </a>
                               </p>
                             );
                           }

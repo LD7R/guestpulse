@@ -55,21 +55,31 @@ type HotelBrandVoice = {
   response_language_mode?: string | null;
 };
 
+type DraftMetadata = {
+  language: string;
+  tone: string;
+  length: string;
+  used_examples: number;
+  used_traits: number;
+  addressed_by_name: boolean;
+};
+
 const ESSENTIAL_DRAFT_LIMIT = 10;
 
 const LENGTH_GUIDE: Record<string, string> = {
-  brief: "Write a brief, punchy response under 60 words.",
-  medium: "Write a balanced response of 60–100 words.",
-  detailed: "Write a thorough, personal response of 100+ words.",
+  brief: "Write a brief, focused response of 40–60 words.",
+  medium: "Write a balanced response of 70–100 words.",
+  detailed: "Write a thorough, personal response of 110–160 words.",
 };
 
-const TONE_INSTRUCTIONS: Record<string, string> = {
-  "warm-professional": "Friendly but maintain professional distance.",
-  "casual-friendly": "Conversational, like talking to a friend.",
-  "formal": "Traditional luxury hotel formality.",
-  "boutique-playful": "Warm with personality and character.",
-  "direct-minimal": "Concise and to the point.",
-  "heartfelt-sincere": "Emotional and grateful tone.",
+const TONE_DESC: Record<string, string> = {
+  "warm-professional": "Warm and professional — friendly but polished.",
+  "casual-friendly": "Casual and friendly — conversational, like talking to a friend.",
+  "refined-elegant": "Refined and elegant — elevated language, formal luxury hospitality.",
+  "formal": "Traditional formal — classic hotel formality with respectful distance.",
+  "boutique-playful": "Boutique and playful — warm personality with character and charm.",
+  "direct-minimal": "Direct and minimal — concise, no fluff, straight to the point.",
+  "heartfelt-sincere": "Heartfelt and sincere — emotionally warm, grateful, genuine.",
 };
 
 const LANG_NAMES: Record<string, string> = {
@@ -86,20 +96,39 @@ function safeArray<T>(val: unknown): T[] {
 
 function buildSystemPrompt(
   hotel: HotelBrandVoice,
+  reviewerName: string,
   responseSignature: string,
   responseLanguage: string,
   brandVoiceUsed: boolean,
+  ratingNum: number | null,
 ): string {
   const hotelName = hotel.name || "our hotel";
   const tone = (hotel.brand_voice_tone as string) || "warm-professional";
-
-  // Length guidance — wizard field takes priority
   const lengthKey = (hotel.response_length as string | null) ?? "medium";
-  const lengthGuide = LENGTH_GUIDE[lengthKey] ?? "Write a genuine, helpful response under 80 words.";
+  const lengthGuide = LENGTH_GUIDE[lengthKey] ?? LENGTH_GUIDE["medium"]!;
 
-  let sys = `You are drafting a response to a hotel review on behalf of "${hotelName}". ${lengthGuide} Do not start with "Dear valued guest". Reference specific details from the review.`;
+  // Address reviewer by name
+  const isNamedGuest = reviewerName && reviewerName !== "Guest" && reviewerName !== "Anonymous";
+  const firstName = isNamedGuest ? reviewerName.split(" ")[0] : null;
+  const addressInstruction = firstName
+    ? `Address the reviewer by their first name "${firstName}" naturally in the response — not necessarily as a salutation, but woven into the text where it feels natural.`
+    : "Do not use generic phrases like 'Dear Valued Guest'. Address the reviewer in a natural, personal way.";
 
-  sys += `\n\nTONE: ${TONE_INSTRUCTIONS[tone] ?? TONE_INSTRUCTIONS["warm-professional"]}`;
+  // Rating-based instruction
+  let ratingInstruction = "Reference specific details from the review.";
+  if (ratingNum !== null) {
+    if (ratingNum <= 2) {
+      ratingInstruction = "This is a negative review. Acknowledge the guest's concerns sincerely, apologize where appropriate, and offer a path forward or invitation to return. Do not be defensive.";
+    } else if (ratingNum === 3) {
+      ratingInstruction = "This is a mixed review. Thank the guest, acknowledge both positives and any concerns, and show commitment to improvement.";
+    } else {
+      ratingInstruction = "This is a positive review. Express genuine, specific gratitude. Reference the details they mentioned. Invite them back warmly.";
+    }
+  }
+
+  let sys = `You are writing a review response on behalf of "${hotelName}". ${lengthGuide}\n\n${addressInstruction}\n\n${ratingInstruction}`;
+
+  sys += `\n\nTONE: ${TONE_DESC[tone] ?? TONE_DESC["warm-professional"]}`;
 
   // Personality traits from wizard
   const traits = safeArray<string>(hotel.brand_voice_traits);
@@ -110,7 +139,7 @@ function buildSystemPrompt(
   // Wizard-trained examples (simple strings)
   const brandExamples = safeArray<string>(hotel.brand_examples);
   if (brandExamples.length > 0) {
-    sys += "\n\nEXAMPLES OF HOW THIS HOTEL ACTUALLY RESPONDS (replicate this voice exactly):\n";
+    sys += "\n\nEXAMPLES OF HOW THIS HOTEL ACTUALLY RESPONDS — match this voice exactly:\n";
     brandExamples.slice(0, 3).forEach((ex, i) => {
       sys += `\n--- Example ${i + 1} ---\n"${ex}"\n`;
     });
@@ -155,7 +184,7 @@ function buildSystemPrompt(
   sys += `\n\nRESPOND IN: ${responseLanguage}`;
   if (responseLanguage !== "en") {
     const langName = LANG_NAMES[responseLanguage] ?? responseLanguage;
-    sys += ` (${langName}). The response must be entirely in this language, including the signature.`;
+    sys += ` (${langName}). The entire response must be in this language, including the signature.`;
   }
 
   return sys;
@@ -331,41 +360,49 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Generate draft ────────────────────────────────────────────────────────
-    const reviewerName = reviewer_name ?? "Guest";
-    const ratingLabel =
-      rating !== null && rating !== undefined && rating !== "" ? String(rating) : "—";
+    const reviewerName = reviewer_name?.trim() || "Guest";
+    const ratingNum = rating !== null && rating !== undefined && rating !== ""
+      ? Number(rating)
+      : null;
+    const ratingLabel = ratingNum !== null && !Number.isNaN(ratingNum) ? String(ratingNum) : "—";
     const platformLabel = platform ?? "unknown";
 
     let requestBody: Record<string, unknown>;
 
     if (hotelData) {
-      // Brand voice / language aware prompt using system + user
       const systemPrompt = buildSystemPrompt(
         hotelData,
+        reviewerName,
         responseSignature,
         responseLanguage,
         brandVoiceUsed,
+        !Number.isNaN(ratingNum) ? ratingNum : null,
       );
       requestBody = {
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 350,
+        max_tokens: 800,
         system: systemPrompt,
         messages: [
           {
             role: "user",
-            content: `Reviewer: ${reviewerName}\nRating: ${ratingLabel}/5\nPlatform: ${platformLabel}\nReview: ${review_text}`,
+            content: `REVIEWER: ${reviewerName}\nRATING: ${ratingLabel}/5\nPLATFORM: ${platformLabel}\nREVIEW TEXT:\n${review_text}`,
           },
         ],
       };
     } else {
       // Legacy prompt (no hotel_id)
+      const isNamed = reviewerName !== "Guest" && reviewerName !== "Anonymous";
+      const firstName = isNamed ? reviewerName.split(" ")[0] : null;
+      const nameHint = firstName
+        ? `Address the reviewer by their first name "${firstName}" naturally in the response.`
+        : "Do not use 'Dear Valued Guest'.";
       requestBody = {
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 300,
+        max_tokens: 800,
         messages: [
           {
             role: "user",
-            content: `You are a professional hotel manager writing a response to a guest review. Write a warm genuine response under 80 words. Reference specific details they mentioned. Do not start with "Dear valued guest". End with exactly this sign-off on a new line: "Kind regards, ${responseSignature}"\n\nReviewer: ${reviewerName}\nRating: ${ratingLabel}/5\nPlatform: ${platformLabel}\nReview: ${review_text}`,
+            content: `You are a professional hotel manager writing a response to a guest review. Write a warm genuine response of 70-100 words. Reference specific details they mentioned. ${nameHint} End with exactly this sign-off on a new line: "Kind regards, ${responseSignature}"\n\nREVIEWER: ${reviewerName}\nRATING: ${ratingLabel}/5\nPLATFORM: ${platformLabel}\nREVIEW TEXT:\n${review_text}`,
           },
         ],
       };
@@ -407,12 +444,24 @@ export async function POST(req: NextRequest) {
         .eq("id", user_id);
     }
 
+    const isNamed = reviewerName !== "Guest" && reviewerName !== "Anonymous";
+    const metadata: DraftMetadata = {
+      language: responseLanguage,
+      tone: (hotelData?.brand_voice_tone as string | null) ?? "warm-professional",
+      length: (hotelData?.response_length as string | null) ?? "medium",
+      used_examples: examplesCount,
+      used_traits: hotelData ? safeArray<string>(hotelData.brand_voice_traits).length : 0,
+      addressed_by_name: isNamed,
+    };
+
     return NextResponse.json({
       success: true,
       response: text,
+      draft: text,
       brand_voice_used: brandVoiceUsed,
       examples_count: examplesCount,
       response_language: responseLanguage,
+      metadata,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";

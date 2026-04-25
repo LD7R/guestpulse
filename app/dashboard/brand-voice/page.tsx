@@ -14,6 +14,7 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 // ─── Design constants ─────────────────────────────────────────────────────────
@@ -110,24 +111,28 @@ const PREVIEW_SAMPLES = [
     label: "5★ Glowing",
     text: "Beautiful hotel with great service! Staff at reception were exceptional and breakfast was delicious. Will definitely return!",
     rating: 5,
+    reviewer: "Sarah M.",
   },
   {
     id: "4star",
     label: "4★ Good",
     text: "Really enjoyed our stay. Room was comfortable and clean, pool area is fantastic. Breakfast could have more variety but overall great.",
     rating: 4,
+    reviewer: "James K.",
   },
   {
     id: "3star",
     label: "3★ Mixed",
     text: "Nice location and friendly staff but the room was small and AC was noisy. Breakfast was good. Overall decent.",
     rating: 3,
+    reviewer: "Anna P.",
   },
   {
     id: "1star",
     label: "1★ Negative",
     text: "Terrible experience. Room wasn't ready on arrival, shower was broken and no one fixed it. Very disappointed.",
     rating: 1,
+    reviewer: "Tom W.",
   },
 ] as const;
 
@@ -137,7 +142,7 @@ type WizardAnswers = {
   tone: string;
   traits: string[];
   responseLength: string;
-  examples: string;
+  examples: string;     // textarea: separate multiple with ---
   guidelines: string;
   languageMode: string;
 };
@@ -154,21 +159,24 @@ const DEFAULT_ANSWERS: WizardAnswers = {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function BrandVoicePage() {
+  const router = useRouter();
+
   const [hotelId, setHotelId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [step, setStep] = useState(1);
   const [answers, setAnswers] = useState<WizardAnswers>(DEFAULT_ANSWERS);
   const [isEditMode, setIsEditMode] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
   // Preview
   const [previewSample, setPreviewSample] = useState("5star");
   const [previewOutput, setPreviewOutput] = useState("");
   const [generatingPreview, setGeneratingPreview] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
-  // Toast
+  // Toast (for preview errors only; save errors are inline)
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const showToast = useCallback((type: "success" | "error", message: string) => {
@@ -188,39 +196,36 @@ export default function BrandVoicePage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const { data } = await supabase
+        const { data: hotel } = await supabase
           .from("hotels")
           .select(
-            "id, brand_voice_traits, response_length, brand_examples, brand_guidelines, response_language_mode, brand_voice_completed_at, brand_voice_tone",
+            "id, name, response_signature, brand_voice_tone, brand_voice_traits, response_length, brand_examples, brand_guidelines, response_language_mode, brand_voice_completed_at",
           )
           .eq("user_id", user.id)
           .maybeSingle();
 
-        if (data) {
-          const h = data as Record<string, unknown>;
+        if (hotel) {
+          const h = hotel as Record<string, unknown>;
           setHotelId(h.id as string);
 
+          // Always pre-fill from DB (not just in edit mode)
+          const traits = Array.isArray(h.brand_voice_traits) ? (h.brand_voice_traits as string[]) : [];
+          const examplesArr = Array.isArray(h.brand_examples) ? (h.brand_examples as string[]) : [];
+          const rawTone = (h.brand_voice_tone as string | null) ?? "";
+          const wizardTone = TONES.some((t) => t.id === rawTone) ? rawTone : "";
+
+          setAnswers({
+            tone: wizardTone,
+            traits,
+            responseLength: (h.response_length as string | null) ?? "medium",
+            examples: examplesArr.filter(Boolean).join("\n\n---\n\n"),
+            guidelines: (h.brand_guidelines as string | null) ?? "",
+            languageMode: (h.response_language_mode as string | null) ?? "match-guest",
+          });
+
           const completedAt = h.brand_voice_completed_at as string | null;
-          if (completedAt) {
-            setIsEditMode(true);
-            setLastUpdated(completedAt);
-
-            const traits = Array.isArray(h.brand_voice_traits) ? (h.brand_voice_traits as string[]) : [];
-            const examplesArr = Array.isArray(h.brand_examples) ? (h.brand_examples as string[]) : [];
-
-            // Map tone: refined-elegant or old-format tone ids
-            const rawTone = (h.brand_voice_tone as string | null) ?? "";
-            const wizardTone = TONES.some((t) => t.id === rawTone) ? rawTone : "";
-
-            setAnswers({
-              tone: wizardTone,
-              traits,
-              responseLength: (h.response_length as string | null) ?? "medium",
-              examples: examplesArr.join("\n\n---\n\n"),
-              guidelines: (h.brand_guidelines as string | null) ?? "",
-              languageMode: (h.response_language_mode as string | null) ?? "match-guest",
-            });
-          }
+          setIsEditMode(!!completedAt);
+          setLastUpdated(completedAt);
         }
       } finally {
         setLoading(false);
@@ -247,42 +252,62 @@ export default function BrandVoicePage() {
     });
   }
 
+  function examplesAsArray(): string[] {
+    return answers.examples
+      .split(/---+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
   // ── Save ─────────────────────────────────────────────────────────────────────
   async function handleSave() {
     if (!hotelId) {
-      showToast("error", "No hotel found. Set up your hotel in Settings first.");
+      setSaveError("No hotel found. Set up your hotel in Settings first.");
       return;
     }
     setSaving(true);
+    setSaveError(null);
+
     try {
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       );
 
-      const examplesArr = answers.examples
-        ? answers.examples.split(/---+/).map((s) => s.trim()).filter(Boolean)
-        : [];
+      // Re-verify auth
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Confirm hotel still belongs to user
+      const { data: hotelCheck } = await supabase
+        .from("hotels")
+        .select("id")
+        .eq("id", hotelId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!hotelCheck) throw new Error("Hotel not found or access denied");
 
       const { error } = await supabase
         .from("hotels")
         .update({
+          brand_voice_tone: answers.tone,
           brand_voice_traits: answers.traits,
           response_length: answers.responseLength,
-          brand_examples: examplesArr,
+          brand_examples: examplesAsArray(),
           brand_guidelines: answers.guidelines.trim() || null,
           response_language_mode: answers.languageMode,
-          brand_voice_tone: answers.tone,
           brand_voice_enabled: true,
           brand_voice_completed_at: new Date().toISOString(),
         })
         .eq("id", hotelId);
 
       if (error) throw error;
-      setSaved(true);
-      showToast("success", isEditMode ? "Brand voice updated" : "Brand voice saved");
+
+      // Redirect to dashboard with success param
+      router.push("/dashboard?brand_voice=saved");
     } catch (err) {
-      showToast("error", err instanceof Error ? err.message : "Failed to save");
+      setSaveError(err instanceof Error ? err.message : "Failed to save. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -293,6 +318,7 @@ export default function BrandVoicePage() {
     if (!hotelId) return;
     setGeneratingPreview(true);
     setPreviewOutput("");
+    setPreviewError(null);
 
     try {
       const supabase = createBrowserClient(
@@ -302,18 +328,15 @@ export default function BrandVoicePage() {
       const { data: { user } } = await supabase.auth.getUser();
 
       // Temporarily push current answers to DB so the API picks them up
-      const examplesArr = answers.examples
-        ? answers.examples.split(/---+/).map((s) => s.trim()).filter(Boolean)
-        : [];
       await supabase
         .from("hotels")
         .update({
+          brand_voice_tone: answers.tone,
           brand_voice_traits: answers.traits,
           response_length: answers.responseLength,
-          brand_examples: examplesArr,
+          brand_examples: examplesAsArray(),
           brand_guidelines: answers.guidelines.trim() || null,
           response_language_mode: answers.languageMode,
-          brand_voice_tone: answers.tone,
           brand_voice_enabled: true,
         })
         .eq("id", hotelId);
@@ -325,7 +348,7 @@ export default function BrandVoicePage() {
         body: JSON.stringify({
           review_text: sample.text,
           rating: sample.rating,
-          reviewer_name: "Guest",
+          reviewer_name: sample.reviewer,
           platform: "preview",
           hotel_id: hotelId,
           user_id: user?.id ?? null,
@@ -335,18 +358,21 @@ export default function BrandVoicePage() {
       const json = (await res.json()) as {
         success?: boolean;
         response?: string;
+        draft?: string;
         error?: string;
         upgrade_required?: boolean;
       };
 
       if (json.upgrade_required) {
-        setPreviewOutput("⚠ Upgrade required to use AI draft preview.");
+        setPreviewError("⚠ Upgrade required to use AI draft preview.");
         return;
       }
-      if (!json.success || !json.response) throw new Error(json.error ?? "Failed");
-      setPreviewOutput(json.response);
+      const text = json.draft ?? json.response;
+      if (!json.success || !text) throw new Error(json.error ?? "Failed to generate preview");
+      setPreviewOutput(text);
     } catch (err) {
-      setPreviewOutput(`Error: ${err instanceof Error ? err.message : "Failed"}`);
+      setPreviewError(err instanceof Error ? err.message : "Failed to generate preview");
+      showToast("error", err instanceof Error ? err.message : "Preview failed");
     } finally {
       setGeneratingPreview(false);
     }
@@ -464,7 +490,7 @@ export default function BrandVoicePage() {
         </div>
       </div>
 
-      {/* Step content — key forces remount animation */}
+      {/* Step content */}
       <div className="bv-step" key={step}>
 
         {/* STEP 1 — Tone */}
@@ -618,7 +644,10 @@ export default function BrandVoicePage() {
             </div>
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", color: C.textMuted, textTransform: "uppercase", marginBottom: 8 }}>
-                Your past responses <span style={{ color: C.textMuted, fontWeight: 400, textTransform: "none" }}>(separate multiple with ---)</span>
+                Your past responses{" "}
+                <span style={{ color: C.textMuted, fontWeight: 400, textTransform: "none" }}>
+                  (separate multiple with ---)
+                </span>
               </div>
               <textarea
                 value={answers.examples}
@@ -637,7 +666,10 @@ export default function BrandVoicePage() {
             </div>
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", color: C.textMuted, textTransform: "uppercase", marginBottom: 8 }}>
-                Brand guidelines <span style={{ fontWeight: 400, textTransform: "none", color: C.textMuted }}>(optional)</span>
+                Brand guidelines{" "}
+                <span style={{ fontWeight: 400, textTransform: "none", color: C.textMuted }}>
+                  (optional)
+                </span>
               </div>
               <textarea
                 value={answers.guidelines}
@@ -759,7 +791,7 @@ export default function BrandVoicePage() {
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => { setPreviewSample(s.id); setPreviewOutput(""); }}
+                    onClick={() => { setPreviewSample(s.id); setPreviewOutput(""); setPreviewError(null); }}
                     style={{
                       background: previewSample === s.id ? "#0a1a0a" : "#111111",
                       border: `1px solid ${previewSample === s.id ? C.green : C.border2}`,
@@ -780,6 +812,9 @@ export default function BrandVoicePage() {
               borderRadius: 6, padding: "12px 14px", marginBottom: 12,
               fontSize: 13, color: C.textSecondary, lineHeight: 1.6,
             }}>
+              <span style={{ fontSize: 11, color: C.textMuted }}>
+                {PREVIEW_SAMPLES.find((s) => s.id === previewSample)?.reviewer} · {" "}
+              </span>
               {PREVIEW_SAMPLES.find((s) => s.id === previewSample)?.text}
             </div>
 
@@ -794,7 +829,6 @@ export default function BrandVoicePage() {
                 opacity: generatingPreview || !hotelId ? 0.6 : 1,
                 fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 16,
               }}
-              onMouseEnter={(e) => { if (!generatingPreview && hotelId) e.currentTarget.style.borderColor = C.border2; }}
             >
               {generatingPreview ? (
                 <>
@@ -808,6 +842,10 @@ export default function BrandVoicePage() {
               ) : "Generate preview →"}
             </button>
 
+            {previewError && (
+              <div style={{ fontSize: 12, color: C.amber, marginBottom: 12 }}>⚠ {previewError}</div>
+            )}
+
             {previewOutput && (
               <div style={{
                 background: "#0a0a0a", border: `1px solid ${C.border}`,
@@ -819,41 +857,42 @@ export default function BrandVoicePage() {
               </div>
             )}
 
-            {/* Save / saved state */}
-            {!saved ? (
-              <button
-                type="button"
-                onClick={() => void handleSave()}
-                disabled={saving || !hotelId}
-                style={{
-                  width: "100%", background: C.green, border: "none",
-                  borderRadius: 8, padding: "14px 20px",
-                  fontSize: 14, fontWeight: 700, color: "#0d0d0d",
-                  cursor: saving || !hotelId ? "not-allowed" : "pointer",
-                  opacity: saving || !hotelId ? 0.6 : 1,
-                  fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                }}
-              >
-                {saving ? (
-                  <>
-                    <span style={{
-                      width: 14, height: 14, borderRadius: "50%",
-                      border: "2px solid rgba(0,0,0,0.2)", borderTopColor: "#0d0d0d",
-                      animation: "bv-spin 0.6s linear infinite", display: "inline-block",
-                    }} />
-                    Saving…
-                  </>
-                ) : isEditMode ? "Update brand voice ✓" : "Save brand voice ✓"}
-              </button>
-            ) : (
+            {/* Save error */}
+            {saveError && (
               <div style={{
-                background: "#0a1a0a", border: "1px solid #1a3a1a",
-                borderRadius: 8, padding: "16px 20px", textAlign: "center",
-                fontSize: 14, fontWeight: 600, color: C.green,
+                background: "#1a0505", border: "1px solid #3a1010",
+                borderRadius: 6, padding: "10px 14px", marginBottom: 12,
+                fontSize: 13, color: C.red,
               }}>
-                ✓ Brand voice {isEditMode ? "updated" : "saved"} — AI will now respond in your style
+                ⚠ {saveError}
               </div>
             )}
+
+            {/* Save button */}
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={saving || !hotelId}
+              style={{
+                width: "100%", background: C.green, border: "none",
+                borderRadius: 8, padding: "14px 20px",
+                fontSize: 14, fontWeight: 700, color: "#0d0d0d",
+                cursor: saving || !hotelId ? "not-allowed" : "pointer",
+                opacity: saving || !hotelId ? 0.6 : 1,
+                fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              }}
+            >
+              {saving ? (
+                <>
+                  <span style={{
+                    width: 14, height: 14, borderRadius: "50%",
+                    border: "2px solid rgba(0,0,0,0.2)", borderTopColor: "#0d0d0d",
+                    animation: "bv-spin 0.6s linear infinite", display: "inline-block",
+                  }} />
+                  Saving…
+                </>
+              ) : isEditMode ? "Update brand voice ✓" : "Save brand voice ✓"}
+            </button>
           </div>
         )}
       </div>
@@ -891,7 +930,7 @@ export default function BrandVoicePage() {
               fontFamily: "inherit",
             }}
           >
-            {step === 4 ? "Continue →" : "Continue →"}
+            Continue →
           </button>
         )}
       </div>
