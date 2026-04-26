@@ -16,6 +16,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import BrandVoiceWizard from "@/components/BrandVoiceWizard";
 
 type ProfileRow = {
   id: string;
@@ -64,6 +65,7 @@ type HotelRow = {
   last_sync_at: string | null;
   default_response_language: string | null;
   supported_response_languages: unknown;
+  brand_voice_completed_at: string | null;
 };
 
 type ActivePlatforms = {
@@ -97,7 +99,9 @@ type HotelSearchResult = {
 };
 
 type ToastState = { type: "success" | "error"; message: string } | null;
-type ActiveTab = "account" | "hotel" | "platforms" | "billing" | "notifications";
+type ActiveTab = "account" | "brand-voice" | "hotel" | "platforms" | "billing" | "notifications";
+
+const VALID_TABS: ActiveTab[] = ["account", "brand-voice", "hotel", "platforms", "billing", "notifications"];
 
 // ─── Style constants ────────────────────────────────────────────────────────
 
@@ -174,6 +178,21 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
+  const [brandVoiceCompletedAt, setBrandVoiceCompletedAt] = useState<string | null>(null);
+
+  // Read tab from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get("tab") as ActiveTab | null;
+    if (tabParam && VALID_TABS.includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, []);
+
+  function goToTab(tab: ActiveTab) {
+    setActiveTab(tab);
+    router.replace(`/dashboard/settings?tab=${tab}`, { scroll: false });
+  }
 
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -305,6 +324,7 @@ export default function SettingsPage() {
         const h = hotelRes.data as HotelRow | null;
         setHotel(h);
         setHotelId(h?.id ?? null);
+        setBrandVoiceCompletedAt(h?.brand_voice_completed_at ?? null);
         if (h) {
           setHotelName(h.name ?? "");
           setPhone(h.phone ?? "");
@@ -593,6 +613,7 @@ export default function SettingsPage() {
 
   const TABS: { id: ActiveTab; label: string }[] = [
     { id: "account", label: "Account" },
+    { id: "brand-voice", label: "Brand voice" },
     { id: "hotel", label: "Hotel" },
     { id: "platforms", label: "Platforms" },
     { id: "billing", label: "Billing" },
@@ -605,17 +626,29 @@ export default function SettingsPage() {
     <div className="settings-page">
       {/* PAGE HEADER */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#f0f0f0", margin: "0 0 4px 0" }}>Settings</h1>
-        <p style={{ fontSize: 12, color: "#555555", margin: 0 }}>Manage your account and hotel preferences</p>
+        <h1 style={{ fontSize: 22, fontWeight: 600, color: "#f0f0f0", margin: "0 0 4px 0" }}>Settings</h1>
+        <p style={{ fontSize: 12, color: "#555555", margin: 0 }}>Manage your account, hotel and AI preferences</p>
       </div>
 
       {/* TABS */}
-      <nav style={{ display: "flex", gap: 0, borderBottom: "1px solid #1e1e1e", marginBottom: 32 }}>
+      <nav style={{ display: "flex", gap: 0, borderBottom: "1px solid #1e1e1e", marginBottom: 28 }}>
         {TABS.map(t => {
           const active = activeTab === t.id;
+          const isBrandVoice = t.id === "brand-voice";
+          const needsSetup = isBrandVoice && !brandVoiceCompletedAt && !!hotelId;
           return (
-            <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} style={{ padding: "8px 0", marginRight: 24, marginBottom: -1, fontSize: 13, fontWeight: 500, color: active ? "#f0f0f0" : "#555555", borderBottom: active ? "2px solid #f0f0f0" : "2px solid transparent", background: "none", borderTop: "none", borderLeft: "none", borderRight: "none", outline: "none", cursor: "pointer", fontFamily: "inherit" }}>
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => goToTab(t.id)}
+              style={{ padding: "10px 0", marginRight: 28, marginBottom: -1, fontSize: 13, fontWeight: active ? 500 : 400, color: active ? "#f0f0f0" : "#555555", borderBottom: active ? "2px solid #f0f0f0" : "2px solid transparent", background: "none", borderTop: "none", borderLeft: "none", borderRight: "none", outline: "none", cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 6, transition: "color 0.15s" }}
+              onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = "#888888"; }}
+              onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = "#555555"; }}
+            >
               {t.label}
+              {needsSetup && (
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", display: "inline-block", flexShrink: 0, animation: "bv-pulse 2s ease-in-out infinite" }} />
+              )}
             </button>
           );
         })}
@@ -680,12 +713,28 @@ export default function SettingsPage() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* TAB 2 — HOTEL                                                        */}
+      {/* TAB 2 — BRAND VOICE                                                  */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+
+      {activeTab === "brand-voice" && (
+        <div style={{ maxWidth: 720 }}>
+          <BrandVoiceWizard
+            onSaved={() => {
+              setBrandVoiceCompletedAt(new Date().toISOString());
+              showToast("success", "Brand voice saved — AI responses will now use your style");
+            }}
+            onGoToHotelTab={() => goToTab("hotel")}
+          />
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* TAB 3 — HOTEL                                                        */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
 
       {activeTab === "hotel" && (
         <div style={{ maxWidth: 720 }}>
-          {/* ── Find your hotel ── */}
+          {/* ─── Find your hotel ─── */}
           <div style={{ background: "#0a1a0a", border: "1px solid #1a3a1a", borderRadius: 8, padding: 20, marginBottom: 20, opacity: isLocked ? 0.5 : 1, pointerEvents: isLocked ? "none" : undefined }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: "#f0f0f0", marginBottom: 4 }}>Find your hotel automatically</div>
             <p style={{ fontSize: 12, color: "#555555", margin: "0 0 12px 0", lineHeight: 1.6 }}>Type your hotel name and we find all your details and review platform links automatically</p>
@@ -1254,6 +1303,7 @@ export default function SettingsPage() {
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes toast-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes skeleton-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+        @keyframes bv-pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
         @keyframes step-fadein { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: translateX(0); } }
         @media (max-width: 768px) {
           .settings-2col { grid-template-columns: 1fr !important; }

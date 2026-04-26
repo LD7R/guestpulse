@@ -326,7 +326,9 @@ export default function DashboardLayout({
     if (href === "/dashboard") {
       return pathname === "/dashboard";
     }
-    return pathname === href || pathname?.startsWith(`${href}/`);
+    // Strip query string for comparison
+    const hrefPath = href.split("?")[0]!;
+    return pathname === hrefPath || pathname?.startsWith(`${hrefPath}/`);
   }
 
   const currentHotelLabel = useMemo(() => {
@@ -450,21 +452,15 @@ export default function DashboardLayout({
         <div style={labelStyle}>Intelligence</div>
         <NavLink href="/dashboard/sentiment" icon="∿" label="Sentiment trends" />
         <NavLink href="/dashboard/benchmarking" icon="◎" label="Competitors" />
-        <NavLink
-          href="/dashboard/brand-voice"
-          icon={
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-            </svg>
-          }
-          label="Brand voice"
-          setupBadge={!!primaryHotel && !primaryHotel.brand_voice_completed_at}
-        />
 
         <div style={labelStyle}>Settings</div>
-        <NavLink href="/dashboard/settings" icon="⚙" label="Settings" />
+        <NavLink
+          href={!!primaryHotel && !primaryHotel.brand_voice_completed_at ? "/dashboard/settings?tab=brand-voice" : "/dashboard/settings"}
+          icon="⚙"
+          label="Settings"
+          setupBadge={!!primaryHotel && !primaryHotel.brand_voice_completed_at}
+        />
         <NavLink href="/dashboard/pricing" icon="◈" label="Pricing" />
-        <NavLink href="/dashboard/settings" icon="✉" label="Notifications" />
 
         {/* Terminal sync card */}
         {syncState.active && (

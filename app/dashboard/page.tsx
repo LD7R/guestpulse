@@ -1333,7 +1333,7 @@ function DashboardOverviewContent() {
           </span>
           <button
             type="button"
-            onClick={() => router.push("/dashboard/brand-voice")}
+            onClick={() => router.push("/dashboard/settings?tab=brand-voice")}
             style={{
               background: "transparent",
               border: "1px solid #2a5a2a",

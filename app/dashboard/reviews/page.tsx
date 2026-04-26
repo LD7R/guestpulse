@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { defaultDraftResponse, useDraftResponses } from "@/lib/useDraftResponses";
 import Spinner from "@/app/components/Spinner";
+import ConfirmModal from "@/components/ConfirmModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DraftMetadata = {
@@ -415,6 +416,7 @@ export default function ReviewsInboxPage() {
   const [noteDraft, setNoteDraft] = useState("");
   const [undoConfirmId, setUndoConfirmId] = useState<string | null>(null);
   const [upgradeModal, setUpgradeModal] = useState<{ message: string } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ reviewId: string } | null>(null);
 
   // Close flag menu on outside click
   useEffect(() => {
@@ -1015,6 +1017,23 @@ export default function ReviewsInboxPage() {
           </div>
         </div>
       )}
+
+      {/* Confirm delete note modal */}
+      <ConfirmModal
+        open={confirmModal !== null}
+        title="Delete note"
+        message="Are you sure you want to delete this internal note? This cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        destructive
+        onConfirm={() => {
+          if (confirmModal) {
+            void saveInternalNote(confirmModal.reviewId, "");
+            setConfirmModal(null);
+          }
+        }}
+        onCancel={() => setConfirmModal(null)}
+      />
 
       {/* ── 1. Page Header ─────────────────────────────────────────────── */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
@@ -1816,7 +1835,7 @@ export default function ReviewsInboxPage() {
                                 color: C.amber,
                               }}>
                                 ⚡ Using default voice.{" "}
-                                <a href="/dashboard/brand-voice" style={{ color: C.amber, textDecoration: "underline" }}>
+                                <a href="/dashboard/settings?tab=brand-voice" style={{ color: C.amber, textDecoration: "underline" }}>
                                   Train your brand voice for better responses →
                                 </a>
                               </div>
@@ -1893,11 +1912,7 @@ export default function ReviewsInboxPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (typeof window !== "undefined" && window.confirm("Delete this note?")) {
-                                void saveInternalNote(review.id!, "");
-                              }
-                            }}
+                            onClick={() => setConfirmModal({ reviewId: review.id! })}
                             style={{ border: "none", background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 2 }}
                             title="Delete note"
                           >
