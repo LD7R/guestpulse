@@ -117,6 +117,33 @@ function bookingRatingFromItem(item: ApifyReviewItem): number | null {
   return Number.isNaN(v) ? null : v;
 }
 
+function extractReviewUrl(
+  item: ApifyReviewItem,
+  platform: string,
+  hotelPageUrl: string,
+): string | null {
+  // Priority 1: explicit review URL from scraped item
+  if (item.reviewUrl) return item.reviewUrl as string;
+  if (item.url) return item.url as string;
+
+  // Priority 2: hotel page URL with platform-specific anchor
+  if (!hotelPageUrl) return null;
+  switch (platform) {
+    case "tripadvisor":
+      return hotelPageUrl + "#REVIEWS";
+    case "google":
+      return hotelPageUrl + "&hl=en";
+    case "booking":
+      return hotelPageUrl.includes("#") ? hotelPageUrl : hotelPageUrl + "#blockdisplay4";
+    case "trip":
+    case "expedia":
+    case "yelp":
+      return hotelPageUrl;
+    default:
+      return hotelPageUrl;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as {
@@ -457,7 +484,7 @@ export async function POST(request: NextRequest) {
               ? Boolean(item.businessResponse)
           : Boolean(item.ownerResponse);
 
-      const reviewUrl = (item.url || item.reviewUrl || null) as string | null;
+      const reviewUrl = extractReviewUrl(item, platform, url);
 
       // Skip duplicate only when reviewer_name matches and review_date is on the same day.
       const dayBounds = getDayBounds(reviewDate);

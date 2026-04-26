@@ -217,6 +217,41 @@ function platformLabel(platform: string | null | undefined): string {
   return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "Platform";
 }
 
+type HotelUrls = {
+  tripadvisor_url: string | null;
+  google_url: string | null;
+  booking_url: string | null;
+  trip_url: string | null;
+  expedia_url: string | null;
+  yelp_url: string | null;
+};
+
+function getReviewUrl(review: Review, hotelUrls: HotelUrls | null): string {
+  if (review.review_url?.trim()) return review.review_url.trim();
+  if (!hotelUrls) return "";
+  const p = (review.platform ?? review.source ?? "").toLowerCase();
+  switch (p) {
+    case "tripadvisor":
+      return hotelUrls.tripadvisor_url ? hotelUrls.tripadvisor_url + "#REVIEWS" : "";
+    case "google":
+      return hotelUrls.google_url ? hotelUrls.google_url + "&hl=en" : "";
+    case "booking":
+      return hotelUrls.booking_url
+        ? hotelUrls.booking_url.includes("#")
+          ? hotelUrls.booking_url
+          : hotelUrls.booking_url + "#blockdisplay4"
+        : "";
+    case "trip":
+      return hotelUrls.trip_url || "";
+    case "expedia":
+      return hotelUrls.expedia_url || "";
+    case "yelp":
+      return hotelUrls.yelp_url || "";
+    default:
+      return "";
+  }
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 function Skeleton({ width = "100%", height = "16px" }: { width?: string; height?: string }) {
   return (
@@ -355,6 +390,7 @@ export default function ReviewsInboxPage() {
   const [brandVoiceMap, setBrandVoiceMap] = useState<Record<string, { used: boolean; count: number }>>({});
   const [draftMetadata, setDraftMetadata] = useState<Record<string, DraftMetadata>>({});
   const [cachedBrandVoiceCompletedAt, setCachedBrandVoiceCompletedAt] = useState<string | null>(null);
+  const [cachedHotelUrls, setCachedHotelUrls] = useState<HotelUrls | null>(null);
 
   const [syncing, setSyncing] = useState(false);
   const [classifying, setClassifying] = useState(false);
@@ -800,7 +836,7 @@ export default function ReviewsInboxPage() {
 
       const { data: hotels, error: hotelsError } = await supabase
         .from("hotels")
-        .select("id, response_signature, brand_voice_completed_at")
+        .select("id, response_signature, brand_voice_completed_at, tripadvisor_url, google_url, booking_url, trip_url, expedia_url, yelp_url")
         .eq("user_id", user.id);
       if (hotelsError) { if (!cancelled) { setError(hotelsError.message); setLoading(false); } return; }
 
@@ -810,6 +846,14 @@ export default function ReviewsInboxPage() {
         setCachedHotelId((h.id as string | null) ?? null);
         setCachedSignature((h.response_signature as string | null)?.trim() || "The Management Team");
         setCachedBrandVoiceCompletedAt((h.brand_voice_completed_at as string | null) ?? null);
+        setCachedHotelUrls({
+          tripadvisor_url: (h.tripadvisor_url as string | null) ?? null,
+          google_url: (h.google_url as string | null) ?? null,
+          booking_url: (h.booking_url as string | null) ?? null,
+          trip_url: (h.trip_url as string | null) ?? null,
+          expedia_url: (h.expedia_url as string | null) ?? null,
+          yelp_url: (h.yelp_url as string | null) ?? null,
+        });
       }
 
       const hotelIds = (hotels ?? []).map((h: Hotel) => h.id).filter(Boolean);
@@ -831,6 +875,18 @@ export default function ReviewsInboxPage() {
     });
     return () => { cancelled = true; };
   }, [refreshKey]);
+
+  // Backfill review URLs for existing reviews that are missing them
+  useEffect(() => {
+    if (!cachedHotelId) return;
+    const missing = reviews.filter((r) => !r.review_url).length;
+    if (missing === 0) return;
+    fetch("/api/backfill-review-urls", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hotel_id: cachedHotelId }),
+    }).catch(() => {});
+  }, [cachedHotelId, reviews.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─────────────────────────────────────────────────────────────────────────
   // Loading state
@@ -1342,7 +1398,6 @@ export default function ReviewsInboxPage() {
           const sentiment = review.sentiment ?? review.sentiment_label ?? "neutral";
           const complaintTopic = review.complaint_topic ?? review.topic ?? null;
           const responded = review.responded ?? review.has_responded ?? review.is_responded ?? false;
-          const externalUrl = review.review_url?.trim() || null;
           const reviewId = review.id ?? `${idx}-${platform}`;
           const draft = draftResponses[reviewId] ?? defaultDraftResponse();
           const isPanelOpen = draft.isOpen;
@@ -1467,18 +1522,43 @@ export default function ReviewsInboxPage() {
                 <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                   <SentimentBadge sentiment={sentiment} />
                   {complaintTopic && <TopicPill topicSlug={complaintTopic} topicType={review.topic_type} />}
-                  {externalUrl && (
-                    <a
-                      href={externalUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ fontSize: 11, color: platformLinkColor(platform), textDecoration: "none" }}
-                      onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
-                    >
-                      View on {platformLabel(platform)} ↗
-                    </a>
-                  )}
+                  {(() => {
+                    const viewUrl = getReviewUrl(review, cachedHotelUrls);
+                    if (!viewUrl) return null;
+                    const color = platformLinkColor(platform);
+                    return (
+                      <a
+                        href={viewUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          background: "transparent",
+                          border: "1px solid #2a2a2a",
+                          color: "#888",
+                          borderRadius: 5,
+                          padding: "3px 9px",
+                          fontSize: 11,
+                          textDecoration: "none",
+                          cursor: "pointer",
+                          transition: "all 0.15s",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = color;
+                          e.currentTarget.style.color = color;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = "#2a2a2a";
+                          e.currentTarget.style.color = "#888";
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        View on {platformLabel(platform)} <span style={{ fontSize: 10 }}>↗</span>
+                      </a>
+                    );
+                  })()}
                   {responded && (
                     <span style={{ borderRadius: 3, padding: "2px 8px", fontSize: 11, background: "#052e16", color: C.green }}>
                       ✓ Responded
@@ -1700,6 +1780,27 @@ export default function ReviewsInboxPage() {
                         {draft.markError && (
                           <p style={{ fontSize: 12, color: C.red, marginTop: 6, marginBottom: 0 }}>{draft.markError}</p>
                         )}
+                        {/* Open platform prompt */}
+                        {(() => {
+                          const platformUrl = getReviewUrl(review, cachedHotelUrls);
+                          if (!platformUrl) return null;
+                          const color = platformLinkColor(platform);
+                          return (
+                            <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 12, color: C.textMuted }}>After copying, paste your response on the platform:</span>
+                              <a
+                                href={platformUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ fontSize: 12, color, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}
+                                onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+                              >
+                                Open {platformLabel(platform)} ↗
+                              </a>
+                            </div>
+                          );
+                        })()}
                         {/* Brand voice indicator / default voice warning */}
                         {(() => {
                           const bv = brandVoiceMap[reviewId];
