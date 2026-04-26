@@ -372,6 +372,8 @@ export default function ReviewsInboxPage() {
     "newest" | "oldest" | "lowRating" | "highRating" | "needsFirst" | "flaggedFirst"
   >("newest");
 
+  const [ratingFilter, setRatingFilter] = useState<number | null>(null);
+
   const [flagMenuOpenId, setFlagMenuOpenId] = useState<string | null>(null);
   const [noteEditorId, setNoteEditorId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
@@ -410,7 +412,11 @@ export default function ReviewsInboxPage() {
               ? Boolean(r.flagged)
               : !Boolean(responded); // needsResponse
 
-      return platformOk && sentimentOk && respondedOk;
+      const ratingOk = ratingFilter === null
+        ? true
+        : normalizeRating(r.rating ?? r.stars) === ratingFilter;
+
+      return platformOk && sentimentOk && respondedOk && ratingOk;
     });
 
     if (reviewType !== "all") {
@@ -468,7 +474,7 @@ export default function ReviewsInboxPage() {
     });
 
     return list;
-  }, [reviews, platformFilter, sentimentFilter, respondedFilter, reviewType, searchQuery, periodDays, sortBy]);
+  }, [reviews, platformFilter, sentimentFilter, respondedFilter, reviewType, searchQuery, periodDays, sortBy, ratingFilter]);
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const summary = useMemo(() => {
@@ -482,25 +488,40 @@ export default function ReviewsInboxPage() {
   }, [reviews]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
-  async function handleDraftResponse(review: Review) {
+  function handleDiscardDraft(reviewId: string) {
+    draftAbortRef.current?.abort();
+    draftAbortRef.current = null;
+    removeDraft(reviewId);
+    setDraftMetadata((prev) => { const next = { ...prev }; delete next[reviewId]; return next; });
+    setBrandVoiceMap((prev) => { const next = { ...prev }; delete next[reviewId]; return next; });
+  }
+
+  async function handleDraftResponse(review: Review, force = false) {
     const id = review.id;
     if (!id) return;
     const cur = draftResponses[id];
 
-    if (cur?.isOpen) {
-      draftAbortRef.current?.abort();
-      draftAbortRef.current = null;
-      patchDraftResponse(id, { isOpen: false });
-      return;
-    }
-    if (cur?.status === "done" || cur?.status === "error") {
-      patchDraftResponse(id, { isOpen: true });
-      return;
+    if (!force) {
+      if (cur?.isOpen) {
+        draftAbortRef.current?.abort();
+        draftAbortRef.current = null;
+        patchDraftResponse(id, { isOpen: false });
+        return;
+      }
+      if (cur?.status === "done" || cur?.status === "error") {
+        patchDraftResponse(id, { isOpen: true });
+        return;
+      }
     }
 
     draftAbortRef.current?.abort();
     const controller = new AbortController();
     draftAbortRef.current = controller;
+
+    if (force) {
+      setDraftMetadata((prev) => { const next = { ...prev }; delete next[id]; return next; });
+      setBrandVoiceMap((prev) => { const next = { ...prev }; delete next[id]; return next; });
+    }
 
     patchDraftResponse(id, { isOpen: true, status: "loading", text: "", markError: null, copied: false });
 
@@ -1073,6 +1094,53 @@ export default function ReviewsInboxPage() {
           />
         </div>
 
+        {/* Star rating filter */}
+        <div style={{ marginTop: 10, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: C.textMuted, marginRight: 2 }}>
+            Rating:
+          </span>
+          <button
+            type="button"
+            onClick={() => setRatingFilter(null)}
+            style={{
+              background: ratingFilter === null ? "#1e1e1e" : C.inputBg,
+              border: `1px solid ${ratingFilter === null ? "#3a3a3a" : C.border}`,
+              color: ratingFilter === null ? C.textPrimary : C.textSecondary,
+              borderRadius: 6, padding: "5px 12px", fontSize: 11,
+              cursor: "pointer", fontFamily: "inherit", fontWeight: ratingFilter === null ? 500 : 400,
+            }}
+          >
+            All ({reviews.length})
+          </button>
+          {([5, 4, 3, 2, 1] as const).map((star) => {
+            const count = reviews.filter((r) => normalizeRating(r.rating ?? r.stars) === star).length;
+            const isActive = ratingFilter === star;
+            const STAR_COLOR: Record<number, string> = { 5: "#4ade80", 4: "#84cc16", 3: "#fbbf24", 2: "#f97316", 1: "#f87171" };
+            const color = STAR_COLOR[star]!;
+            return (
+              <button
+                key={star}
+                type="button"
+                onClick={() => setRatingFilter(isActive ? null : star)}
+                disabled={count === 0}
+                style={{
+                  background: isActive ? `${color}18` : C.inputBg,
+                  border: `1px solid ${isActive ? color : C.border}`,
+                  color: count === 0 ? "#333" : isActive ? color : C.textSecondary,
+                  borderRadius: 6, padding: "5px 12px", fontSize: 11,
+                  cursor: count === 0 ? "not-allowed" : "pointer",
+                  opacity: count === 0 ? 0.5 : 1,
+                  fontFamily: "inherit", fontWeight: isActive ? 500 : 400,
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                }}
+              >
+                <span style={{ color, letterSpacing: -1 }}>{"★".repeat(star)}</span>
+                <span>({count})</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Filter row */}
         <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
           {/* Date range */}
@@ -1201,21 +1269,66 @@ export default function ReviewsInboxPage() {
         </div>
       )}
 
+      {/* ── 4b. Active rating filter chip ──────────────────────────────── */}
+      {ratingFilter !== null && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            background: "#1a1a1a", border: `1px solid ${C.borderSub}`,
+            borderRadius: 100, padding: "4px 10px", fontSize: 11, color: C.textSecondary,
+          }}>
+            Showing only {ratingFilter}-star reviews
+            <button
+              type="button"
+              onClick={() => setRatingFilter(null)}
+              style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0, fontFamily: "inherit" }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── 5. Empty state ──────────────────────────────────────────────── */}
       {!loading && visibleReviews.length === 0 && (
         <div style={{ ...cardStyle, padding: 40, textAlign: "center" }}>
-          <div style={{ fontSize: 16, fontWeight: 600, color: C.textMuted }}>No reviews found</div>
-          <div style={{ fontSize: 13, color: "#444444", marginTop: 4 }}>
-            Try adjusting your filters or sync new reviews
-          </div>
-          <button
-            type="button"
-            disabled={syncing}
-            onClick={() => void handleSyncAllReviews()}
-            style={{ ...primaryBtn(syncing), marginTop: 16 }}
-          >
-            {syncing ? "Syncing…" : "Sync reviews"}
-          </button>
+          {reviews.length > 0 ? (
+            <>
+              <div style={{ fontSize: 14, fontWeight: 500, color: C.textMuted, marginBottom: 12 }}>
+                No reviews match your filters
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setRatingFilter(null);
+                  setSearchQuery("");
+                  setPlatformFilter("all");
+                  setSentimentFilter("all");
+                  setRespondedFilter("all");
+                  setReviewType("all");
+                  setPeriodDays(30);
+                }}
+                style={secondaryBtn({ padding: "6px 14px", fontSize: 12 })}
+              >
+                Clear all filters
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 16, fontWeight: 600, color: C.textMuted }}>No reviews found</div>
+              <div style={{ fontSize: 13, color: "#444444", marginTop: 4 }}>
+                Try adjusting your filters or sync new reviews
+              </div>
+              <button
+                type="button"
+                disabled={syncing}
+                onClick={() => void handleSyncAllReviews()}
+                style={{ ...primaryBtn(syncing), marginTop: 16 }}
+              >
+                {syncing ? "Syncing…" : "Sync reviews"}
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -1518,7 +1631,7 @@ export default function ReviewsInboxPage() {
                             color: "#cccccc",
                           }}
                         />
-                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                           <button
                             type="button"
                             onClick={async () => {
@@ -1527,9 +1640,45 @@ export default function ReviewsInboxPage() {
                               setTimeout(() => patchDraftResponse(reviewId, { copied: false }), 2000);
                             }}
                             style={{
-                              background: "#1e1e1e",
+                              background: C.textPrimary,
+                              border: "none",
+                              color: "#0d0d0d",
+                              borderRadius: 5,
+                              padding: "6px 14px",
+                              fontSize: 12,
+                              fontWeight: 500,
+                              cursor: "pointer",
+                              fontFamily: "inherit",
+                            }}
+                          >
+                            {draft.copied ? "✓ Copied" : "Copy"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDraftResponse(review, true)}
+                            style={{
+                              background: "transparent",
                               border: `1px solid ${C.borderSub}`,
-                              color: C.textPrimary,
+                              color: C.textSecondary,
+                              borderRadius: 5,
+                              padding: "6px 14px",
+                              fontSize: 12,
+                              cursor: "pointer",
+                              fontFamily: "inherit",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 5,
+                            }}
+                          >
+                            ↻ Regenerate
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDiscardDraft(reviewId)}
+                            style={{
+                              background: "transparent",
+                              border: "1px solid #2a1a1a",
+                              color: C.red,
                               borderRadius: 5,
                               padding: "6px 14px",
                               fontSize: 12,
@@ -1537,13 +1686,13 @@ export default function ReviewsInboxPage() {
                               fontFamily: "inherit",
                             }}
                           >
-                            {draft.copied ? "Copied!" : "Copy response"}
+                            Discard
                           </button>
                           <button
                             type="button"
                             disabled={draft.markingResponded}
                             onClick={() => review.id && void handleMarkResponded(review.id)}
-                            style={primaryBtn(draft.markingResponded)}
+                            style={{ ...primaryBtn(draft.markingResponded), marginLeft: "auto" }}
                           >
                             {draft.markingResponded ? "Saving…" : "Mark as responded"}
                           </button>
