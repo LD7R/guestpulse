@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import PageLoadingBar from "@/app/components/PageLoadingBar";
 import TerminalSyncCard, { type SyncPlatformStatus } from "@/app/components/TerminalSyncCard";
+import Logo from "@/components/Logo";
 
 const labelStyle: CSSProperties = {
   fontSize: "10px",
@@ -432,12 +433,12 @@ export default function DashboardLayout({
       >
         <div
           style={{
-            padding: "16px 16px 8px",
-            borderBottom: "1px solid #1a1a1a",
+            padding: "14px 16px",
+            borderBottom: "1px solid #1e1e1e",
             marginBottom: 8,
           }}
         >
-          <span style={{ fontSize: 15, fontWeight: 700, color: "#f0f0f0" }}>GuestPulse</span>
+          <Logo size="md" />
         </div>
 
         <div style={labelStyle}>Overview</div>

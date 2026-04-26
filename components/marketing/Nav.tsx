@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { CSSProperties } from "react";
+import Logo from "@/components/Logo";
 
 export default function MarketingNav() {
   const router = useRouter();
@@ -41,9 +42,8 @@ export default function MarketingNav() {
           padding: "0 48px",
         }}
       >
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", flexShrink: 0 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80" }} />
-          <span style={{ fontSize: 17, fontWeight: 700, color: "#ffffff" }}>GuestPulse</span>
+        <Link href="/" style={{ display: "flex", alignItems: "center", textDecoration: "none", flexShrink: 0 }}>
+          <Logo size="md" />
         </Link>
 
         <div className="mnav-links">

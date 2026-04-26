@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import Logo from "@/components/Logo";
 
 function FooterLink({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -29,9 +30,8 @@ export default function MarketingFooter() {
       <footer style={{ background: "#0a0c12", borderTop: "1px solid #242836", padding: "64px 48px 32px" }}>
         <div className="mfooter-grid" style={{ maxWidth: 1200, margin: "0 auto" }}>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80" }} />
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#ffffff" }}>GuestPulse</span>
+            <div style={{ marginBottom: 12 }}>
+              <Logo size="sm" />
             </div>
             <p style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.7, maxWidth: 280 }}>
               AI-powered review management built for independent boutique hotels worldwide.
