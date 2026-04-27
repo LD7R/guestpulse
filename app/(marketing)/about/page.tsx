@@ -42,8 +42,8 @@ export default function AboutPage() {
         <h1 style={{ fontSize: "clamp(30px,5vw,48px)", fontWeight: 700, color: C.text, letterSpacing: "-1.5px", lineHeight: 1.1, marginBottom: 20 }}>
           Built by hoteliers, for hoteliers
         </h1>
-        <p style={{ fontSize: 17, color: C.textSec, lineHeight: 1.7 }}>
-          GuestPulse is a tool born from frustration — the same frustration every independent hotelier knows.
+        <p style={{ fontSize: 17, color: C.textSec, lineHeight: 1.7, maxWidth: 540, margin: "0 auto" }}>
+          GuestPulse was born from years of frustration managing hotel reviews manually
         </p>
       </section>
 
@@ -53,22 +53,16 @@ export default function AboutPage() {
           <span style={sectionLabel}>Our story</span>
           <div style={{ fontSize: 16, color: C.textSec, lineHeight: 1.8, display: "flex", flexDirection: "column", gap: 20 }}>
             <p>
-              GuestPulse was built after years of managing hotel reviews manually — logging into 6 different platforms
-              every morning, copy-pasting the same responses, missing urgent reviews because nobody checked
-              Booking.com for 3 days.
+              GuestPulse was built after years of managing hotel reviews manually — logging into 6 different platforms,
+              copy-pasting responses, missing urgent reviews because nobody checked
+              Booking.com for 3 days, watching competitors get better reviews while we did the work manually.
             </p>
             <p>
-              We watched competitors pull ahead not because their hotels were better, but because they were
-              faster at responding. A prompt, personal response to a bad review can save a booking. An ignored
-              review compounds into a pattern that damages your ranking permanently.
-            </p>
-            <p>
-              We tried the enterprise tools. They were built for hotel chains with IT teams and four-figure
-              monthly budgets. We tried the manual approach. It was eating hours every week and still missing
-              things. There was no good option for independent boutique hotels.
+              We built the tool we wished we had: one dashboard, all your reviews, AI-powered responses, automatic
+              monitoring, and competitive intelligence — all in under 5 minutes of setup.
             </p>
             <p style={{ color: C.text, fontWeight: 500 }}>
-              So we built one. The tool we wished we had.
+              Today, GuestPulse is helping independent boutique hotels worldwide turn review chaos into competitive advantage.
             </p>
           </div>
         </div>
@@ -126,14 +120,14 @@ export default function AboutPage() {
             L
           </div>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontSize: 18, fontWeight: 600, color: C.text }}>Leonardo</div>
-            <div style={{ fontSize: 13, color: C.green, marginTop: 4, marginBottom: 12 }}>Founder &amp; Builder</div>
+            <div style={{ fontSize: 18, fontWeight: 600, color: C.text }}>Leonardo Baaijens</div>
+            <div style={{ fontSize: 13, color: C.green, marginTop: 4, marginBottom: 12 }}>Founder, building from Amsterdam</div>
             <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.7 }}>
-              Building GuestPulse for independent hotels worldwide. Spent years watching boutique properties lose
-              bookings to avoidable reputation problems. Decided to do something about it.
+              Background in hospitality and tech. Built GuestPulse to solve a problem we kept hearing from hotel
+              managers — the chaos of multi-platform review management.
             </p>
             <p style={{ fontSize: 13, color: C.textMuted, marginTop: 10 }}>
-              Questions? <a href="mailto:hello@guestpulse.com" style={{ color: C.green, textDecoration: "none" }}>hello@guestpulse.com</a>
+              Questions? <a href="mailto:hello@guestpulse.app" style={{ color: C.green, textDecoration: "none" }}>hello@guestpulse.app</a>
             </p>
           </div>
         </div>
@@ -165,13 +159,13 @@ export default function AboutPage() {
 
       {/* Final CTA */}
       <section className="ap" style={{ padding: "96px 48px", maxWidth: 900, margin: "0 auto", textAlign: "center" }}>
-        <h2 style={{ fontSize: "clamp(28px,4vw,40px)", fontWeight: 700, color: C.text, letterSpacing: "-1.5px", lineHeight: 1.15 }}>
-          Ready to try it yourself?
+        <h2 style={{ fontSize: "clamp(24px,4vw,40px)", fontWeight: 700, color: C.text, letterSpacing: "-1px", lineHeight: 1.15 }}>
+          Ready to transform your reviews?
         </h2>
         <p style={{ fontSize: 17, color: C.textSec, marginTop: 16, lineHeight: 1.7 }}>
           7-day free trial. No credit card. Set up in 5 minutes.
         </p>
-        <button type="button" onClick={() => router.push("/pricing")} style={{ ...primaryBtn, padding: "14px 28px", fontSize: 15, marginTop: 32 }}
+        <button type="button" onClick={() => router.push("/signup")} style={{ ...primaryBtn, padding: "14px 28px", fontSize: 15, marginTop: 32 }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "#22c55e"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = C.green; }}>
           Start 7-day free trial →

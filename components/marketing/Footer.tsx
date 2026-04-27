@@ -45,15 +45,12 @@ export default function MarketingFooter() {
             <FooterLink href="/product">Overview</FooterLink>
             <FooterLink href="/features">Features</FooterLink>
             <FooterLink href="/pricing">Pricing</FooterLink>
-            <FooterLink href="/changelog">Changelog</FooterLink>
           </div>
 
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#6b7280", marginBottom: 16 }}>
               Resources
             </div>
-            <FooterLink href="/blog">Blog</FooterLink>
-            <FooterLink href="/guides">Hotel guides</FooterLink>
             <FooterLink href="/help">Help center</FooterLink>
             <FooterLink href="/contact">Contact</FooterLink>
           </div>
@@ -63,7 +60,6 @@ export default function MarketingFooter() {
               Company
             </div>
             <FooterLink href="/about">About</FooterLink>
-            <FooterLink href="/careers">Careers</FooterLink>
             <FooterLink href="/privacy">Privacy</FooterLink>
             <FooterLink href="/terms">Terms</FooterLink>
           </div>

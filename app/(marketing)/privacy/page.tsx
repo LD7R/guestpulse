@@ -2,49 +2,100 @@
 
 const SECTIONS = [
   {
-    title: "What we collect",
-    body: "We collect the information you provide when you sign up (name, email, hotel name), your hotel's review data from public listing pages, and basic usage analytics to improve the product. We do not collect your guests' personal data beyond what appears in public reviews.",
+    title: "1. Introduction",
+    body: `GuestPulse ("we", "us", "our") respects your privacy and is committed to protecting your personal data. This privacy policy explains how we collect, use, and protect information when you use our review management platform.`,
   },
   {
-    title: "How we use it",
-    body: "Your data is used solely to operate GuestPulse: syncing reviews, generating AI responses, and delivering analytics. We do not sell your data to third parties, use it for advertising, or share it with competitors.",
+    title: "2. Information We Collect",
+    body: `We collect:\n• Account information: name, email, hotel name and address\n• Hotel data: review platform URLs, hotel details, competitors you track\n• Review data: public reviews from third-party platforms (TripAdvisor, Google Maps, Booking.com, Trip.com, Expedia, Yelp)\n• Usage data: how you interact with our platform\n• Payment information: processed securely by Stripe; we do not store credit card details`,
   },
   {
-    title: "AI and your data",
-    body: "Your review data and hotel information are never used to train AI models. AI responses are generated in real-time using your data as context and discarded immediately after.",
+    title: "3. How We Use Your Information",
+    body: `We use your data to:\n• Provide and improve the GuestPulse service\n• Generate AI-powered review responses and insights\n• Send you account, billing and product communications\n• Detect fraud and ensure platform security\n• Comply with legal obligations`,
   },
   {
-    title: "Data storage",
-    body: "Your data is stored on enterprise-grade infrastructure in the EU. We use encryption at rest and in transit. Backups are retained for 30 days.",
+    title: "4. Data Sharing",
+    body: `We do not sell your data. We share information only with:\n• Service providers (Supabase for hosting, Stripe for payments, Anthropic for AI processing, Apify for review collection)\n• Legal authorities when required by law\n• Business successors in case of merger or acquisition`,
   },
   {
-    title: "Your rights",
-    body: "You can export your data at any time from your account settings. You can request deletion of your account and all associated data by emailing hello@guestpulse.com. We comply with GDPR.",
+    title: "5. AI and Data Training",
+    body: `Your hotel data, reviews, and brand voice training materials are never used to train AI models. All AI processing is conducted via Anthropic's API with zero data retention. AI-generated responses are suggestions only and are not stored beyond your active session.`,
   },
   {
-    title: "Cookies",
-    body: "We use only essential cookies required to operate the service (authentication session). We do not use advertising or tracking cookies.",
+    title: "6. Data Security",
+    body: `We implement industry-standard security measures including:\n• Encryption at rest and in transit\n• Row-level security on all database access\n• Regular security audits\n• Limited employee access on a need-to-know basis`,
   },
   {
-    title: "Contact",
-    body: "For privacy questions, email hello@guestpulse.com. We aim to respond within 2 business days.",
+    title: "7. Your Rights (GDPR + CCPA)",
+    body: `You have the right to:\n• Access your personal data\n• Correct inaccurate data\n• Delete your data ("right to be forgotten")\n• Export your data\n• Opt out of marketing emails\n• Withdraw consent at any time\n\nTo exercise these rights, contact us at hello@guestpulse.app.`,
+  },
+  {
+    title: "8. Data Retention",
+    body: `We retain your data for as long as your account is active. After account deletion:\n• Personal data is deleted within 30 days\n• Anonymized usage data may be retained for analytics\n• Legal records (invoices, tax data) are retained as required by law`,
+  },
+  {
+    title: "9. Cookies",
+    body: `We use essential cookies for authentication and session management only. We do not use tracking cookies or third-party advertising cookies.`,
+  },
+  {
+    title: "10. International Transfers",
+    body: `Your data may be processed in countries outside your home country. We ensure adequate protection through standard contractual clauses and data processing agreements with all service providers.`,
+  },
+  {
+    title: "11. Children",
+    body: `GuestPulse is not intended for users under 18. We do not knowingly collect data from children.`,
+  },
+  {
+    title: "12. Changes to This Policy",
+    body: `We may update this policy from time to time. Material changes will be communicated via email or in-app notification with reasonable advance notice.`,
+  },
+  {
+    title: "13. Contact",
+    body: `For privacy questions or to exercise your rights:\nEmail: hello@guestpulse.app\nWe aim to respond within 2 business days.`,
   },
 ];
 
+function renderBody(text: string) {
+  return text.split("\n").map((line, i) => (
+    <p key={i} style={{ fontSize: 15, color: "#d1d5db", lineHeight: 1.7, margin: "0 0 6px 0" }}>
+      {line}
+    </p>
+  ));
+}
+
 export default function PrivacyPage() {
   return (
-    <main style={{ padding: "96px 48px", maxWidth: 760, margin: "0 auto", fontFamily: "Inter, -apple-system, sans-serif" }}>
-      <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6b7280", marginBottom: 12, textAlign: "center" }}>Legal</p>
-      <h1 style={{ fontSize: 40, fontWeight: 700, color: "#ffffff", letterSpacing: "-1px", textAlign: "center", marginBottom: 8 }}>Privacy Policy</h1>
-      <p style={{ fontSize: 13, color: "#6b7280", textAlign: "center", marginBottom: 64 }}>Last updated: April 2026</p>
-      <p style={{ fontSize: 15, color: "#9ca3af", lineHeight: 1.8, marginBottom: 48 }}>
-        Your privacy matters to us. This policy explains what data GuestPulse collects, how we use it, and your rights as a user.
-      </p>
+    <main
+      style={{
+        background: "#0f1117",
+        fontFamily: "Inter, -apple-system, sans-serif",
+        padding: "80px 32px",
+        maxWidth: 760,
+        margin: "0 auto",
+        boxSizing: "border-box",
+      }}
+    >
+      <h1 style={{ fontSize: 36, fontWeight: 700, color: "#ffffff", letterSpacing: "-0.8px", marginBottom: 8 }}>
+        Privacy Policy
+      </h1>
+      <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 56 }}>Last updated: April 2026</p>
+
       <div style={{ display: "flex", flexDirection: "column", gap: 40 }}>
         {SECTIONS.map((s) => (
           <div key={s.title}>
-            <h2 style={{ fontSize: 18, fontWeight: 600, color: "#ffffff", marginBottom: 10 }}>{s.title}</h2>
-            <p style={{ fontSize: 15, color: "#9ca3af", lineHeight: 1.8 }}>{s.body}</p>
+            <h2
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "#9ca3af",
+                marginBottom: 12,
+              }}
+            >
+              {s.title}
+            </h2>
+            <div>{renderBody(s.body)}</div>
           </div>
         ))}
       </div>
