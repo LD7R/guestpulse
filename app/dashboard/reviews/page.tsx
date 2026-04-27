@@ -198,6 +198,48 @@ function formatRelativeTime(iso: string | null | undefined): string {
   return `${Math.floor(mo / 12)}y ago`;
 }
 
+function formatReviewDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "Unknown date";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "Unknown date";
+  const now = new Date();
+  const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7);
+    return weeks === 1 ? "1 week ago" : `${weeks} weeks ago`;
+  }
+  if (date.getFullYear() === now.getFullYear()) {
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function fullDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function dateColor(dateStr: string | null | undefined): string {
+  if (!dateStr) return C.textMuted;
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return C.textMuted;
+  const days = Math.floor((Date.now() - date.getTime()) / 86400000);
+  if (days <= 3) return C.green;
+  if (days <= 7) return C.amber;
+  if (days <= 14) return C.textSecondary;
+  return C.textMuted;
+}
+
 function platformLinkColor(platform: string | null | undefined): string {
   const p = (platform ?? "").toLowerCase();
   if (p === "tripadvisor") return C.green;
@@ -867,7 +909,7 @@ export default function ReviewsInboxPage() {
         .from("reviews")
         .select("*")
         .in("hotel_id", hotelIds)
-        .order("created_at", { ascending: false });
+        .order("review_date", { ascending: false, nullsFirst: false });
 
       if (reviewsError) { if (!cancelled) { setError(reviewsError.message); setLoading(false); } return; }
       if (!cancelled) { setReviews((reviewsData ?? []) as Review[]); setLoading(false); }
@@ -1424,7 +1466,7 @@ export default function ReviewsInboxPage() {
           const isPanelOpen = draft.isOpen;
           const hasSavedDraft = (draft.status === "done" || draft.status === "error") && Boolean(draft.text?.trim());
           const hasStableId = Boolean(review.id);
-          const timeAgo = formatRelativeTime(getReviewDate(review));
+          const reviewDateIso = getReviewDate(review);
 
           // Left border color
           const flagAccent = review.flagged
@@ -1457,7 +1499,13 @@ export default function ReviewsInboxPage() {
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 13, color: C.textSecondary }}>{reviewerName}</span>
-                    <span style={{ fontSize: 11, color: "#444444" }}>{timeAgo}</span>
+                    <span style={{ fontSize: 11, color: C.textMuted }}>·</span>
+                    <span
+                      title={fullDate(reviewDateIso)}
+                      style={{ fontSize: 11, color: dateColor(reviewDateIso), cursor: "help" }}
+                    >
+                      {formatReviewDate(reviewDateIso)}
+                    </span>
                     {/* Flag button */}
                     {hasStableId && (
                       <div data-flag-menu-root style={{ position: "relative" }}>
