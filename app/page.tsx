@@ -3,6 +3,7 @@
 import MarketingFooter from "@/components/marketing/Footer";
 import MarketingNav from "@/components/marketing/Nav";
 import { createBrowserClient } from "@supabase/ssr";
+import { AlertTriangle, BarChart3, Layers, Mail, Sparkles, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -60,10 +61,6 @@ const sectionLabel: CSSProperties = {
   display: "block",
 };
 
-function scrollTo(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-}
-
 const FAQ_ITEMS = [
   {
     q: "How long does setup really take?",
@@ -74,12 +71,24 @@ const FAQ_ITEMS = [
     a: "No. We never ask for your platform login details. GuestPulse reads reviews from public listing pages only. Your accounts stay completely private and secure.",
   },
   {
+    q: "How does AI response drafting work?",
+    a: "Click 'Draft AI response' on any review. Within 2–3 seconds the AI reads the review, references specific details the guest mentioned, applies your brand voice settings, and produces a ready-to-copy response.",
+  },
+  {
     q: "Will AI responses sound generic or robotic?",
-    a: "No. Each response references specific details the guest mentioned — their room type, the dish they praised, the issue they had. You can also set a custom sign-off so every response ends with your hotel's signature line.",
+    a: "No. Each response references specific details the guest mentioned — their room type, the dish they praised, the issue they had. You can also train a custom brand voice so every response sounds like you.",
   },
   {
     q: "What happens after the free trial?",
     a: "You'll be charged at your selected plan rate. Cancel anytime before the trial ends and you won't be charged. No credit card required to start the trial.",
+  },
+  {
+    q: "Does GuestPulse work for multiple properties?",
+    a: "Yes — the Multi-property plan supports up to 5 hotels with a shared portfolio dashboard. For larger groups, contact us about a custom plan.",
+  },
+  {
+    q: "What languages are supported?",
+    a: "GuestPulse handles reviews in 19 languages including English, Dutch, German, French, Spanish, Italian, Portuguese, Indonesian, Japanese, Chinese, and more. Sentiment analysis and AI responses work across all supported languages.",
   },
   {
     q: "Is my hotel data safe?",
@@ -87,9 +96,55 @@ const FAQ_ITEMS = [
   },
 ];
 
+const FEATURES = [
+  {
+    bg: "rgba(74,222,128,0.07)",
+    icon: <Sparkles size={20} />,
+    ic: C.green,
+    title: "AI responses in 2 seconds",
+    desc: "Our AI reads each review and generates a warm professional response referencing specific details the guest mentioned. Edit, copy, post.",
+  },
+  {
+    bg: "rgba(96,165,250,0.07)",
+    icon: <Layers size={20} />,
+    ic: C.blue,
+    title: "All 6 platforms in one inbox",
+    desc: "TripAdvisor, Google, Booking.com, Trip.com, Expedia and Yelp — all synced automatically. No more logging into 6 different dashboards.",
+  },
+  {
+    bg: "rgba(167,139,250,0.07)",
+    icon: <BarChart3 size={20} />,
+    ic: C.purple,
+    title: "AI sentiment analysis",
+    desc: "Every review automatically classified: positive, neutral, negative. Spot complaint trends before they hurt your rating. 19 languages supported.",
+  },
+  {
+    bg: "rgba(251,191,36,0.07)",
+    icon: <TrendingUp size={20} />,
+    ic: C.amber,
+    title: "Know your competition",
+    desc: "AI finds similar hotels in your area. See exactly how you rank. Benchmark your rating, review volume, and complaint topics vs local rivals.",
+  },
+  {
+    bg: "rgba(248,113,113,0.07)",
+    icon: <AlertTriangle size={20} />,
+    ic: C.red,
+    title: "Urgent review alerts",
+    desc: "Get instant notification when a 1 or 2 star review is posted. Respond within hours, not days — the difference between saved and lost bookings.",
+  },
+  {
+    bg: "rgba(74,222,128,0.07)",
+    icon: <Mail size={20} />,
+    ic: C.green,
+    title: "Monday morning digest",
+    desc: "Weekly email summary: new reviews, rating changes, top complaints, urgent items. Start every Monday knowing exactly where you stand.",
+  },
+];
+
 export default function HomePage() {
   const router = useRouter();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [scrollProgress, setScrollProgress] = useState(0);
 
   useEffect(() => {
     async function checkAuth() {
@@ -102,6 +157,16 @@ export default function HomePage() {
     }
     checkAuth();
   }, [router]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = totalHeight > 0 ? (window.scrollY / totalHeight) * 100 : 0;
+      setScrollProgress(Math.min(100, Math.max(0, progress)));
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const goSignup = useCallback(() => router.push("/pricing"), [router]);
 
@@ -123,7 +188,15 @@ export default function HomePage() {
           .hp-row { flex-direction: column !important; }
           .hp-trow { grid-template-columns: 1.8fr 1fr 1fr 1fr; font-size: 11px !important; }
         }
+        @media (max-width: 480px) {
+          .hp-pg4 { grid-template-columns: 1fr 1fr !important; }
+        }
       `}} />
+
+      {/* Scroll progress bar */}
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 2, zIndex: 200, pointerEvents: "none" }}>
+        <div style={{ height: "100%", background: C.green, width: `${scrollProgress}%`, transition: "width 0.1s ease-out" }} />
+      </div>
 
       <MarketingNav />
 
@@ -134,18 +207,18 @@ export default function HomePage() {
 
       {/* ── HERO ── */}
       <section className="hp" style={{ padding: "96px 48px 72px", maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
-        <div style={{ display: "inline-block", background: C.bgDeep, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, color: C.textMuted, marginBottom: 24 }}>
+        <div style={{ display: "inline-block", background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 100, padding: "6px 14px", fontSize: 12, color: C.textSec, marginBottom: 24 }}>
           ✦ Built for independent boutique hotels worldwide
         </div>
 
-        <h1 style={{ fontSize: "clamp(36px,5vw,56px)", fontWeight: 700, letterSpacing: "-2px", lineHeight: 1.08, maxWidth: 900, margin: "0 auto" }}>
-          <span style={{ color: C.text, display: "block" }}>Never lose a booking to</span>
-          <span style={{ color: C.green, display: "block" }}>an unanswered review</span>
+        <h1 style={{ fontSize: "clamp(32px,5vw,56px)", fontWeight: 700, letterSpacing: "-2px", lineHeight: 1.08, maxWidth: 900, margin: "0 auto" }}>
+          <span style={{ color: C.text, display: "block" }}>Stop losing bookings to</span>
+          <span style={{ color: C.green, display: "block" }}>unanswered reviews</span>
         </h1>
 
-        <p style={{ fontSize: 17, color: C.textSec, maxWidth: 640, lineHeight: 1.7, margin: "20px auto 0" }}>
+        <p style={{ fontSize: "clamp(15px,2vw,18px)", color: C.textSec, maxWidth: 660, lineHeight: 1.6, margin: "20px auto 0" }}>
           GuestPulse pulls reviews from all 6 major platforms, drafts AI responses in 2 seconds, and finds
-          your competitors automatically — set up in under 5 minutes. Works for hotels worldwide.
+          your competitors automatically — set up in under 5 minutes.
         </p>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center", marginTop: 32 }}>
@@ -154,13 +227,26 @@ export default function HomePage() {
             onMouseLeave={(e) => { e.currentTarget.style.background = C.green; }}>
             Start 7-day free trial →
           </button>
-          <button type="button" onClick={() => scrollTo("how-it-works")} style={{ ...secondaryBtn, padding: "13px 26px", fontSize: 14 }}
+          <button
+            type="button"
+            onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}
+            style={{ ...secondaryBtn, padding: "13px 26px", fontSize: 14 }}
             onMouseEnter={(e) => { e.currentTarget.style.background = C.bgCard; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
             See how it works
           </button>
         </div>
-        <p style={{ fontSize: 12, color: C.textFaint, marginTop: 16 }}>No credit card required · Cancel anytime</p>
+        <p style={{ fontSize: 12, color: C.textFaint, marginTop: 16 }}>No credit card required · Cancel anytime · Set up in 5 minutes</p>
+
+        {/* Social proof row */}
+        <div style={{ display: "flex", gap: 16, justifyContent: "center", alignItems: "center", marginTop: 32, flexWrap: "wrap" }}>
+          {["6 review platforms", "19 languages", "Made in Amsterdam"].map((item, i, arr) => (
+            <span key={item} style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <span style={{ fontSize: 11, color: "#444" }}>{item}</span>
+              {i < arr.length - 1 && <span style={{ color: C.borderMid, fontSize: 11 }}>·</span>}
+            </span>
+          ))}
+        </div>
       </section>
 
       {/* ── PLATFORM LOGOS ── */}
@@ -182,7 +268,7 @@ export default function HomePage() {
       {/* ── THE PROBLEM ── */}
       <section className="hp" style={{ padding: "96px 48px", maxWidth: 1100, margin: "0 auto" }}>
         <span style={sectionLabel}>The Problem</span>
-        <h2 style={{ fontSize: "clamp(26px,3.5vw,36px)", fontWeight: 700, color: C.text, letterSpacing: "-1px", textAlign: "center", marginBottom: 12 }}>
+        <h2 style={{ fontSize: "clamp(24px,3.5vw,36px)", fontWeight: 700, color: C.text, letterSpacing: "-1px", textAlign: "center", marginBottom: 12 }}>
           The reviews problem no one talks about
         </h2>
         <p style={{ fontSize: 16, color: C.textSec, textAlign: "center", maxWidth: 600, margin: "0 auto 48px", lineHeight: 1.7 }}>
@@ -206,7 +292,7 @@ export default function HomePage() {
       {/* ── HOW IT WORKS ── */}
       <section id="how-it-works" className="hp" style={{ padding: "96px 48px", maxWidth: 1100, margin: "0 auto" }}>
         <span style={sectionLabel}>How It Works</span>
-        <h2 style={{ fontSize: "clamp(26px,3.5vw,36px)", fontWeight: 700, color: C.text, letterSpacing: "-1px", textAlign: "center" }}>
+        <h2 style={{ fontSize: "clamp(24px,3.5vw,36px)", fontWeight: 700, color: C.text, letterSpacing: "-1px", textAlign: "center" }}>
           From setup to first response in 5 minutes
         </h2>
         <div className="hp-pg3" style={{ marginTop: 48 }}>
@@ -227,20 +313,16 @@ export default function HomePage() {
       {/* ── FEATURES ── */}
       <section id="features" className="hp" style={{ padding: "96px 48px", maxWidth: 1100, margin: "0 auto" }}>
         <span style={sectionLabel}>Features</span>
-        <h2 style={{ fontSize: "clamp(26px,3.5vw,36px)", fontWeight: 700, color: C.text, textAlign: "center" }}>
+        <h2 style={{ fontSize: "clamp(24px,3.5vw,36px)", fontWeight: 700, color: C.text, textAlign: "center" }}>
           Everything you need to own your reputation
         </h2>
         <div className="hp-pg2" style={{ marginTop: 48 }}>
-          {[
-            { bg: "rgba(74,222,128,0.07)", icon: "✦", ic: C.green, title: "AI responses in 2 seconds", desc: "Our AI reads each review and generates a warm professional response referencing specific details the guest mentioned. Edit, copy, post." },
-            { bg: "rgba(96,165,250,0.07)", icon: "◈", ic: C.blue, title: "All 6 platforms in one inbox", desc: "TripAdvisor, Google, Booking.com, Trip.com, Expedia and Yelp — all synced automatically. No more logging into 6 different dashboards." },
-            { bg: "rgba(167,139,250,0.07)", icon: "◎", ic: C.purple, title: "AI sentiment analysis", desc: "Every review automatically classified: positive, neutral, negative. Spot complaint trends before they hurt your rating. 19 languages supported." },
-            { bg: "rgba(251,191,36,0.07)", icon: "△", ic: C.amber, title: "Know your competition", desc: "AI finds similar hotels in your area. See exactly how you rank. Benchmark your rating, review volume, and complaint topics vs local rivals." },
-            { bg: "rgba(248,113,113,0.07)", icon: "!", ic: C.red, title: "Urgent review alerts", desc: "Get instant notification when a 1 or 2 star review is posted. Respond within hours, not days — the difference between saved and lost bookings." },
-            { bg: "rgba(74,222,128,0.07)", icon: "✉", ic: C.green, title: "Monday morning digest", desc: "Weekly email summary: new reviews, rating changes, top complaints, urgent items. Start every Monday knowing exactly where you stand." },
-          ].map((f) => (
+          {FEATURES.map((f) => (
             <div key={f.title} style={{ ...card, padding: "28px" }}>
-              <div style={{ width: 40, height: 40, borderRadius: 8, background: f.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: f.ic }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 8, background: f.bg,
+                display: "flex", alignItems: "center", justifyContent: "center", color: f.ic,
+              }}>
                 {f.icon}
               </div>
               <h3 style={{ fontSize: 17, fontWeight: 600, color: C.text, marginTop: 16 }}>{f.title}</h3>
@@ -258,62 +340,82 @@ export default function HomePage() {
       {/* ── PRODUCT MOCKUP ── */}
       <section className="hp" style={{ padding: "72px 48px", maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
         <span style={sectionLabel}>The Product</span>
-        <h2 style={{ fontSize: "clamp(26px,3.5vw,36px)", fontWeight: 700, color: C.text }}>Built to be used every day</h2>
+        <h2 style={{ fontSize: "clamp(24px,3.5vw,36px)", fontWeight: 700, color: C.text }}>Built to be used every day</h2>
         <p style={{ fontSize: 16, color: C.textSec, maxWidth: 560, margin: "12px auto 40px", lineHeight: 1.7 }}>
           A clean professional dashboard that surfaces what matters today. No bloat. No learning curve.
         </p>
 
-        <div style={{ ...card, borderRadius: 12, padding: 0, overflow: "hidden", maxWidth: 900, margin: "0 auto", textAlign: "left" }}>
-          {/* Browser bar */}
-          <div style={{ background: C.bgAlt, padding: "10px 14px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center" }}>
+        {/* Browser frame */}
+        <div style={{ borderRadius: 12, overflow: "hidden", maxWidth: 900, margin: "0 auto", border: `1px solid ${C.border}`, textAlign: "left", boxShadow: "0 24px 64px rgba(0,0,0,0.4)" }}>
+          {/* Browser chrome */}
+          <div style={{ background: "#0a0c12", padding: "10px 14px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ display: "flex", gap: 6 }}>
-              {[C.red, C.amber, C.green].map((c) => <span key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, display: "block" }} />)}
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#f87171", display: "block" }} />
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#fbbf24", display: "block" }} />
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#4ade80", display: "block" }} />
             </div>
-            <span style={{ fontSize: 11, color: C.textFaint, marginLeft: 14 }}>guestpulse.com/dashboard</span>
+            <span style={{ fontSize: 11, color: "#3a3f52", background: "#0f1117", border: "1px solid #1e2230", borderRadius: 4, padding: "2px 12px", marginLeft: 8 }}>
+              guestpulse.com/dashboard
+            </span>
           </div>
 
-          <div style={{ padding: 24 }}>
+          {/* Dashboard content */}
+          <div style={{ background: "#0d0d0d", padding: 24 }}>
+            {/* 4 stat cards */}
             <div className="hp-pg4">
               {[
-                { label: "AVG RATING", value: "4.8", delta: "+0.3 vs last month", dc: C.green },
-                { label: "REVIEWS THIS WEEK", value: "12", delta: "+4 vs last week", dc: C.green },
-                { label: "RESPONSE RATE", value: "94%", delta: "+7% vs last month", dc: C.green },
-                { label: "PENDING REPLIES", value: "3", delta: "2 urgent", dc: C.red },
+                { label: "AVG RATING", value: "4.8", delta: "+0.3 this month", dc: "#4ade80" },
+                { label: "TOTAL REVIEWS", value: "144", delta: "+18 new", dc: "#4ade80" },
+                { label: "RESPONSE RATE", value: "84%", delta: "+22% vs last month", dc: "#4ade80" },
+                { label: "URGENT", value: "3", delta: "needs response now", dc: "#f87171", vc: "#f87171" },
               ].map((s) => (
-                <div key={s.label} style={{ background: C.bgAlt, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14 }}>
-                  <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: C.textMuted, marginBottom: 6 }}>{s.label}</div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: C.text, lineHeight: 1 }}>{s.value}</div>
+                <div key={s.label} style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 6, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#555", marginBottom: 6 }}>{s.label}</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: s.vc ?? "#f0f0f0", lineHeight: 1 }}>{s.value}</div>
                   <div style={{ fontSize: 11, color: s.dc, marginTop: 4 }}>{s.delta}</div>
                 </div>
               ))}
             </div>
 
-            {/* Fake review */}
-            <div style={{ background: C.bgAlt, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.red}`, borderRadius: 6, padding: 14, marginTop: 12, display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: 10, justifyContent: "space-between" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 100, background: "#0d1528", border: `1px solid #1a2d3a`, color: C.blue }}>GOOGLE</span>
-                  <span style={{ color: C.amber, fontSize: 13 }}>★★</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>James K.</span>
-                  <span style={{ fontSize: 11, color: C.textMuted }}>· 2 hours ago</span>
-                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 100, background: "#1f0d0d", border: `1px solid #3a1a1a`, color: C.red }}>Negative</span>
+            {/* Review card */}
+            <div style={{ background: "#141414", border: "1px solid #1e1e1e", borderLeft: "3px solid #f87171", borderRadius: 6, padding: "14px 16px", marginTop: 12 }}>
+              {/* Review header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 3, background: "#052e16", color: "#4ade80" }}>TripAdvisor</span>
+                  <span style={{ color: "#fbbf24", fontSize: 12, letterSpacing: 1 }}>★★☆☆☆</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#f0f0f0" }}>Sarah M.</span>
                 </div>
-                <p style={{ fontSize: 13, color: C.textSec, lineHeight: 1.5 }}>
-                  Very disappointed with our stay. The room was noisy all night due to construction next door...
-                </p>
+                <span style={{ fontSize: 11, color: "#555" }}>2 days ago</span>
               </div>
-              <button type="button" style={{ ...primaryBtn, padding: "6px 12px", fontSize: 11, flexShrink: 0 }}>
-                Draft AI response
-              </button>
+              {/* Review text */}
+              <p style={{ fontSize: 12, color: "#888", lineHeight: 1.5, marginBottom: 10 }}>
+                Room was directly above the bar and the noise kept us up until 1am. When we mentioned it to reception they were dismissive and offered nothing.
+              </p>
+              {/* Bottom row */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 3, background: "#2d0a0a", color: "#f87171" }}>Negative</span>
+                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 3, background: "#1e1e1e", color: "#fbbf24" }}>↑ Noise</span>
+                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 3, background: "#1e1e1e", color: "#fbbf24" }}>↑ Staff</span>
+                </div>
+                <button type="button" style={{ background: "#f0f0f0", color: "#0d0d0d", border: "none", borderRadius: 4, padding: "5px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                  Draft AI response
+                </button>
+              </div>
             </div>
           </div>
         </div>
+
+        <p style={{ fontSize: 13, color: C.textSec, textAlign: "center", marginTop: 24 }}>
+          Real-time review monitoring. AI-powered responses. Competitive intelligence. All in one dashboard.
+        </p>
       </section>
 
       {/* ── COMPARISON TABLE ── */}
       <section className="hp" style={{ padding: "96px 48px", maxWidth: 960, margin: "0 auto" }}>
         <span style={sectionLabel}>Why GuestPulse</span>
-        <h2 style={{ fontSize: "clamp(26px,3.5vw,36px)", fontWeight: 700, color: C.text, textAlign: "center", marginBottom: 40 }}>
+        <h2 style={{ fontSize: "clamp(24px,3.5vw,36px)", fontWeight: 700, color: C.text, textAlign: "center", marginBottom: 40 }}>
           Compare your options
         </h2>
         <div style={{ ...card, overflow: "hidden" }}>
@@ -349,7 +451,7 @@ export default function HomePage() {
       {/* ── PRICING TEASER ── */}
       <section id="pricing" className="hp" style={{ padding: "96px 48px", maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
         <span style={sectionLabel}>Pricing</span>
-        <h2 style={{ fontSize: "clamp(26px,3.5vw,36px)", fontWeight: 700, color: C.text }}>Simple, transparent pricing</h2>
+        <h2 style={{ fontSize: "clamp(24px,3.5vw,36px)", fontWeight: 700, color: C.text }}>Simple, transparent pricing</h2>
         <p style={{ fontSize: 16, color: C.textSec, marginTop: 8, marginBottom: 36 }}>
           Start free for 7 days. No credit card required.
         </p>
@@ -440,18 +542,28 @@ export default function HomePage() {
       {/* ── FAQ ── */}
       <section id="faq" className="hp" style={{ padding: "96px 48px", maxWidth: 720, margin: "0 auto" }}>
         <span style={sectionLabel}>FAQ</span>
-        <h2 style={{ fontSize: "clamp(26px,3.5vw,36px)", fontWeight: 700, color: C.text, textAlign: "center", marginBottom: 40 }}>
+        <h2 style={{ fontSize: "clamp(24px,3.5vw,36px)", fontWeight: 700, color: C.text, textAlign: "center", marginBottom: 40 }}>
           Questions hoteliers ask
         </h2>
         {FAQ_ITEMS.map((item, i) => {
           const open = openFaq === i;
           return (
-            <div key={item.q} style={{ borderBottom: `1px solid ${C.border}`, padding: "20px 0", cursor: "pointer" }} onClick={() => setOpenFaq(open ? null : i)}>
+            <div
+              key={item.q}
+              style={{ borderBottom: `1px solid ${C.border}`, padding: "20px 0", cursor: "pointer" }}
+              onClick={() => setOpenFaq(open ? null : i)}
+            >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{item.q}</span>
-                <span style={{ fontSize: 18, color: C.textMuted, flexShrink: 0, userSelect: "none" }}>{open ? "−" : "+"}</span>
+                <span style={{ fontSize: 16, fontWeight: 500, color: C.text }}>{item.q}</span>
+                <span style={{ fontSize: 18, color: C.textMuted, flexShrink: 0, userSelect: "none", transition: "transform 0.2s" }}>
+                  {open ? "−" : "+"}
+                </span>
               </div>
-              {open && <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.7, marginTop: 12 }}>{item.a}</p>}
+              {open && (
+                <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.7, marginTop: 12, marginBottom: 0 }}>
+                  {item.a}
+                </p>
+              )}
             </div>
           );
         })}
