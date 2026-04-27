@@ -5,6 +5,10 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import type { MapHotel, MapCompetitor } from "./MapComponent";
+import EmptyState from "@/components/EmptyState";
+import ErrorState from "@/components/ErrorState";
+import ConfirmModal from "@/components/ConfirmModal";
+import { useToast } from "@/components/Toast";
 
 const MapComponent = dynamic(() => import("./MapComponent"), {
   ssr: false,
@@ -358,6 +362,8 @@ const inputStyle: CSSProperties = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function BenchmarkingPage() {
+  const { showToast } = useToast();
+
   // Core data
   const [loading, setLoading] = useState(true);
   const [loadingAnalysis, setLoadingAnalysis] = useState(true);
@@ -397,6 +403,7 @@ export default function BenchmarkingPage() {
 
   // Remove
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeConfirm, setRemoveConfirm] = useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
 
   // Analysis
   const [analyzingHotel, setAnalyzingHotel] = useState(false);
@@ -971,9 +978,13 @@ export default function BenchmarkingPage() {
       const { error: delError } = await sb.from("competitors").delete().eq("id", id);
       if (!delError) {
         setCompetitors((prev) => prev.filter((c) => c.id !== id));
+        showToast("success", "Competitor removed");
+      } else {
+        showToast("error", "Failed to remove competitor");
       }
     } finally {
       setRemovingId(null);
+      setRemoveConfirm({ open: false, id: "", name: "" });
     }
   }
 
@@ -1260,15 +1271,16 @@ export default function BenchmarkingPage() {
 
   if (error) {
     return (
-      <div
-        style={{
-          background: PAGE_BG,
-          minHeight: "100vh",
-          padding: "24px 28px",
-          color: "#f87171",
-        }}
-      >
-        {error}
+      <div style={{ background: PAGE_BG, minHeight: "100vh", padding: "60px 28px" }}>
+        <ErrorState
+          title="Couldn't load competitors"
+          message={error}
+          onRetry={() => {
+            setError(null);
+            setLoading(true);
+            window.location.reload();
+          }}
+        />
       </div>
     );
   }
@@ -3022,9 +3034,16 @@ export default function BenchmarkingPage() {
         {/* Rows */}
         <div className="bench-table-wrap">
           {competitors.length === 0 ? (
-            <div style={{ padding: "20px 16px", fontSize: 13, color: TEXT_MUTED }}>
-              No competitors yet. Use &ldquo;Find competitors&rdquo; above, or add manually with
-              &ldquo;+ Add competitor&rdquo;.
+            <div style={{ padding: "32px 16px" }}>
+              <EmptyState
+                icon={<span style={{ fontSize: 32 }}>◎</span>}
+                title="No competitors tracked yet"
+                description="Track up to 5 competitors to see how your hotel compares on rating, review volume, and guest experience."
+                primaryAction={{
+                  label: finding ? "Finding…" : "Find competitors",
+                  onClick: () => void handleFindCompetitors(),
+                }}
+              />
             </div>
           ) : (
             competitors.map((comp, i) => {
@@ -3184,13 +3203,7 @@ export default function BenchmarkingPage() {
                       type="button"
                       disabled={isRemoving}
                       onClick={() => {
-                        if (
-                          window.confirm(
-                            `Remove ${comp.name} from your benchmarking list?`,
-                          )
-                        ) {
-                          void handleRemove(comp.id);
-                        }
+                        setRemoveConfirm({ open: true, id: comp.id, name: comp.name });
                       }}
                       style={{
                         background: "transparent",
@@ -3221,6 +3234,18 @@ export default function BenchmarkingPage() {
           )}
         </div>
       </div>
+
+      {/* Remove competitor confirmation */}
+      <ConfirmModal
+        open={removeConfirm.open}
+        title="Remove competitor?"
+        message={`This will delete all data for "${removeConfirm.name}". This action cannot be undone.`}
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        destructive
+        onConfirm={() => void handleRemove(removeConfirm.id)}
+        onCancel={() => setRemoveConfirm({ open: false, id: "", name: "" })}
+      />
     </div>
   );
 }

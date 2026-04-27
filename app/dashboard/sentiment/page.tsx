@@ -4,6 +4,9 @@ import { createBrowserClient } from "@supabase/ssr";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import ReputationScoreCard from "@/components/ReputationScoreCard";
+import EmptyState from "@/components/EmptyState";
+import ErrorState from "@/components/ErrorState";
+import { useToast } from "@/components/Toast";
 import {
   CartesianGrid,
   Line,
@@ -143,8 +146,10 @@ function TrendTooltip({ active, payload, label }: TTP) {
 
 /* ─── main page ──────────────────────────────────────────── */
 export default function SentimentPage() {
+  const { showToast } = useToast();
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [period, setPeriod] = useState(30);
   const [insights, setInsights] = useState<Insights | null>(null);
   const [generatingInsights, setGeneratingInsights] = useState(false);
@@ -155,25 +160,32 @@ export default function SentimentPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      );
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
+      setPageError(null);
+      try {
+        const supabase = createBrowserClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        );
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setLoading(false); return; }
 
-      const { data: hotel } = await supabase
-        .from("hotels").select("id, name").eq("user_id", user.id).maybeSingle();
-      if (!hotel?.id) { setLoading(false); return; }
+        const { data: hotel } = await supabase
+          .from("hotels").select("id, name").eq("user_id", user.id).maybeSingle();
+        if (!hotel?.id) { setLoading(false); return; }
 
-      const { data: rows } = await supabase
-        .from("reviews")
-        .select("id, platform, rating, sentiment, complaint_topic, topic_type, review_date, review_text, responded, reviewer_name, original_language, created_at")
-        .eq("hotel_id", hotel.id)
-        .order("review_date", { ascending: true });
+        const { data: rows, error: rowsError } = await supabase
+          .from("reviews")
+          .select("id, platform, rating, sentiment, complaint_topic, topic_type, review_date, review_text, responded, reviewer_name, original_language, created_at")
+          .eq("hotel_id", hotel.id)
+          .order("review_date", { ascending: true });
 
-      setReviews((rows as ReviewRow[]) ?? []);
-      setLoading(false);
+        if (rowsError) throw rowsError;
+        setReviews((rows as ReviewRow[]) ?? []);
+      } catch (e) {
+        setPageError(e instanceof Error ? e.message : "Failed to load sentiment data");
+      } finally {
+        setLoading(false);
+      }
     }
     void load();
   }, []);
@@ -456,6 +468,7 @@ export default function SentimentPage() {
       const data = (await res.json()) as { success: boolean; insights?: Insights; error?: string };
       if (data.success && data.insights) {
         setInsights(data.insights);
+        showToast("success", "Insights generated");
       } else {
         setInsightError(data.error ?? "Failed to generate insights");
       }
@@ -488,28 +501,64 @@ export default function SentimentPage() {
   if (loading) {
     return (
       <div style={{ padding: "28px" }}>
+        <style>{`@keyframes sent-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 20 }}>
           {[0, 1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              style={{
-                background: "#161616",
-                border: "1px solid #1e1e1e",
-                borderRadius: 8,
-                padding: "16px 20px",
-                height: 90,
-                animation: "pulse 1.5s ease-in-out infinite",
-              }}
-            />
+            <div key={i} style={{ background: "#161616", border: "1px solid #1e1e1e", borderRadius: 8, padding: "16px 20px", height: 90, animation: "sent-pulse 1.5s ease-in-out infinite" }} />
           ))}
         </div>
-        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+          {[0, 1].map((i) => (
+            <div key={i} style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, height: 240, animation: "sent-pulse 1.5s ease-in-out infinite" }} />
+          ))}
+        </div>
       </div>
     );
   }
 
+  if (pageError) {
+    return (
+      <div style={{ padding: "60px 28px" }}>
+        <ErrorState
+          title="Couldn't load sentiment data"
+          message={pageError}
+          onRetry={() => {
+            setPageError(null);
+            setLoading(true);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (reviews.length === 0) {
+    return (
+      <div style={{ padding: "28px" }}>
+        <h1 style={{ fontSize: 20, fontWeight: 500, color: "#f0f0f0", margin: "0 0 24px" }}>Sentiment dashboard</h1>
+        <EmptyState
+          icon={<span style={{ fontSize: 32 }}>∿</span>}
+          title="No sentiment data yet"
+          description="Classify your reviews using AI to unlock sentiment analysis, trend tracking, and topic insights."
+          primaryAction={{
+            label: "Go to review inbox",
+            onClick: () => { window.location.href = "/dashboard/reviews"; },
+          }}
+        />
+      </div>
+    );
+  }
+
+  const classifiedCount = reviews.filter((r) => r.complaint_topic).length;
+
   return (
     <div style={{ padding: "28px 28px 28px", maxWidth: 1200 }}>
+      {/* ── few classified reviews banner ──────────────── */}
+      {classifiedCount < 5 && classifiedCount > 0 && (
+        <div style={{ background: "#1a1200", border: "1px solid #2a2000", borderRadius: 6, padding: "10px 16px", marginBottom: 16, fontSize: 13, color: "#fbbf24" }}>
+          Classify more reviews for richer insights — currently showing {classifiedCount} classified review{classifiedCount !== 1 ? "s" : ""}
+        </div>
+      )}
+
       {/* ── header ─────────────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div>

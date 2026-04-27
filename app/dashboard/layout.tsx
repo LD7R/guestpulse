@@ -8,6 +8,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import PageLoadingBar from "@/app/components/PageLoadingBar";
 import TerminalSyncCard, { type SyncPlatformStatus } from "@/app/components/TerminalSyncCard";
 import Logo from "@/components/Logo";
+import { ToastProvider, useToast } from "@/components/Toast";
 
 const labelStyle: CSSProperties = {
   fontSize: "10px",
@@ -66,11 +67,12 @@ function formatSyncTime(iso: string | null | undefined): string {
   return `Last sync: ${diffDays}d ago`;
 }
 
-export default function DashboardLayout({
+function DashboardLayoutInner({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { showToast } = useToast();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -93,9 +95,7 @@ export default function DashboardLayout({
     startTime?: number;
   }>({ active: false, platforms: [] });
 
-  // Toast
-  const [toast, setToast] = useState<{ message: string; type: "success" | "warning" } | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Toast is provided by ToastProvider context (useToast above)
 
   useEffect(() => {
     async function loadUser() {
@@ -213,16 +213,14 @@ export default function DashboardLayout({
       const totalNew = detail?.totalNew ?? 0;
       const errorCount = detail?.errorCount ?? 0;
 
-      // Show toast
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      // Show toast via context
       if (errorCount > 0) {
-        setToast({ message: `Sync finished · ${errorCount} platform${errorCount > 1 ? "s" : ""} failed`, type: "warning" });
+        showToast("warning", `Sync finished · ${errorCount} platform${errorCount > 1 ? "s" : ""} failed`);
       } else if (totalNew > 0) {
-        setToast({ message: `Sync complete · ${totalNew} new review${totalNew > 1 ? "s" : ""}`, type: "success" });
+        showToast("success", `Sync complete · ${totalNew} new review${totalNew > 1 ? "s" : ""}`);
       } else {
-        setToast({ message: "Sync complete · No new reviews", type: "success" });
+        showToast("success", "Sync complete · No new reviews");
       }
-      toastTimerRef.current = setTimeout(() => setToast(null), 4000);
 
       // Clear sync card after 2s
       setTimeout(() => setSyncState({ active: false, platforms: [] }), 2000);
@@ -602,50 +600,7 @@ export default function DashboardLayout({
         {children}
       </main>
 
-      {/* Toast notification */}
-      {toast && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 24,
-            right: 24,
-            zIndex: 1000,
-            background: toast.type === "success" ? "#052e16" : "#1c1200",
-            border: `1px solid ${toast.type === "success" ? "#166534" : "#3a2800"}`,
-            borderRadius: 8,
-            padding: "12px 16px",
-            fontSize: 13,
-            color: toast.type === "success" ? "#4ade80" : "#fbbf24",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-            animation: "gpFadeInUp 0.25s ease",
-            maxWidth: 320,
-          }}
-        >
-          <span style={{ fontSize: 14 }}>{toast.type === "success" ? "✓" : "⚠"}</span>
-          <span>{toast.message}</span>
-          <button
-            type="button"
-            onClick={() => setToast(null)}
-            style={{
-              marginLeft: "auto",
-              background: "none",
-              border: "none",
-              color: "inherit",
-              opacity: 0.5,
-              cursor: "pointer",
-              fontSize: 14,
-              padding: 0,
-              lineHeight: 1,
-            }}
-            aria-label="Dismiss"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      {/* Toasts are rendered by ToastProvider */}
 
       <nav className="bottom-nav" aria-label="Mobile navigation">
         {[
@@ -727,5 +682,15 @@ export default function DashboardLayout({
         }}
       />
     </div>
+  );
+}
+
+export default function DashboardLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <ToastProvider>
+      <DashboardLayoutInner>{children}</DashboardLayoutInner>
+    </ToastProvider>
   );
 }

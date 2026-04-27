@@ -14,6 +14,9 @@ import {
   XAxis,
 } from "recharts";
 import ReputationScoreCard from "@/components/ReputationScoreCard";
+import EmptyState from "@/components/EmptyState";
+import ErrorState from "@/components/ErrorState";
+import { useToast } from "@/components/Toast";
 
 type Hotel = {
   id: string;
@@ -270,6 +273,7 @@ const CustomTooltip = ({
 function DashboardOverviewContent() {
   const router = useRouter();
   const pathname = usePathname();
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -753,9 +757,10 @@ function DashboardOverviewContent() {
       .update({ responded: true })
       .eq("id", reviewId);
     if (error) {
-      console.error(error);
+      showToast("error", "Failed to mark as responded");
       return;
     }
+    showToast("success", "Marked as responded");
     setUrgentReviewsList((prev) => prev.filter((r) => r.id !== reviewId));
     setNeedingResponse((prev) => Math.max(0, prev - 1));
     setDrafts((prev) => {
@@ -1055,23 +1060,15 @@ function DashboardOverviewContent() {
 
   if (error) {
     return (
-      <div style={{ background: "#0d0d0d", minHeight: "100vh", padding: "24px 28px", color: "#f87171" }}>
-        <p style={{ marginBottom: 12 }}>{error}</p>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          style={{
-            background: "#1e1e1e",
-            border: "1px solid #2a2a2a",
-            borderRadius: 6,
-            padding: "7px 14px",
-            fontSize: 12,
-            color: "#f0f0f0",
-            cursor: "pointer",
+      <div style={{ background: "#0d0d0d", minHeight: "100vh", padding: "60px 28px" }}>
+        <ErrorState
+          title="Couldn't load dashboard"
+          message={error}
+          onRetry={() => {
+            setError(null);
+            void loadDashboard();
           }}
-        >
-          Retry
-        </button>
+        />
       </div>
     );
   }
@@ -1402,33 +1399,33 @@ function DashboardOverviewContent() {
       </nav>
 
       {!hasHotel ? (
-        <div
-          style={{
-            background: "#141414",
-            border: "1px solid #1e1e1e",
-            borderRadius: 8,
-            padding: 24,
-            color: "#f0f0f0",
-            fontSize: 14,
-          }}
-        >
-          Add your hotel to start tracking reviews.{" "}
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard/settings")}
-            style={{
-              background: "#f0f0f0",
-              color: "#0d0d0d",
-              border: "none",
-              borderRadius: 6,
-              padding: "8px 14px",
-              fontWeight: 600,
-              cursor: "pointer",
-              marginLeft: 8,
+        <div style={{ paddingTop: 40 }}>
+          <EmptyState
+            variant="success"
+            icon={<span style={{ fontSize: 32 }}>◈</span>}
+            title="Welcome to GuestPulse"
+            description="Let's set up your hotel to start tracking reviews across all 6 platforms."
+            primaryAction={{
+              label: "Set up your hotel",
+              onClick: () => router.push("/dashboard/onboarding"),
             }}
-          >
-            Hotel settings
-          </button>
+          />
+        </div>
+      ) : totalReviews === 0 && !loading ? (
+        <div style={{ paddingTop: 40 }}>
+          <EmptyState
+            icon={<span style={{ fontSize: 32 }}>☰</span>}
+            title="No reviews synced yet"
+            description="Sync your review platforms to see your dashboard come alive with insights, sentiment analysis, and AI-powered responses."
+            primaryAction={{
+              label: "Sync reviews now",
+              onClick: () => void handleSyncAllReviews(),
+            }}
+            secondaryAction={{
+              label: "Set up platforms",
+              onClick: () => router.push("/dashboard/settings?tab=platforms"),
+            }}
+          />
         </div>
       ) : (
         <>

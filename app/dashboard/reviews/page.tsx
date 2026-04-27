@@ -7,6 +7,9 @@ import { useRouter } from "next/navigation";
 import { defaultDraftResponse, useDraftResponses } from "@/lib/useDraftResponses";
 import Spinner from "@/app/components/Spinner";
 import ConfirmModal from "@/components/ConfirmModal";
+import EmptyState from "@/components/EmptyState";
+import ErrorState from "@/components/ErrorState";
+import { useToast } from "@/components/Toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DraftMetadata = {
@@ -418,6 +421,7 @@ function Pill({
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function ReviewsInboxPage() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -721,7 +725,14 @@ export default function ReviewsInboxPage() {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
-    await supabase.from("reviews").update({ internal_note: trimmed || null }).eq("id", reviewId);
+    const { error } = await supabase.from("reviews").update({ internal_note: trimmed || null }).eq("id", reviewId);
+    if (error) {
+      showToast("error", "Failed to save note");
+    } else if (trimmed) {
+      showToast("success", "Note saved");
+    } else {
+      showToast("success", "Note deleted");
+    }
   }
 
   async function syncPlatform(platform: "tripadvisor" | "google" | "booking" | "trip" | "expedia" | "yelp", url: string, hotelId: string) {
@@ -977,8 +988,15 @@ export default function ReviewsInboxPage() {
 
   if (error) {
     return (
-      <div style={{ background: C.pageBg, minHeight: "100vh", padding: "24px 28px", color: C.red }}>
-        {error}
+      <div style={{ background: C.pageBg, minHeight: "100vh", padding: "60px 28px" }}>
+        <ErrorState
+          title="Couldn't load reviews"
+          message={error}
+          onRetry={() => {
+            setError(null);
+            setRefreshKey((k) => k + 1);
+          }}
+        />
       </div>
     );
   }
@@ -1410,15 +1428,14 @@ export default function ReviewsInboxPage() {
 
       {/* ── 5. Empty state ──────────────────────────────────────────────── */}
       {!loading && visibleReviews.length === 0 && (
-        <div style={{ ...cardStyle, padding: 40, textAlign: "center" }}>
+        <div style={{ paddingTop: 20 }}>
           {reviews.length > 0 ? (
-            <>
-              <div style={{ fontSize: 14, fontWeight: 500, color: C.textMuted, marginBottom: 12 }}>
-                No reviews match your filters
-              </div>
-              <button
-                type="button"
-                onClick={() => {
+            <EmptyState
+              title="No reviews match your filters"
+              description="Try adjusting your search or clearing filters to see more reviews."
+              primaryAction={{
+                label: "Clear filters",
+                onClick: () => {
                   setRatingFilter(null);
                   setSearchQuery("");
                   setPlatformFilter("all");
@@ -1426,32 +1443,36 @@ export default function ReviewsInboxPage() {
                   setRespondedFilter("all");
                   setReviewType("all");
                   setPeriodDays(30);
-                }}
-                style={secondaryBtn({ padding: "6px 14px", fontSize: 12 })}
-              >
-                Clear all filters
-              </button>
-            </>
+                },
+              }}
+            />
           ) : (
-            <>
-              <div style={{ fontSize: 16, fontWeight: 600, color: C.textMuted }}>No reviews found</div>
-              <div style={{ fontSize: 13, color: "#444444", marginTop: 4 }}>
-                Try adjusting your filters or sync new reviews
-              </div>
-              <button
-                type="button"
-                disabled={syncing}
-                onClick={() => void handleSyncAllReviews()}
-                style={{ ...primaryBtn(syncing), marginTop: 16 }}
-              >
-                {syncing ? "Syncing…" : "Sync reviews"}
-              </button>
-            </>
+            <EmptyState
+              icon={<span style={{ fontSize: 32 }}>☰</span>}
+              title="No reviews yet"
+              description="Once you sync your platforms, all reviews appear here. Click sync to get started."
+              primaryAction={{
+                label: syncing ? "Syncing…" : "Sync reviews",
+                onClick: () => void handleSyncAllReviews(),
+              }}
+            />
           )}
         </div>
       )}
 
-      {/* ── 6. Review Cards ─────────────────────────────────────────────── */}
+      {/* ── 6. All caught up banner ─────────────────────────────────────── */}
+      {!loading && reviews.length > 0 && summary.needingResponse === 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <EmptyState
+            variant="success"
+            icon={<span style={{ fontSize: 28 }}>✓</span>}
+            title="All caught up"
+            description="Every review has been responded to. Great work."
+          />
+        </div>
+      )}
+
+      {/* ── 7. Review Cards ─────────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {visibleReviews.map((review, idx) => {
           const platform = review.platform ?? review.source ?? "";

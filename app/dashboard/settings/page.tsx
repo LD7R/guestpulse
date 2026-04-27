@@ -17,6 +17,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import BrandVoiceWizard from "@/components/BrandVoiceWizard";
+import ErrorState from "@/components/ErrorState";
 
 type ProfileRow = {
   id: string;
@@ -603,8 +604,16 @@ export default function SettingsPage() {
 
   if (error) {
     return (
-      <div className="settings-page">
-        <div style={{ ...card, padding: 24, color: "#f87171", fontSize: 14 }}>{error}</div>
+      <div className="settings-page" style={{ paddingTop: 40 }}>
+        <ErrorState
+          title="Couldn't load settings"
+          message={error}
+          onRetry={() => {
+            setError(null);
+            setLoading(true);
+            window.location.reload();
+          }}
+        />
       </div>
     );
   }
