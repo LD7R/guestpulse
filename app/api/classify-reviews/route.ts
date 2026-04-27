@@ -9,6 +9,8 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServerClient } from "@/lib/supabase";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -50,6 +52,22 @@ const VALID_LANGUAGES = [
 
 export async function POST(request: NextRequest) {
   try {
+    // Require authenticated session
+    const supabaseAuth = await createSupabaseServerClient();
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user?.id) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Rate limit: 5 classification runs per minute per user
+    const { allowed } = rateLimit(`classify:${user.id}`, 5, 60_000);
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many requests. Try again in a minute." },
+        { status: 429 },
+      );
+    }
+
     const { hotel_id } = (await request.json()) as { hotel_id?: string };
 
     if (!hotel_id) {
@@ -79,6 +97,16 @@ export async function POST(request: NextRequest) {
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
     });
+
+    // Verify hotel ownership
+    const { data: hotelOwner } = await supabase
+      .from("hotels")
+      .select("user_id")
+      .eq("id", hotel_id)
+      .maybeSingle();
+    if (!hotelOwner || hotelOwner.user_id !== user.id) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
 
     // Count total unclassified for the `remaining` field in the response
     const { count: totalUnclassified } = await supabase

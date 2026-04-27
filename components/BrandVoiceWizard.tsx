@@ -440,7 +440,6 @@ export default function BrandVoiceWizard({ onSaved, onGoToHotelTab }: BrandVoice
           reviewer_name: sample.reviewer,
           platform: "preview",
           hotel_id: hotelId,
-          user_id: user?.id ?? null,
         }),
       });
 

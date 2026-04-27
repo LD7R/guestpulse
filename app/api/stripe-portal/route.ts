@@ -1,21 +1,23 @@
 import Stripe from "stripe";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServerClient } from "@/lib/supabase";
 
 export async function POST(request: NextRequest) {
   try {
+    const supabaseAuth = await createSupabaseServerClient();
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeKey) {
       return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
     }
     const stripe = new Stripe(stripeKey);
 
-    const body = (await request.json()) as { user_id?: string };
-    const { user_id } = body;
-
-    if (!user_id) {
-      return NextResponse.json({ error: "user_id required" }, { status: 400 });
-    }
+    const user_id = user.id;
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

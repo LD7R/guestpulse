@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServerClient } from "@/lib/supabase";
 
 export async function POST(request: NextRequest) {
   try {
+    // Require authenticated session
+    const supabaseAuth = await createSupabaseServerClient();
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { hotel_id } = (await request.json()) as { hotel_id?: string };
 
     if (!hotel_id) {
@@ -17,12 +25,12 @@ export async function POST(request: NextRequest) {
 
     const { data: hotel } = await supabase
       .from("hotels")
-      .select("id, tripadvisor_url, google_url, booking_url, trip_url, expedia_url, yelp_url")
+      .select("id, user_id, tripadvisor_url, google_url, booking_url, trip_url, expedia_url, yelp_url")
       .eq("id", hotel_id)
       .single();
 
-    if (!hotel) {
-      return NextResponse.json({ error: "Hotel not found" }, { status: 404 });
+    if (!hotel || hotel.user_id !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const h = hotel as {

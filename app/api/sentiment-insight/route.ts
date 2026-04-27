@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 30;
 
@@ -16,6 +18,20 @@ type InsightPayload = {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabaseAuth = await createSupabaseServerClient();
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user?.id) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { allowed } = rateLimit(`sentiment-insight:${user.id}`, 10, 60_000);
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many requests. Try again in a minute." },
+        { status: 429 },
+      );
+    }
+
     const body = (await request.json()) as InsightPayload;
 
     const apiKey = process.env.ANTHROPIC_API_KEY;

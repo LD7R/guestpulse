@@ -79,13 +79,6 @@ const LANG_LABELS: Record<string, string> = {
   th: "Thai", vi: "Vietnamese", ar: "Arabic",
 };
 
-const LANG_NAME_TO_CODE: Record<string, string> = {
-  English: "en", Dutch: "nl", German: "de", French: "fr",
-  Spanish: "es", Italian: "it", Portuguese: "pt", Indonesian: "id",
-  Chinese: "zh", Japanese: "ja", Korean: "ko", Russian: "ru",
-  Thai: "th", Vietnamese: "vi", Arabic: "ar",
-};
-
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
   pageBg: "#0d0d0d",
@@ -428,12 +421,6 @@ export default function ReviewsInboxPage() {
   const [upgradeModal, setUpgradeModal] = useState<{ message: string } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ reviewId: string } | null>(null);
 
-  // Translation state
-  const [userLanguage, setUserLanguage] = useState("en"); // language code from profile
-  const [translations, setTranslations] = useState<Record<string, string>>({}); // reviewId → translated text
-  const [translating, setTranslating] = useState<Record<string, boolean>>({}); // reviewId → in-flight
-  const [showingTranslated, setShowingTranslated] = useState<Record<string, boolean>>({}); // reviewId → showing translated
-
   // Close flag menu on outside click
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -596,7 +583,6 @@ export default function ReviewsInboxPage() {
           reviewer_name: review.reviewer_name ?? review.name ?? null,
           platform: review.platform ?? review.source ?? null,
           signature: cachedSignature,
-          user_id: user.id,
           hotel_id: cachedHotelId,
           response_language_override: draftLanguageOverride,
         }),
@@ -790,36 +776,6 @@ export default function ReviewsInboxPage() {
     }
   }
 
-  async function handleTranslate(review: Review) {
-    const id = review.id;
-    if (!id) return;
-
-    // If already translated, just toggle visibility
-    if (translations[id]) {
-      setShowingTranslated((prev) => ({ ...prev, [id]: !prev[id] }));
-      return;
-    }
-
-    setTranslating((prev) => ({ ...prev, [id]: true }));
-    try {
-      const res = await fetch("/api/translate-review", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ review_id: id, target_language: userLanguage }),
-      });
-      const json = (await res.json()) as { success?: boolean; translated?: string; error?: string };
-      if (!json.success) throw new Error(json.error ?? "Translation failed");
-      if (json.translated) {
-        setTranslations((prev) => ({ ...prev, [id]: json.translated! }));
-        setShowingTranslated((prev) => ({ ...prev, [id]: true }));
-      }
-    } catch {
-      setSyncError("Translation failed. Please try again.");
-    } finally {
-      setTranslating((prev) => ({ ...prev, [id]: false }));
-    }
-  }
-
   async function handleAutoClassify() {
     setSyncError(null);
     setSyncMessage(null);
@@ -882,18 +838,6 @@ export default function ReviewsInboxPage() {
       if (userError) { if (!cancelled) { setError(userError.message); setLoading(false); } return; }
       if (!user?.id) { if (!cancelled) { setError("You must be signed in."); setLoading(false); } return; }
 
-      // Fetch user's preferred language from profile
-      let langCode = "en";
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("preferred_language")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (!cancelled && profile?.preferred_language) {
-        langCode = LANG_NAME_TO_CODE[profile.preferred_language as string] ?? "en";
-        setUserLanguage(langCode);
-      }
-
       const { data: hotels, error: hotelsError } = await supabase
         .from("hotels")
         .select("id, response_signature, brand_voice_completed_at, tripadvisor_url, google_url, booking_url, trip_url, expedia_url, yelp_url")
@@ -926,19 +870,7 @@ export default function ReviewsInboxPage() {
         .order("created_at", { ascending: false });
 
       if (reviewsError) { if (!cancelled) { setError(reviewsError.message); setLoading(false); } return; }
-      if (!cancelled) {
-        const reviewList = (reviewsData ?? []) as Review[];
-        setReviews(reviewList);
-        // Pre-populate translation cache from DB for current user language
-        const cached: Record<string, string> = {};
-        reviewList.forEach((r) => {
-          if (r.id && r.translated_text && r.translated_to === langCode) {
-            cached[r.id] = r.translated_text;
-          }
-        });
-        if (Object.keys(cached).length > 0) setTranslations(cached);
-        setLoading(false);
-      }
+      if (!cancelled) { setReviews((reviewsData ?? []) as Review[]); setLoading(false); }
     }
     fetchInbox().catch((e) => {
       if (cancelled) return;
@@ -1602,11 +1534,9 @@ export default function ReviewsInboxPage() {
                   </div>
                 </div>
 
-                {/* Review text (translated or original) */}
+                {/* Review text */}
                 <div style={{ marginTop: 10, fontSize: 13, color: "#cccccc", lineHeight: 1.6 }}>
-                  {showingTranslated[reviewId] && translations[reviewId]
-                    ? translations[reviewId]
-                    : (reviewText || <em style={{ color: "#444444" }}>No written review</em>)}
+                  {reviewText ? reviewText : <em style={{ color: "#444444" }}>No written review</em>}
                 </div>
 
                 {/* Tags row */}
@@ -1650,35 +1580,6 @@ export default function ReviewsInboxPage() {
                       </a>
                     );
                   })()}
-                  {/* Translate button */}
-                  {hasText(reviewText) && hasStableId && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); void handleTranslate(review); }}
-                      disabled={!!translating[reviewId]}
-                      style={{
-                        background: showingTranslated[reviewId] ? "#0a1a0a" : "transparent",
-                        border: `1px solid ${showingTranslated[reviewId] ? "#1a3a1a" : "#2a2a2a"}`,
-                        color: showingTranslated[reviewId] ? C.green : "#888",
-                        borderRadius: 5,
-                        padding: "3px 9px",
-                        fontSize: 11,
-                        cursor: translating[reviewId] ? "wait" : "pointer",
-                        fontFamily: "inherit",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 4,
-                        transition: "all 0.15s",
-                      }}
-                    >
-                      {translating[reviewId] ? (
-                        <>
-                          <span style={{ width: 8, height: 8, border: "1.5px solid rgba(255,255,255,0.2)", borderTopColor: "currentColor", borderRadius: "50%", animation: "rvspin 0.8s linear infinite", display: "inline-block" }} />
-                          Translating
-                        </>
-                      ) : showingTranslated[reviewId] ? "✓ Translated" : "↻ Translate"}
-                    </button>
-                  )}
                   {responded && (
                     <span style={{ borderRadius: 3, padding: "2px 8px", fontSize: 11, background: "#052e16", color: C.green }}>
                       ✓ Responded
@@ -1795,7 +1696,6 @@ export default function ReviewsInboxPage() {
                           tags.push(`✓ Voice: ${TONE_LABELS[meta.tone] ?? meta.tone}`);
                           tags.push(`✓ Length: ${meta.length}`);
                           tags.push(`✓ Language: ${LANG_LABELS[meta.language] ?? meta.language}`);
-                          if (showingTranslated[reviewId] && translations[reviewId]) tags.push("📖 Translated");
                           if (meta.used_examples > 0) tags.push(`✓ Trained on ${meta.used_examples} example${meta.used_examples !== 1 ? "s" : ""}`);
                           if (meta.addressed_by_name) {
                             const firstName = reviewerName !== "Anonymous" ? reviewerName.split(" ")[0] : null;

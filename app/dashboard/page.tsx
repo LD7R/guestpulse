@@ -788,7 +788,6 @@ function DashboardOverviewContent() {
           reviewer_name: review.reviewer_name,
           platform: review.platform,
           signature: sig,
-          user_id: currentUser?.id ?? null,
         }),
       });
       const json = (await res.json()) as {

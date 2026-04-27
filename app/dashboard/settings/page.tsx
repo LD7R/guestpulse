@@ -1117,7 +1117,7 @@ export default function SettingsPage() {
                     onClick={async () => {
                       if (!userId) return;
                       try {
-                        const res = await fetch("/api/create-checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: userId, email: userEmail, plan, interval }) });
+                        const res = await fetch("/api/create-checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, interval }) });
                         const data = await res.json() as { url?: string; error?: string };
                         if (data.url) window.location.href = data.url;
                         else showToast("error", data.error ?? "Could not open checkout");
@@ -1176,7 +1176,7 @@ export default function SettingsPage() {
                       onClick={async () => {
                         if (!userId) return;
                         try {
-                          const res = await fetch("/api/stripe-portal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: userId }) });
+                          const res = await fetch("/api/stripe-portal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
                           const data = await res.json() as { url?: string; error?: string };
                           if (data.url) window.location.href = data.url;
                           else showToast("error", data.error ?? "Could not open billing portal");
@@ -1218,7 +1218,7 @@ export default function SettingsPage() {
                   onClick={async () => {
                     if (!userId) return;
                     try {
-                      const res = await fetch("/api/stripe-portal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: userId }) });
+                      const res = await fetch("/api/stripe-portal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
                       const data = await res.json() as { url?: string; error?: string };
                       if (data.url) window.location.href = data.url;
                       else showToast("error", data.error ?? "Could not open billing portal");

@@ -15,6 +15,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServerClient } from "@/lib/supabase";
 
 type ApifyReviewItem = {
   user?: { username?: string; name?: string };
@@ -146,6 +147,21 @@ function extractReviewUrl(
 
 export async function POST(request: NextRequest) {
   try {
+    // Auth: accept either a valid user session or an internal cron token
+    const internalToken = request.headers.get("x-internal-token");
+    const cronSecret = process.env.CRON_SECRET;
+    const isInternalCall = cronSecret && internalToken === cronSecret;
+
+    let authedUserId: string | null = null;
+    if (!isInternalCall) {
+      const supabaseAuth = await createSupabaseServerClient();
+      const { data: { user } } = await supabaseAuth.auth.getUser();
+      if (!user?.id) {
+        return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+      }
+      authedUserId = user.id;
+    }
+
     const body = (await request.json()) as {
       hotel_id?: string;
       url?: string;
@@ -199,6 +215,18 @@ export async function POST(request: NextRequest) {
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
     });
+
+    // Verify hotel ownership for user-initiated calls
+    if (!isInternalCall && authedUserId) {
+      const { data: hotelOwner } = await supabase
+        .from("hotels")
+        .select("user_id")
+        .eq("id", hotel_id)
+        .maybeSingle();
+      if (!hotelOwner || hotelOwner.user_id !== authedUserId) {
+        return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+      }
+    }
 
     // For incremental sync, fetch hotel's last_sync_at to filter old reviews
     let lastSyncAt: string | null = null;

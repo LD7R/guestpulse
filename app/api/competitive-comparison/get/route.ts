@@ -6,11 +6,18 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServerClient } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   try {
+    const supabaseAuth = await createSupabaseServerClient();
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const hotelId = searchParams.get("hotel_id");
 
@@ -23,6 +30,18 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { persistSession: false } },
     );
+
+    // Verify hotel ownership
+    const { data: hotelOwner } = await supabase
+      .from("hotels")
+      .select("id")
+      .eq("id", hotelId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!hotelOwner) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const now = new Date().toISOString();
 

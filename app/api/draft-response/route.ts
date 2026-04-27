@@ -22,6 +22,8 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServerClient } from "@/lib/supabase";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -192,13 +194,27 @@ function buildSystemPrompt(
 
 export async function POST(req: NextRequest) {
   try {
+    // Require authenticated session — never trust user_id from body
+    const supabaseAuth = await createSupabaseServerClient();
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user?.id) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { allowed } = rateLimit(`draft-response:${user.id}`, 30, 60_000);
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many requests. Try again in a minute." },
+        { status: 429 },
+      );
+    }
+
     const body = (await req.json()) as {
       review_text?: string;
       rating?: number | string | null;
       reviewer_name?: string | null;
       platform?: string | null;
       signature?: string | null;
-      user_id?: string | null;
       hotel_id?: string | null;
       response_language_override?: string | null;
       original_language?: string | null;
@@ -210,11 +226,13 @@ export async function POST(req: NextRequest) {
       reviewer_name,
       platform,
       signature,
-      user_id,
       hotel_id,
       response_language_override,
       original_language,
     } = body;
+
+    // user_id is always from the authenticated session
+    const user_id = user.id;
 
     const responseSignature =
       signature && String(signature).trim() !== ""
@@ -317,6 +335,7 @@ export async function POST(req: NextRequest) {
         .from("hotels")
         .select("*")
         .eq("id", hotel_id)
+        .eq("user_id", user_id)
         .maybeSingle();
 
       if (data) {

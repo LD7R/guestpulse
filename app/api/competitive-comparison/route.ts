@@ -39,6 +39,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -137,6 +138,14 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user?.id) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { allowed } = rateLimit(`competitive-comparison:${user.id}`, 5, 60_000);
+    if (!allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many requests. Try again in a minute." },
+        { status: 429 },
+      );
     }
 
     const { data: hotelData, error: hErr } = await supabase

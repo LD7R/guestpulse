@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { NextRequest, NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase";
 
 const PRICES: Record<string, Record<string, string>> = {
   essential: {
@@ -18,18 +19,25 @@ const PRICES: Record<string, Record<string, string>> = {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabaseAuth = await createSupabaseServerClient();
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeKey) {
       return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
     }
     const stripe = new Stripe(stripeKey);
 
-    const { user_id, email, plan, interval } = (await request.json()) as {
-      user_id?: string;
-      email?: string;
+    const { plan, interval } = (await request.json()) as {
       plan?: string;
       interval?: string;
     };
+
+    const user_id = user.id;
+    const email = user.email;
 
     const resolvedInterval = interval === "annual" ? "annual" : "monthly";
     const priceId = PRICES[plan ?? ""]?.[resolvedInterval];
