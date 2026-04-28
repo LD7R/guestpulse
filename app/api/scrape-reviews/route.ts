@@ -56,6 +56,8 @@ type ApifyRun = {
 };
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
+
+// Apify actor IDs (internal numeric IDs — stable across renames)
 const ACTOR_IDS = {
   tripadvisor: "Hvp4YfFGyLM635Q2F",
   google: "Xb8osYTtOjlsgI6k9",
@@ -65,13 +67,54 @@ const ACTOR_IDS = {
   yelp: "gTYnt7Xc2Qjw8eljO",
 } as const;
 
+// Slug names for reference / test-scrape endpoint
+// tripadvisor: maxcopell~tripadvisor-reviews
+// google:      compass~google-maps-reviews-scraper
+// booking:     voyager~booking-reviews-scraper
+// trip:        compass~trip-com-scraper
+// expedia:     tri_angle~expedia-hotels-scraper
+// yelp:        compass~yelp-scraper
+
 export const runtime = "nodejs";
+
+// ─── URL validation ──────────────────────────────────────────────────────────
+
+function validateUrl(platform: string, url: string): string | null {
+  if (!url || !url.trim()) return "No URL configured";
+
+  switch (platform) {
+    case "tripadvisor":
+      if (!url.includes("Hotel_Review")) return "Must be a Hotel_Review URL (e.g. tripadvisor.com/Hotel_Review-...)";
+      break;
+    case "google":
+      if (!url.includes("google.com/maps") && !url.includes("g.co") && !url.includes("goo.gl")) {
+        return "Must be a Google Maps URL (google.com/maps or g.co/...)";
+      }
+      break;
+    case "booking":
+      if (!url.includes("booking.com/hotel")) return "Must be a Booking.com hotel URL (booking.com/hotel/...)";
+      break;
+    case "trip":
+      if (!url.includes("trip.com")) return "Must be a Trip.com URL";
+      break;
+    case "expedia":
+      if (!url.includes("expedia.com")) return "Must be an Expedia URL";
+      break;
+    case "yelp":
+      if (!url.includes("yelp.com/biz")) return "Must be a Yelp business URL (yelp.com/biz/...)";
+      break;
+  }
+
+  return null; // valid
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function normalizeRating(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "number") {
     const clamped = Math.max(1, Math.min(5, value));
-    return Math.round(clamped); // Ensure integer 1-5
+    return Math.round(clamped);
   }
   const n = parseInt(String(value), 10);
   if (Number.isNaN(n)) return null;
@@ -84,7 +127,6 @@ function getDayBounds(dateValue: string | null) {
   const parsed = new Date(dateValue);
   if (Number.isNaN(parsed.getTime())) return null;
 
-  // Normalize to UTC day bounds so time-of-day differences are ignored.
   const start = new Date(
     Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate(), 0, 0, 0, 0),
   );
@@ -113,7 +155,7 @@ function reviewerNameFromField(
 function bookingRatingFromItem(item: ApifyReviewItem): number | null {
   const r = item.rating;
   if (r === null || r === undefined || r === "") return null;
-  if (!r) return null; // matches `item.rating ? ... : null` (0 → null)
+  if (!r) return null;
   const v = Math.min(5, Math.round(parseFloat(String(r)) / 2));
   return Number.isNaN(v) ? null : v;
 }
@@ -123,11 +165,9 @@ function extractReviewUrl(
   platform: string,
   hotelPageUrl: string,
 ): string | null {
-  // Priority 1: explicit review URL from scraped item
   if (item.reviewUrl) return item.reviewUrl as string;
   if (item.url) return item.url as string;
 
-  // Priority 2: hotel page URL with platform-specific anchor
   if (!hotelPageUrl) return null;
   switch (platform) {
     case "tripadvisor":
@@ -144,6 +184,8 @@ function extractReviewUrl(
       return hotelPageUrl;
   }
 }
+
+// ─── Main handler ─────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   try {
@@ -190,8 +232,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Diagnostic logging ────────────────────────────────────────────────────
+    console.log(`[scrape:${platform}] starting with URL:`, url);
+    console.log(`[scrape:${platform}] hotel_id:`, hotel_id, "sync_type:", sync_type);
+
+    // ── URL validation ────────────────────────────────────────────────────────
+    const urlError = validateUrl(platform, url);
+    if (urlError) {
+      console.error(`[scrape:${platform}] URL validation FAILED:`, urlError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: urlError,
+          platform,
+          result: {
+            [platform]: { attempted: true, success: false, count: 0, error: urlError },
+          },
+        },
+        { status: 400 },
+      );
+    }
+
     const apifyToken = process.env.APIFY_API_TOKEN;
-    // Debug logging removed (avoid leaking env details in production).
     if (!apifyToken) {
       return NextResponse.json(
         { success: false, error: "APIFY_API_TOKEN is not configured" },
@@ -239,7 +301,7 @@ export async function POST(request: NextRequest) {
       lastSyncAt = (hotelRow as { last_sync_at?: string | null } | null)?.last_sync_at ?? null;
     }
 
-    // 2. Start Apify actor run
+    // ── Start Apify actor run ─────────────────────────────────────────────────
     const actorId = ACTOR_IDS[platform];
     if (!actorId) {
       return NextResponse.json(
@@ -247,7 +309,10 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    const maxReviews = sync_type === "incremental" ? 20 : 100;
+
+    // maxReviews must be at least 1
+    const maxReviews = Math.max(1, sync_type === "incremental" ? 20 : 100);
+
     const actorInput =
       platform === "google"
         ? {
@@ -276,14 +341,18 @@ export async function POST(request: NextRequest) {
                 }
               : platform === "yelp"
                 ? {
+                    // Yelp actor uses reviewLimit, not maxReviews
+                    startUrls: [{ url }],
+                    reviewLimit: maxReviews,
+                  }
+                : {
+                    // tripadvisor
                     startUrls: [{ url }],
                     maxReviews,
-                  }
-              : {
-                  startUrls: [{ url }],
-                  maxReviews,
-                  language: "en",
-                };
+                    language: "en",
+                  };
+
+    console.log(`[scrape:${platform}] actor ID:`, actorId, "input:", JSON.stringify(actorInput));
 
     const startRunRes = await fetch(
       `${APIFY_BASE_URL}/acts/${encodeURIComponent(actorId)}/runs`,
@@ -299,6 +368,7 @@ export async function POST(request: NextRequest) {
 
     if (!startRunRes.ok) {
       const text = await startRunRes.text();
+      console.error(`[scrape:${platform}] Apify start run FAILED: HTTP ${startRunRes.status}`, text);
       return NextResponse.json(
         {
           success: false,
@@ -312,13 +382,16 @@ export async function POST(request: NextRequest) {
     const startRunJson = (await startRunRes.json()) as { data?: ApifyRun };
     const run = startRunJson.data;
     if (!run?.id) {
+      console.error(`[scrape:${platform}] Apify run did not return an id. Response:`, JSON.stringify(startRunJson));
       return NextResponse.json(
         { success: false, error: "Apify run did not return an id" },
         { status: 502 },
       );
     }
 
-    // 3. Poll run status every 3 seconds until SUCCEEDED
+    console.log(`[scrape:${platform}] Apify run ID:`, run.id, "initial status:", run.status);
+
+    // ── Poll run status ───────────────────────────────────────────────────────
     let runStatus = run.status;
     let datasetId = run.defaultDatasetId;
 
@@ -329,8 +402,10 @@ export async function POST(request: NextRequest) {
       "TIMED-OUT",
     ]);
 
+    let pollCount = 0;
     while (!terminalStatuses.has(runStatus)) {
       await sleep(3000);
+      pollCount++;
 
       const runRes = await fetch(
         `${APIFY_BASE_URL}/actor-runs/${encodeURIComponent(run.id)}`,
@@ -343,6 +418,7 @@ export async function POST(request: NextRequest) {
 
       if (!runRes.ok) {
         const text = await runRes.text();
+        console.error(`[scrape:${platform}] Apify poll FAILED: HTTP ${runRes.status}`, text);
         return NextResponse.json(
           {
             success: false,
@@ -359,26 +435,39 @@ export async function POST(request: NextRequest) {
 
       runStatus = current.status;
       datasetId = current.defaultDatasetId ?? datasetId;
+
+      if (pollCount % 5 === 0) {
+        console.log(`[scrape:${platform}] poll #${pollCount} — status: ${runStatus}`);
+      }
     }
 
+    console.log(`[scrape:${platform}] run finished — status: ${runStatus}, dataset: ${datasetId}`);
+
     if (runStatus !== "SUCCEEDED") {
+      const errMsg = `Apify run did not succeed (status: ${runStatus})`;
+      console.error(`[scrape:${platform}] FAILED:`, errMsg);
       return NextResponse.json(
         {
           success: false,
-          error: `Apify run did not succeed (status: ${runStatus})`,
+          error: errMsg,
+          result: {
+            [platform]: { attempted: true, success: false, count: 0, error: errMsg },
+          },
         },
         { status: 502 },
       );
     }
 
     if (!datasetId) {
+      const errMsg = "Apify run did not produce a dataset";
+      console.error(`[scrape:${platform}] FAILED:`, errMsg);
       return NextResponse.json(
-        { success: false, error: "Apify run did not produce a dataset" },
+        { success: false, error: errMsg },
         { status: 502 },
       );
     }
 
-    // 4. Fetch results from dataset
+    // ── Fetch results from dataset ────────────────────────────────────────────
     const itemsRes = await fetch(
       `${APIFY_BASE_URL}/datasets/${encodeURIComponent(datasetId)}/items`,
       {
@@ -390,6 +479,7 @@ export async function POST(request: NextRequest) {
 
     if (!itemsRes.ok) {
       const text = await itemsRes.text();
+      console.error(`[scrape:${platform}] dataset fetch FAILED: HTTP ${itemsRes.status}`, text);
       return NextResponse.json(
         {
           success: false,
@@ -401,14 +491,22 @@ export async function POST(request: NextRequest) {
     }
 
     const items = (await itemsRes.json()) as ApifyReviewItem[];
-    console.log("[scrape-reviews] Apify items returned:", Array.isArray(items) ? items.length : 0);
+    const itemCount = Array.isArray(items) ? items.length : 0;
+    console.log(`[scrape:${platform}] returned:`, itemCount, "reviews");
 
     if (!Array.isArray(items) || items.length === 0) {
       await supabase.from("hotels").update({ last_sync_at: new Date().toISOString(), first_sync_completed: true }).eq("id", hotel_id);
-      return NextResponse.json({ success: true, count: 0 });
+      return NextResponse.json({
+        success: true,
+        count: 0,
+        platform,
+        result: {
+          [platform]: { attempted: true, success: true, count: 0, error: null },
+        },
+      });
     }
 
-    // 5. Build rows; 6. Skip duplicates (same reviewer_name + review_date + hotel_id)
+    // ── Build rows ────────────────────────────────────────────────────────────
     const reviewerName = (item: ApifyReviewItem) =>
       platform === "google"
         ? item.name ?? reviewerNameFromField(item.reviewer) ?? "Anonymous"
@@ -461,6 +559,7 @@ export async function POST(request: NextRequest) {
                     (item.publishedDate as string | null | undefined) ??
                     null
               : item.publishedDate ?? null;
+
       // For incremental sync, skip reviews older than last sync
       if (sync_type === "incremental" && lastSyncAt && reviewDate) {
         if (new Date(reviewDate) < new Date(lastSyncAt)) {
@@ -475,7 +574,6 @@ export async function POST(request: NextRequest) {
             ? bookingRatingFromItem(item)
             : platform === "expedia"
               ? (() => {
-                  // Expedia uses 1–10 scale → divide by 2 for 1–5
                   const raw = item.rating;
                   if (raw === null || raw === undefined || raw === "") return null;
                   const v = parseFloat(String(raw));
@@ -483,6 +581,7 @@ export async function POST(request: NextRequest) {
                   return Math.max(1, Math.min(5, Math.round(v / 2)));
                 })()
           : normalizeRating(item.rating);
+
       const reviewText =
         platform === "google"
           ? item.text ?? item.snippet ?? null
@@ -503,6 +602,7 @@ export async function POST(request: NextRequest) {
                 : platform === "yelp"
                   ? item.text ?? item.reviewText ?? item.content ?? null
           : item.text ?? null;
+
       const responded =
         platform === "google"
           ? Boolean(item.responseFromOwnerText)
@@ -514,7 +614,7 @@ export async function POST(request: NextRequest) {
 
       const reviewUrl = extractReviewUrl(item, platform, url);
 
-      // Skip duplicate only when reviewer_name matches and review_date is on the same day.
+      // Skip duplicate: same reviewer_name + review_date (same UTC day) + hotel_id
       const dayBounds = getDayBounds(reviewDate);
       let existing: { id: string } | null = null;
 
@@ -559,11 +659,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    console.log(`[scrape:${platform}] duplicates skipped:`, skippedDuplicates, "new rows to insert:", rowsToInsert.length);
+
     if (rowsToInsert.length === 0) {
-      console.log("[scrape-reviews] Duplicates skipped:", skippedDuplicates);
-      console.log("[scrape-reviews] Inserted reviews:", 0);
       await supabase.from("hotels").update({ last_sync_at: new Date().toISOString(), first_sync_completed: true }).eq("id", hotel_id);
-      return NextResponse.json({ success: true, count: 0 });
+      return NextResponse.json({
+        success: true,
+        count: 0,
+        platform,
+        result: {
+          [platform]: { attempted: true, success: true, count: 0, error: null },
+        },
+      });
     }
 
     const { error: insertError } = await supabase
@@ -571,30 +678,35 @@ export async function POST(request: NextRequest) {
       .insert(rowsToInsert);
 
     if (insertError) {
-      console.log("[scrape-reviews] Duplicates skipped:", skippedDuplicates);
-      console.log("[scrape-reviews] Inserted reviews:", 0);
-      console.error("[scrape-reviews] Insert error:", insertError);
+      console.error(`[scrape:${platform}] FAILED insert:`, insertError.message);
       return NextResponse.json(
         {
           success: false,
           error: "Failed to insert reviews into Supabase",
           details: insertError.message,
+          result: {
+            [platform]: { attempted: true, success: false, count: 0, error: insertError.message },
+          },
         },
         { status: 500 },
       );
     }
 
-    console.log("[scrape-reviews] Duplicates skipped:", skippedDuplicates);
-    console.log("[scrape-reviews] Inserted reviews:", rowsToInsert.length);
+    console.log(`[scrape:${platform}] inserted:`, rowsToInsert.length, "reviews");
 
     await supabase.from("hotels").update({ last_sync_at: new Date().toISOString(), first_sync_completed: true }).eq("id", hotel_id);
 
     return NextResponse.json({
       success: true,
       count: rowsToInsert.length,
+      platform,
+      result: {
+        [platform]: { attempted: true, success: true, count: rowsToInsert.length, error: null },
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("[scrape] uncaught error:", message);
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 },
