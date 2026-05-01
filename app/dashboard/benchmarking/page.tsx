@@ -1183,86 +1183,24 @@ export default function BenchmarkingPage() {
   if (loading) {
     return (
       <div style={{ background: PAGE_BG, minHeight: "100vh", padding: "24px 28px" }}>
-        <style>{`@keyframes bench-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: 20,
-          }}
-        >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
           <div>
-            <div
-              style={{
-                width: 200,
-                height: 22,
-                background: "#1a1a1a",
-                borderRadius: 4,
-                animation: "bench-pulse 1.5s ease-in-out infinite",
-              }}
-            />
-            <div
-              style={{
-                width: 140,
-                height: 14,
-                background: "#1a1a1a",
-                borderRadius: 4,
-                marginTop: 6,
-                animation: "bench-pulse 1.5s ease-in-out infinite",
-              }}
-            />
+            <div className="gp-skeleton" style={{ width: 200, height: 22, borderRadius: 4, marginBottom: 8 }} />
+            <div className="gp-skeleton" style={{ width: 140, height: 14, borderRadius: 4 }} />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <div
-              style={{
-                width: 120,
-                height: 32,
-                background: "#1a1a1a",
-                borderRadius: 6,
-                animation: "bench-pulse 1.5s ease-in-out infinite",
-              }}
-            />
-            <div
-              style={{
-                width: 80,
-                height: 32,
-                background: "#1a1a1a",
-                borderRadius: 6,
-                animation: "bench-pulse 1.5s ease-in-out infinite",
-              }}
-            />
+            <div className="gp-skeleton" style={{ width: 120, height: 32, borderRadius: 6 }} />
+            <div className="gp-skeleton" style={{ width: 80, height: 32, borderRadius: 6 }} />
           </div>
         </div>
-        <div
-          style={{
-            height: 280,
-            background: "#141414",
-            border: "1px solid #1e1e1e",
-            borderRadius: 8,
-            animation: "bench-pulse 1.5s ease-in-out infinite",
-            marginBottom: 12,
-          }}
-        />
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(5, 1fr)",
-            gap: 10,
-            marginBottom: 12,
-          }}
-        >
+        <div className="gp-skeleton" style={{ height: 280, borderRadius: 8, marginBottom: 12 }} />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 12 }}>
           {[0, 1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              style={{
-                height: 100,
-                background: "#141414",
-                border: "1px solid #1e1e1e",
-                borderRadius: 8,
-                animation: "bench-pulse 1.5s ease-in-out infinite",
-              }}
-            />
+            <div key={i} style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, padding: 16 }}>
+              <div className="gp-skeleton" style={{ width: 50, height: 10, borderRadius: 4, marginBottom: 10 }} />
+              <div className="gp-skeleton" style={{ width: "60%", height: 24, borderRadius: 4, marginBottom: 8 }} />
+              <div className="gp-skeleton" style={{ width: "80%", height: 10, borderRadius: 4 }} />
+            </div>
           ))}
         </div>
       </div>
@@ -1287,6 +1225,7 @@ export default function BenchmarkingPage() {
 
   return (
     <div
+      className="gp-fade-in"
       style={{
         background: PAGE_BG,
         minHeight: "100vh",

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useEffect, type CSSProperties } from "react";
 
 interface ConfirmModalProps {
   open: boolean;
@@ -23,6 +23,16 @@ export default function ConfirmModal({
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  // Close on Escape
+  useEffect(() => {
+    if (!open) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [open, onCancel]);
+
   if (!open) return null;
 
   const confirmStyle: CSSProperties = {
@@ -35,6 +45,7 @@ export default function ConfirmModal({
     color: "#0d0d0d",
     cursor: "pointer",
     fontFamily: "inherit",
+    transition: "opacity 0.15s, transform 0.1s",
   };
 
   const cancelStyle: CSSProperties = {
@@ -46,15 +57,34 @@ export default function ConfirmModal({
     color: "#888888",
     cursor: "pointer",
     fontFamily: "inherit",
+    transition: "color 0.15s, border-color 0.15s, background 0.15s",
   };
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.7)",
+        zIndex: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        animation: "gpFadeIn 0.2s ease-out forwards",
+      }}
       onClick={onCancel}
     >
       <div
-        style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, padding: 24, maxWidth: 400, width: "100%" }}
+        style={{
+          background: "#141414",
+          border: "1px solid #1e1e1e",
+          borderRadius: 8,
+          padding: 24,
+          maxWidth: 400,
+          width: "100%",
+          animation: "gpFadeInScale 0.25s ease-out forwards",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ fontSize: 16, fontWeight: 600, color: "#f0f0f0", marginBottom: 8 }}>{title}</div>
@@ -64,8 +94,16 @@ export default function ConfirmModal({
             type="button"
             onClick={onCancel}
             style={cancelStyle}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#3a3a3a"; e.currentTarget.style.color = "#aaaaaa"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2a2a2a"; e.currentTarget.style.color = "#888888"; }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "#3a3a3a";
+              e.currentTarget.style.color = "#aaaaaa";
+              e.currentTarget.style.background = "#1a1a1a";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "#2a2a2a";
+              e.currentTarget.style.color = "#888888";
+              e.currentTarget.style.background = "transparent";
+            }}
           >
             {cancelLabel}
           </button>

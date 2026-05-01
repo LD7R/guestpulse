@@ -1003,7 +1003,7 @@ export default function ReviewsInboxPage() {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div style={{ background: C.pageBg, minHeight: "100vh", padding: "24px 28px", boxSizing: "border-box" }}>
+    <div className="gp-fade-in" style={{ background: C.pageBg, minHeight: "100vh", padding: "24px 28px", boxSizing: "border-box" }}>
       <style dangerouslySetInnerHTML={{ __html: "@keyframes rv-pulse { 0%,100%{opacity:0.4} 50%{opacity:0.8} } @keyframes rvspin { to { transform: rotate(360deg); } } @keyframes sync-fadein { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } } @keyframes countdown-bar { from { width:100%; } to { width:0%; } }" }} />
 
       {/* Upgrade modal */}

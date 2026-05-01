@@ -501,15 +501,21 @@ export default function SentimentPage() {
   if (loading) {
     return (
       <div style={{ padding: "28px" }}>
-        <style>{`@keyframes sent-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 20 }}>
           {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} style={{ background: "#161616", border: "1px solid #1e1e1e", borderRadius: 8, padding: "16px 20px", height: 90, animation: "sent-pulse 1.5s ease-in-out infinite" }} />
+            <div key={i} style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, padding: "16px 20px" }}>
+              <div className="gp-skeleton" style={{ width: 60, height: 10, borderRadius: 4, marginBottom: 12 }} />
+              <div className="gp-skeleton" style={{ width: "55%", height: 26, borderRadius: 4, marginBottom: 8 }} />
+              <div className="gp-skeleton" style={{ width: "70%", height: 10, borderRadius: 4 }} />
+            </div>
           ))}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
           {[0, 1].map((i) => (
-            <div key={i} style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, height: 240, animation: "sent-pulse 1.5s ease-in-out infinite" }} />
+            <div key={i} style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, padding: 20 }}>
+              <div className="gp-skeleton" style={{ width: 100, height: 11, borderRadius: 4, marginBottom: 16 }} />
+              <div className="gp-skeleton" style={{ width: "100%", height: 180, borderRadius: 4 }} />
+            </div>
           ))}
         </div>
       </div>
@@ -551,7 +557,7 @@ export default function SentimentPage() {
   const classifiedCount = reviews.filter((r) => r.complaint_topic).length;
 
   return (
-    <div style={{ padding: "28px 28px 28px", maxWidth: 1200 }}>
+    <div className="gp-fade-in" style={{ padding: "28px 28px 28px", maxWidth: 1200 }}>
       {/* ── few classified reviews banner ──────────────── */}
       {classifiedCount < 5 && classifiedCount > 0 && (
         <div style={{ background: "#1a1200", border: "1px solid #2a2000", borderRadius: 6, padding: "10px 16px", marginBottom: 16, fontSize: 13, color: "#fbbf24" }}>

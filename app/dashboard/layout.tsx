@@ -364,8 +364,23 @@ function DashboardLayoutInner({
         href={href}
         style={{
           ...navItemBase,
-          background: active ? "#1e1e1e" : "transparent",
+          background: active ? "#1a1a1a" : "transparent",
           color: active ? "#f0f0f0" : "#888888",
+          borderLeft: active ? "2px solid #4ade80" : "2px solid transparent",
+          paddingLeft: 10,
+          transition: "background 0.15s ease-out, color 0.15s ease-out, border-color 0.15s ease-out",
+        }}
+        onMouseEnter={(e) => {
+          if (!active) {
+            (e.currentTarget as HTMLElement).style.background = "#161616";
+            (e.currentTarget as HTMLElement).style.color = "#cccccc";
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!active) {
+            (e.currentTarget as HTMLElement).style.background = "transparent";
+            (e.currentTarget as HTMLElement).style.color = "#888888";
+          }
         }}
       >
         <span style={{ width: 18, textAlign: "center", opacity: 0.9, display: "flex", alignItems: "center", justifyContent: "center" }} aria-hidden>

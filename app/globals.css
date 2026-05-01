@@ -198,6 +198,16 @@ body {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s ease-out, opacity 0.15s ease-out, transform 0.1s ease-out;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #e8e8e8;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-secondary {
@@ -208,6 +218,18 @@ body {
   padding: 8px 16px;
   font-size: 13px;
   cursor: pointer;
+  transition: background 0.15s ease-out, color 0.15s ease-out, border-color 0.15s ease-out;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #1a1a1a;
+  color: #f0f0f0;
+  border-color: #2a2a2a;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .input-dark {
@@ -256,4 +278,83 @@ body {
   50% {
     opacity: 0.8;
   }
+}
+
+/* ─── GuestPulse animation primitives ──────────────────────────────────────── */
+
+@keyframes gpFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gpFadeInScale {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes gpShimmer {
+  0%   { background-position: -800px 0; }
+  100% { background-position:  800px 0; }
+}
+
+@keyframes gpPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+@keyframes gpSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes gpSlideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Utility classes */
+.gp-fade-in        { animation: gpFadeIn      0.3s ease-out forwards; }
+.gp-fade-in-scale  { animation: gpFadeInScale 0.3s ease-out forwards; }
+.gp-slide-up       { animation: gpSlideUp     0.4s ease-out forwards; }
+
+/* Stagger delays for lists / grids */
+.gp-stagger-1 { animation-delay: 0.04s; opacity: 0; }
+.gp-stagger-2 { animation-delay: 0.08s; opacity: 0; }
+.gp-stagger-3 { animation-delay: 0.12s; opacity: 0; }
+.gp-stagger-4 { animation-delay: 0.16s; opacity: 0; }
+.gp-stagger-5 { animation-delay: 0.20s; opacity: 0; }
+.gp-stagger-6 { animation-delay: 0.24s; opacity: 0; }
+
+/* Shimmer skeleton */
+.gp-skeleton {
+  background: linear-gradient(
+    90deg,
+    #1a1a1a 0%,
+    #222222 40%,
+    #1a1a1a 80%
+  );
+  background-size: 800px 100%;
+  animation: gpShimmer 1.6s infinite linear;
+  border-radius: 4px;
+}
+
+/* Cards that lift on hover */
+.gp-card-hover {
+  transition: background 0.18s ease-out, border-color 0.18s ease-out, transform 0.15s ease-out;
+}
+.gp-card-hover:hover {
+  border-color: #2a2a2a !important;
+  background:   #181818 !important;
+}
+
+/* Buttons feel pressable */
+button:not(:disabled):active,
+[role="button"]:active {
+  transform: scale(0.97);
+}
+
+/* Universal transition on interactive elements (opt-in via class) */
+.gp-btn {
+  transition: background 0.15s ease-out, color 0.15s ease-out,
+              border-color 0.15s ease-out, opacity 0.15s ease-out,
+              transform 0.1s ease-out;
 }

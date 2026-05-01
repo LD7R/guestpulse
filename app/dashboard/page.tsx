@@ -1038,22 +1038,32 @@ function DashboardOverviewContent() {
   if (loading) {
     return (
       <div style={{ background: "#0d0d0d", minHeight: "100vh", padding: "24px 28px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+        {/* Header skeleton */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+          <div>
+            <div className="gp-skeleton" style={{ width: 140, height: 22, borderRadius: 4, marginBottom: 8 }} />
+            <div className="gp-skeleton" style={{ width: 200, height: 13, borderRadius: 4 }} />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div className="gp-skeleton" style={{ width: 90, height: 32, borderRadius: 6 }} />
+            <div className="gp-skeleton" style={{ width: 110, height: 32, borderRadius: 6 }} />
+          </div>
+        </div>
+        {/* Stat card skeletons */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
           {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              style={{
-                background: "#161616",
-                border: "1px solid #1e1e1e",
-                borderRadius: 10,
-                padding: "20px 24px",
-                height: 110,
-                animation: "pulse 1.5s ease-in-out infinite",
-              }}
-            />
+            <div key={i} style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, padding: "16px 20px" }}>
+              <div className="gp-skeleton" style={{ width: 70, height: 10, borderRadius: 4, marginBottom: 12 }} />
+              <div className="gp-skeleton" style={{ width: "50%", height: 28, borderRadius: 4, marginBottom: 8 }} />
+              <div className="gp-skeleton" style={{ width: "70%", height: 11, borderRadius: 4 }} />
+            </div>
           ))}
         </div>
-        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+        {/* Chart skeleton */}
+        <div style={{ background: "#141414", border: "1px solid #1e1e1e", borderRadius: 8, padding: 20, marginBottom: 12 }}>
+          <div className="gp-skeleton" style={{ width: 120, height: 11, borderRadius: 4, marginBottom: 16 }} />
+          <div className="gp-skeleton" style={{ width: "100%", height: 180, borderRadius: 4 }} />
+        </div>
       </div>
     );
   }
@@ -1074,7 +1084,7 @@ function DashboardOverviewContent() {
   }
 
   return (
-    <div style={{ background: "#0d0d0d", minHeight: "100vh", padding: "24px 28px", boxSizing: "border-box" }}>
+    <div className="gp-fade-in" style={{ background: "#0d0d0d", minHeight: "100vh", padding: "24px 28px", boxSizing: "border-box" }}>
       <header
         style={{
           display: "flex",
@@ -1390,7 +1400,10 @@ function DashboardOverviewContent() {
                 background: "none",
                 cursor: "pointer",
                 fontFamily: "inherit",
+                transition: "color 0.15s ease-out",
               }}
+              onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = "#888888"; }}
+              onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = "#555555"; }}
             >
               {t.label}
             </button>
@@ -1478,7 +1491,7 @@ function DashboardOverviewContent() {
             {[
               {
                 label: "Total reviews",
-                value: String(totalReviews),
+                value: totalReviews.toLocaleString(),
                 trend: trendTotal,
                 subLabel: null as string | null,
                 urgent: false,
@@ -1508,9 +1521,10 @@ function DashboardOverviewContent() {
                 subLabel: null as string | null,
                 urgent: true,
               },
-            ].map((card) => (
+            ].map((card, idx) => (
               <div
                 key={card.label}
+                className={`gp-fade-in gp-stagger-${idx + 1}`}
                 style={{
                   background: "#141414",
                   border: "1px solid #1e1e1e",

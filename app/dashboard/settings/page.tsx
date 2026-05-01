@@ -632,7 +632,7 @@ export default function SettingsPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="settings-page">
+    <div className="settings-page gp-fade-in">
       {/* PAGE HEADER */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 600, color: "#f0f0f0", margin: "0 0 4px 0" }}>Settings</h1>
