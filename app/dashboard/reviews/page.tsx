@@ -1,26 +1,17 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
-import { defaultDraftResponse, useDraftResponses } from "@/lib/useDraftResponses";
 import Spinner from "@/app/components/Spinner";
 import ConfirmModal from "@/components/ConfirmModal";
 import EmptyState from "@/components/EmptyState";
 import ErrorState from "@/components/ErrorState";
 import { useToast } from "@/components/Toast";
+import { friendlyError } from "@/lib/errors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type DraftMetadata = {
-  language: string;
-  tone: string;
-  length: string;
-  used_examples: number;
-  used_traits: number;
-  addressed_by_name: boolean;
-};
-
 type Hotel = {
   id: string;
   name?: string | null;
@@ -63,23 +54,6 @@ type Review = {
   original_language?: string | null;
   translated_text?: string | null;
   translated_to?: string | null;
-};
-
-const TONE_LABELS: Record<string, string> = {
-  "warm-professional": "Warm & Professional",
-  "casual-friendly": "Casual & Friendly",
-  "refined-elegant": "Refined & Elegant",
-  "formal": "Formal",
-  "boutique-playful": "Boutique & Playful",
-  "direct-minimal": "Direct & Minimal",
-  "heartfelt-sincere": "Heartfelt & Sincere",
-};
-
-const LANG_LABELS: Record<string, string> = {
-  en: "English", nl: "Dutch", de: "German", fr: "French",
-  es: "Spanish", it: "Italian", pt: "Portuguese", id: "Indonesian",
-  zh: "Chinese", ja: "Japanese", ko: "Korean", ru: "Russian",
-  th: "Thai", vi: "Vietnamese", ar: "Arabic",
 };
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -427,20 +401,15 @@ export default function ReviewsInboxPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const { draftResponses, patchDraftResponse, removeDraft } = useDraftResponses();
-  const draftAbortRef = useRef<AbortController | null>(null);
-
   // Hotel context (cached so we don't re-fetch on every draft)
   const [cachedHotelId, setCachedHotelId] = useState<string | null>(null);
   const [cachedSignature, setCachedSignature] = useState<string>("The Management Team");
-  const [defaultResponseLanguage, setDefaultResponseLanguage] = useState("match-guest");
-  // Language override for drafts — null means use hotel default
-  const [draftLanguageOverride, setDraftLanguageOverride] = useState<string | null>(null);
-  // brand_voice_used per review id
-  const [brandVoiceMap, setBrandVoiceMap] = useState<Record<string, { used: boolean; count: number }>>({});
-  const [draftMetadata, setDraftMetadata] = useState<Record<string, DraftMetadata>>({});
-  const [cachedBrandVoiceCompletedAt, setCachedBrandVoiceCompletedAt] = useState<string | null>(null);
   const [cachedHotelUrls, setCachedHotelUrls] = useState<HotelUrls | null>(null);
+
+  // Draft state — simple map of reviewId → draft text
+  const [draftingId, setDraftingId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [markingRespondedId, setMarkingRespondedId] = useState<string | null>(null);
 
   const [syncing, setSyncing] = useState(false);
   const [classifying, setClassifying] = useState(false);
@@ -575,51 +544,33 @@ export default function ReviewsInboxPage() {
   }, [reviews]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
-  function handleDiscardDraft(reviewId: string) {
-    draftAbortRef.current?.abort();
-    draftAbortRef.current = null;
-    removeDraft(reviewId);
-    setDraftMetadata((prev) => { const next = { ...prev }; delete next[reviewId]; return next; });
-    setBrandVoiceMap((prev) => { const next = { ...prev }; delete next[reviewId]; return next; });
-  }
 
-  async function handleDraftResponse(review: Review, force = false) {
+  // Restore drafts from sessionStorage (24hr expiry)
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(sessionStorage.getItem("gp_drafts") ?? "{}") as Record<
+        string,
+        { text: string; timestamp: number }
+      >;
+      const valid: Record<string, string> = {};
+      const now = Date.now();
+      for (const [id, data] of Object.entries(stored)) {
+        if (data.timestamp && now - data.timestamp < 24 * 60 * 60 * 1000) {
+          valid[id] = data.text;
+        }
+      }
+      setDrafts(valid);
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  async function handleDraft(review: Review) {
     const id = review.id;
     if (!id) return;
-    const cur = draftResponses[id];
 
-    if (!force) {
-      if (cur?.isOpen) {
-        draftAbortRef.current?.abort();
-        draftAbortRef.current = null;
-        patchDraftResponse(id, { isOpen: false });
-        return;
-      }
-      if (cur?.status === "done" || cur?.status === "error") {
-        patchDraftResponse(id, { isOpen: true });
-        return;
-      }
-    }
-
-    draftAbortRef.current?.abort();
-    const controller = new AbortController();
-    draftAbortRef.current = controller;
-
-    if (force) {
-      setDraftMetadata((prev) => { const next = { ...prev }; delete next[id]; return next; });
-      setBrandVoiceMap((prev) => { const next = { ...prev }; delete next[id]; return next; });
-    }
-
-    patchDraftResponse(id, { isOpen: true, status: "loading", text: "", markError: null, copied: false });
-
+    setDraftingId(id);
     try {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      );
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) throw new Error("You must be signed in.");
-
       const res = await fetch("/api/draft-response", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -630,58 +581,67 @@ export default function ReviewsInboxPage() {
           platform: review.platform ?? review.source ?? null,
           signature: cachedSignature,
           hotel_id: cachedHotelId,
-          response_language_override: draftLanguageOverride,
         }),
-        signal: controller.signal,
       });
 
       const json = (await res.json()) as {
         success?: boolean;
+        draft?: string;
         response?: string;
         error?: string;
         upgrade_required?: boolean;
-        brand_voice_used?: boolean;
-        examples_count?: number;
-        metadata?: DraftMetadata;
       };
-      if (controller.signal.aborted) return;
+
       if (json.upgrade_required) {
-        patchDraftResponse(id, { isOpen: false, status: "idle" });
         setUpgradeModal({ message: json.error ?? "Upgrade required to use AI drafts." });
         return;
       }
-      if (!res.ok || json.success !== true || !json.response) throw new Error(json.error ?? "Failed to generate draft");
-      patchDraftResponse(id, { status: "done", text: json.response });
-      if (json.brand_voice_used !== undefined) {
-        setBrandVoiceMap((prev) => ({
-          ...prev,
-          [id]: { used: json.brand_voice_used ?? false, count: json.examples_count ?? 0 },
-        }));
-      }
-      if (json.metadata) {
-        setDraftMetadata((prev) => ({ ...prev, [id]: json.metadata! }));
-      }
+      if (!res.ok || !json.success) throw new Error(json.error ?? "Failed to generate draft");
+
+      const draftText = json.draft ?? json.response ?? "";
+      if (!draftText) throw new Error("No draft returned");
+
+      setDrafts((prev) => ({ ...prev, [id]: draftText }));
+
+      try {
+        const stored = JSON.parse(sessionStorage.getItem("gp_drafts") ?? "{}");
+        stored[id] = { text: draftText, timestamp: Date.now() };
+        sessionStorage.setItem("gp_drafts", JSON.stringify(stored));
+      } catch { /* ignore */ }
+
+      showToast("success", "Draft ready");
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") return;
-      patchDraftResponse(id, { status: "error", text: err instanceof Error ? err.message : "Failed to generate draft" });
+      showToast("error", friendlyError(err));
     } finally {
-      if (draftAbortRef.current === controller) draftAbortRef.current = null;
+      setDraftingId(null);
     }
   }
 
+  function discardDraft(reviewId: string) {
+    setDrafts((prev) => { const next = { ...prev }; delete next[reviewId]; return next; });
+    try {
+      const stored = JSON.parse(sessionStorage.getItem("gp_drafts") ?? "{}");
+      delete stored[reviewId];
+      sessionStorage.setItem("gp_drafts", JSON.stringify(stored));
+    } catch { /* ignore */ }
+  }
+
   async function handleMarkResponded(reviewId: string) {
-    patchDraftResponse(reviewId, { markingResponded: true, markError: null });
+    setMarkingRespondedId(reviewId);
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
     const { error: updateError } = await supabase.from("reviews").update({ responded: true }).eq("id", reviewId);
     if (updateError) {
-      patchDraftResponse(reviewId, { markingResponded: false, markError: updateError.message });
+      setMarkingRespondedId(null);
+      showToast("error", "Failed to mark as responded");
       return;
     }
     setReviews((prev) => prev.map((r) => (r.id === reviewId ? { ...r, responded: true } : r)));
-    removeDraft(reviewId);
+    discardDraft(reviewId);
+    setMarkingRespondedId(null);
+    showToast("success", "Marked as responded");
   }
 
   async function handleUndoResponded(reviewId: string) {
@@ -902,7 +862,6 @@ export default function ReviewsInboxPage() {
         const h = hotels[0] as Record<string, unknown>;
         setCachedHotelId((h.id as string | null) ?? null);
         setCachedSignature((h.response_signature as string | null)?.trim() || "The Management Team");
-        setCachedBrandVoiceCompletedAt((h.brand_voice_completed_at as string | null) ?? null);
         setCachedHotelUrls({
           tripadvisor_url: (h.tripadvisor_url as string | null) ?? null,
           google_url: (h.google_url as string | null) ?? null,
@@ -1002,10 +961,10 @@ export default function ReviewsInboxPage() {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Fixed modals are rendered OUTSIDE the animated container to avoid CSS
+  // transform stacking-context issues with position:fixed descendants.
   return (
-    <div className="gp-fade-in" style={{ background: C.pageBg, minHeight: "100vh", padding: "24px 28px", boxSizing: "border-box" }}>
-      <style dangerouslySetInnerHTML={{ __html: "@keyframes rv-pulse { 0%,100%{opacity:0.4} 50%{opacity:0.8} } @keyframes rvspin { to { transform: rotate(360deg); } } @keyframes sync-fadein { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } } @keyframes countdown-bar { from { width:100%; } to { width:0%; } }" }} />
-
+    <>
       {/* Upgrade modal */}
       {upgradeModal && (
         <div
@@ -1029,6 +988,7 @@ export default function ReviewsInboxPage() {
               padding: 28,
               maxWidth: 400,
               width: "100%",
+              animation: "gpFadeInScale 0.25s ease-out forwards",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1097,6 +1057,9 @@ export default function ReviewsInboxPage() {
         onCancel={() => setConfirmModal(null)}
       />
 
+      <div className="gp-fade-in" style={{ background: C.pageBg, minHeight: "100vh", padding: "24px 28px", boxSizing: "border-box" }}>
+      <style dangerouslySetInnerHTML={{ __html: "@keyframes rv-pulse { 0%,100%{opacity:0.4} 50%{opacity:0.8} } @keyframes rvspin { to { transform: rotate(360deg); } }" }} />
+
       {/* ── 1. Page Header ─────────────────────────────────────────────── */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
         <div>
@@ -1106,40 +1069,6 @@ export default function ReviewsInboxPage() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          {/* Language dropdown for AI drafts */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.textMuted }}>
-            <span style={{ flexShrink: 0 }}>Draft in:</span>
-            <select
-              value={draftLanguageOverride ?? defaultResponseLanguage}
-              onChange={(e) => {
-                const v = e.target.value;
-                setDraftLanguageOverride(v === defaultResponseLanguage ? null : v);
-              }}
-              style={{
-                background: "#111111",
-                border: "1px solid #2a2a2a",
-                borderRadius: 5,
-                padding: "4px 8px",
-                color: C.textSecondary,
-                fontSize: 12,
-                outline: "none",
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              <option value="match-guest">Guest&apos;s language</option>
-              <option value="en">English</option>
-              <option value="nl">Dutch</option>
-              <option value="de">German</option>
-              <option value="fr">French</option>
-              <option value="es">Spanish</option>
-              <option value="it">Italian</option>
-              <option value="pt">Portuguese</option>
-              <option value="id">Indonesian</option>
-              <option value="zh">Chinese</option>
-              <option value="ja">Japanese</option>
-            </select>
-          </div>
           <button
             type="button"
             disabled={classifying || syncing}
@@ -1483,9 +1412,6 @@ export default function ReviewsInboxPage() {
           const complaintTopic = review.complaint_topic ?? review.topic ?? null;
           const responded = review.responded ?? review.has_responded ?? review.is_responded ?? false;
           const reviewId = review.id ?? `${idx}-${platform}`;
-          const draft = draftResponses[reviewId] ?? defaultDraftResponse();
-          const isPanelOpen = draft.isOpen;
-          const hasSavedDraft = (draft.status === "done" || draft.status === "error") && Boolean(draft.text?.trim());
           const hasStableId = Boolean(review.id);
           const reviewDateIso = getReviewDate(review);
 
@@ -1662,32 +1588,29 @@ export default function ReviewsInboxPage() {
                   {!responded && hasStableId && (
                     <button
                       type="button"
-                      onClick={() => void handleDraftResponse(review)}
-                      disabled={isPanelOpen && draft.status === "loading"}
+                      onClick={(e) => { e.stopPropagation(); void handleDraft(review); }}
+                      disabled={draftingId === reviewId}
                       style={{
-                        background: C.textPrimary,
-                        color: "#0d0d0d",
-                        border: "none",
+                        background: drafts[reviewId] ? "#0a1a0a" : C.textPrimary,
+                        color: drafts[reviewId] ? C.green : "#0d0d0d",
+                        border: drafts[reviewId] ? `1px solid #1a3a1a` : "none",
                         borderRadius: 5,
                         padding: "6px 14px",
                         fontSize: 12,
                         fontWeight: 600,
-                        cursor: isPanelOpen && draft.status === "loading" ? "not-allowed" : "pointer",
-                        opacity: isPanelOpen && draft.status === "loading" ? 0.6 : 1,
+                        cursor: draftingId === reviewId ? "wait" : "pointer",
                         fontFamily: "inherit",
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
                       }}
                     >
-                      {isPanelOpen && draft.status === "loading" ? (
+                      {draftingId === reviewId ? (
                         <>
-                          <span style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid #ccc", borderTopColor: "#0d0d0d", animation: "rvspin 0.8s linear infinite", display: "inline-block" }} />
-                          Generating…
+                          <span style={{ width: 11, height: 11, borderRadius: "50%", border: "2px solid rgba(0,0,0,0.3)", borderTopColor: "currentColor", animation: "gpSpin 0.8s linear infinite", display: "inline-block" }} />
+                          Drafting…
                         </>
-                      ) : isPanelOpen ? "Hide response" : hasSavedDraft ? (
-                        <><span style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, display: "inline-block" }} />Show draft</>
-                      ) : "Draft AI response"}
+                      ) : drafts[reviewId] ? "✓ Draft ready" : "✦ Draft response"}
                     </button>
                   )}
 
@@ -1722,207 +1645,96 @@ export default function ReviewsInboxPage() {
                   )}
                 </div>
 
-                {/* Draft panel */}
-                {isPanelOpen && draft.status !== "idle" && hasStableId && (
+                {/* Inline draft panel */}
+                {drafts[reviewId] && hasStableId && (
                   <div
+                    className="gp-fade-in"
                     style={{
-                      marginTop: 12,
-                      background: "#1a1a1a",
-                      border: `1px solid ${C.borderSub}`,
-                      borderTop: `2px solid ${C.green}`,
-                      borderRadius: "0 0 8px 8px",
-                      padding: "14px 16px",
-                      position: "relative",
+                      marginTop: 10,
+                      background: "#0a1a0a",
+                      border: "1px solid #1a3a1a",
+                      borderRadius: 6,
+                      padding: 14,
                     }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", color: C.green, textTransform: "uppercase" }}>
-                        AI DRAFT READY
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: C.green, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        ✦ AI draft response
                       </span>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          type="button"
+                          onClick={() => void handleDraft(review)}
+                          disabled={draftingId === reviewId}
+                          style={{ background: "transparent", color: C.textSecondary, border: `1px solid ${C.borderSub}`, borderRadius: 4, padding: "3px 9px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}
+                        >
+                          ↻ Regenerate
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await navigator.clipboard.writeText(drafts[reviewId] ?? "");
+                            showToast("success", "Copied to clipboard");
+                          }}
+                          style={{ background: "transparent", color: C.textSecondary, border: `1px solid ${C.borderSub}`, borderRadius: 4, padding: "3px 9px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}
+                        >
+                          ⧉ Copy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => discardDraft(reviewId)}
+                          style={{ background: "transparent", color: C.textMuted, border: `1px solid ${C.borderSub}`, borderRadius: 4, padding: "3px 9px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}
+                        >
+                          × Discard
+                        </button>
+                      </div>
+                    </div>
+                    <textarea
+                      value={drafts[reviewId]}
+                      onChange={(e) => setDrafts((prev) => ({ ...prev, [reviewId]: e.target.value }))}
+                      style={{
+                        ...inputStyle,
+                        width: "100%",
+                        minHeight: 100,
+                        resize: "vertical",
+                        padding: "10px 12px",
+                        lineHeight: 1.7,
+                        fontSize: 13,
+                        color: "#cccccc",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                    {/* Platform link */}
+                    {(() => {
+                      const platformUrl = getReviewUrl(review, cachedHotelUrls);
+                      if (!platformUrl) return null;
+                      const color = platformLinkColor(platform);
+                      return (
+                        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 12, color: C.textMuted }}>Paste on the platform:</span>
+                          <a
+                            href={platformUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: 12, color, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}
+                            onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
+                          >
+                            Open {platformLabel(platform)} ↗
+                          </a>
+                        </div>
+                      );
+                    })()}
+                    <div style={{ marginTop: 10 }}>
                       <button
                         type="button"
-                        onClick={() => patchDraftResponse(reviewId, { isOpen: false })}
-                        style={{ border: "none", background: "transparent", color: "#444444", fontSize: 16, cursor: "pointer", lineHeight: 1, fontFamily: "inherit" }}
+                        disabled={markingRespondedId === reviewId}
+                        onClick={() => review.id && void handleMarkResponded(review.id)}
+                        style={{ ...primaryBtn(markingRespondedId === reviewId), fontSize: 12 }}
                       >
-                        ×
+                        {markingRespondedId === reviewId ? "Saving…" : "Mark as responded"}
                       </button>
                     </div>
-
-                    {draft.status === "loading" ? (
-                      <div style={{ fontSize: 13, color: C.textSecondary, display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid #333", borderTopColor: C.green, animation: "rvspin 0.8s linear infinite", display: "inline-block" }} />
-                        Generating…
-                      </div>
-                    ) : draft.status === "error" ? (
-                      <p style={{ fontSize: 13, color: C.red, margin: 0 }}>{draft.text}</p>
-                    ) : (
-                      <>
-                        {/* Metadata row */}
-                        {(() => {
-                          const meta = draftMetadata[reviewId];
-                          if (!meta) return null;
-                          const tags: string[] = [];
-                          tags.push(`✓ Voice: ${TONE_LABELS[meta.tone] ?? meta.tone}`);
-                          tags.push(`✓ Length: ${meta.length}`);
-                          tags.push(`✓ Language: ${LANG_LABELS[meta.language] ?? meta.language}`);
-                          if (meta.used_examples > 0) tags.push(`✓ Trained on ${meta.used_examples} example${meta.used_examples !== 1 ? "s" : ""}`);
-                          if (meta.addressed_by_name) {
-                            const firstName = reviewerName !== "Anonymous" ? reviewerName.split(" ")[0] : null;
-                            if (firstName) tags.push(`✓ Addressed ${firstName}`);
-                          }
-                          return (
-                            <div style={{
-                              background: "#0a1a0a",
-                              border: "1px solid #1a3a1a",
-                              borderRadius: 4,
-                              padding: "6px 10px",
-                              marginBottom: 8,
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: 12,
-                            }}>
-                              {tags.map((t) => (
-                                <span key={t} style={{ fontSize: 11, color: C.green }}>{t}</span>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                        <textarea
-                          value={draft.text}
-                          onChange={(e) => patchDraftResponse(reviewId, { text: e.target.value })}
-                          style={{
-                            ...inputStyle,
-                            width: "100%",
-                            minHeight: 100,
-                            resize: "vertical",
-                            padding: "10px 12px",
-                            lineHeight: 1.7,
-                            fontSize: 13,
-                            color: "#cccccc",
-                          }}
-                        />
-                        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              await navigator.clipboard.writeText(draft.text);
-                              patchDraftResponse(reviewId, { copied: true });
-                              setTimeout(() => patchDraftResponse(reviewId, { copied: false }), 2000);
-                            }}
-                            style={{
-                              background: C.textPrimary,
-                              border: "none",
-                              color: "#0d0d0d",
-                              borderRadius: 5,
-                              padding: "6px 14px",
-                              fontSize: 12,
-                              fontWeight: 500,
-                              cursor: "pointer",
-                              fontFamily: "inherit",
-                            }}
-                          >
-                            {draft.copied ? "✓ Copied" : "Copy"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void handleDraftResponse(review, true)}
-                            style={{
-                              background: "transparent",
-                              border: `1px solid ${C.borderSub}`,
-                              color: C.textSecondary,
-                              borderRadius: 5,
-                              padding: "6px 14px",
-                              fontSize: 12,
-                              cursor: "pointer",
-                              fontFamily: "inherit",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 5,
-                            }}
-                          >
-                            ↻ Regenerate
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDiscardDraft(reviewId)}
-                            style={{
-                              background: "transparent",
-                              border: "1px solid #2a1a1a",
-                              color: C.red,
-                              borderRadius: 5,
-                              padding: "6px 14px",
-                              fontSize: 12,
-                              cursor: "pointer",
-                              fontFamily: "inherit",
-                            }}
-                          >
-                            Discard
-                          </button>
-                          <button
-                            type="button"
-                            disabled={draft.markingResponded}
-                            onClick={() => review.id && void handleMarkResponded(review.id)}
-                            style={{ ...primaryBtn(draft.markingResponded), marginLeft: "auto" }}
-                          >
-                            {draft.markingResponded ? "Saving…" : "Mark as responded"}
-                          </button>
-                        </div>
-                        {draft.markError && (
-                          <p style={{ fontSize: 12, color: C.red, marginTop: 6, marginBottom: 0 }}>{draft.markError}</p>
-                        )}
-                        {/* Open platform prompt */}
-                        {(() => {
-                          const platformUrl = getReviewUrl(review, cachedHotelUrls);
-                          if (!platformUrl) return null;
-                          const color = platformLinkColor(platform);
-                          return (
-                            <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                              <span style={{ fontSize: 12, color: C.textMuted }}>After copying, paste your response on the platform:</span>
-                              <a
-                                href={platformUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{ fontSize: 12, color, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}
-                                onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}
-                              >
-                                Open {platformLabel(platform)} ↗
-                              </a>
-                            </div>
-                          );
-                        })()}
-                        {/* Brand voice indicator / default voice warning */}
-                        {(() => {
-                          const bv = brandVoiceMap[reviewId];
-                          if (!cachedBrandVoiceCompletedAt) {
-                            return (
-                              <div style={{
-                                background: "#1a1200",
-                                border: "1px solid #2a2000",
-                                borderRadius: 4,
-                                padding: "8px 12px",
-                                marginTop: 8,
-                                fontSize: 12,
-                                color: C.amber,
-                              }}>
-                                ⚡ Using default voice.{" "}
-                                <a href="/dashboard/settings?tab=brand-voice" style={{ color: C.amber, textDecoration: "underline" }}>
-                                  Train your brand voice for better responses →
-                                </a>
-                              </div>
-                            );
-                          }
-                          if (bv?.used) {
-                            return (
-                              <p style={{ fontSize: 11, color: C.green, marginTop: 8, marginBottom: 0 }}>
-                                ✓ Trained on your brand voice ({bv.count} example{bv.count !== 1 ? "s" : ""})
-                              </p>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </>
-                    )}
                   </div>
                 )}
 
@@ -1999,6 +1811,7 @@ export default function ReviewsInboxPage() {
           );
         })}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
