@@ -9,6 +9,7 @@ import PageLoadingBar from "@/app/components/PageLoadingBar";
 import TerminalSyncCard, { type SyncPlatformStatus } from "@/app/components/TerminalSyncCard";
 import Logo from "@/components/Logo";
 import { ToastProvider, useToast } from "@/components/Toast";
+import { isTestAccount } from "@/lib/test-account";
 
 const labelStyle: CSSProperties = {
   fontSize: "10px",
@@ -80,6 +81,7 @@ function DashboardLayoutInner({
 
   const [email, setEmail] = useState<string | null>(null);
   const [initials, setInitials] = useState<string>("?");
+  const [isTest, setIsTest] = useState(false);
   const [inboxUnrespondedCount, setInboxUnrespondedCount] = useState(0);
   const [primaryHotel, setPrimaryHotel] = useState<HotelSync | null>(null);
   const [autoSyncing, setAutoSyncing] = useState(false);
@@ -109,10 +111,12 @@ function DashboardLayoutInner({
       setEmail(userEmail);
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("full_name, is_test_account")
         .eq("id", data.user.id)
         .maybeSingle();
-      setInitials(computeInitials((profile as { full_name?: string | null } | null)?.full_name, userEmail));
+      const p = profile as { full_name?: string | null; is_test_account?: boolean | null } | null;
+      setInitials(computeInitials(p?.full_name, userEmail));
+      setIsTest(isTestAccount({ email: userEmail }, p));
     }
     void loadUser();
   }, []);
@@ -451,9 +455,30 @@ function DashboardLayoutInner({
             padding: "14px 16px",
             borderBottom: "1px solid #1e1e1e",
             marginBottom: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
           }}
         >
           <Logo size="md" />
+          {isTest && (
+            <span
+              style={{
+                background: "#2a1f00",
+                color: "#fbbf24",
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                padding: "2px 7px",
+                borderRadius: 4,
+                border: "1px solid #3d2e00",
+                flexShrink: 0,
+              }}
+            >
+              TEST
+            </span>
+          )}
         </div>
 
         <div style={labelStyle}>Overview</div>

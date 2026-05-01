@@ -18,6 +18,7 @@ import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import BrandVoiceWizard from "@/components/BrandVoiceWizard";
 import ErrorState from "@/components/ErrorState";
+import { isTestAccount, type PlanKey } from "@/lib/test-account";
 
 type ProfileRow = {
   id: string;
@@ -38,6 +39,7 @@ type ProfileRow = {
   notif_monthly_report: boolean | null;
   notif_sync_reminders: boolean | null;
   notif_rating_drops: boolean | null;
+  is_test_account: boolean | null;
 };
 
 type HotelRow = {
@@ -284,6 +286,11 @@ export default function SettingsPage() {
     return "free";
   }, [profile]);
 
+  const isTest = useMemo(
+    () => isTestAccount({ email: userEmail }, profile),
+    [userEmail, profile],
+  );
+
   // ── Load data ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -385,7 +392,7 @@ export default function SettingsPage() {
         if (error) throw error;
       }
 
-      setProfile(prev => ({ id: user.id, ...profileData, subscription_status: prev?.subscription_status ?? null, subscription_plan: prev?.subscription_plan ?? null, subscription_interval: prev?.subscription_interval ?? null, stripe_customer_id: prev?.stripe_customer_id ?? null, current_period_end: prev?.current_period_end ?? null, trial_ends_at: prev?.trial_ends_at ?? null, ai_drafts_used: prev?.ai_drafts_used ?? null, notif_new_reviews: prev?.notif_new_reviews ?? null, notif_urgent_alerts: prev?.notif_urgent_alerts ?? null, notif_weekly_digest: prev?.notif_weekly_digest ?? null, notif_monthly_report: prev?.notif_monthly_report ?? null, notif_sync_reminders: prev?.notif_sync_reminders ?? null, notif_rating_drops: prev?.notif_rating_drops ?? null }));
+      setProfile(prev => ({ id: user.id, ...profileData, subscription_status: prev?.subscription_status ?? null, subscription_plan: prev?.subscription_plan ?? null, subscription_interval: prev?.subscription_interval ?? null, stripe_customer_id: prev?.stripe_customer_id ?? null, current_period_end: prev?.current_period_end ?? null, trial_ends_at: prev?.trial_ends_at ?? null, ai_drafts_used: prev?.ai_drafts_used ?? null, notif_new_reviews: prev?.notif_new_reviews ?? null, notif_urgent_alerts: prev?.notif_urgent_alerts ?? null, notif_weekly_digest: prev?.notif_weekly_digest ?? null, notif_monthly_report: prev?.notif_monthly_report ?? null, notif_sync_reminders: prev?.notif_sync_reminders ?? null, notif_rating_drops: prev?.notif_rating_drops ?? null, is_test_account: prev?.is_test_account ?? null }));
 
       if (hotelId) {
         const { error } = await supabase.from("hotels").update({ response_signature: responseSignature.trim() || "The Management Team" }).eq("id", hotelId);
@@ -1085,6 +1092,63 @@ export default function SettingsPage() {
 
       {activeTab === "billing" && (
         <div style={{ maxWidth: 720 }}>
+
+          {/* ── TEST ACCOUNT BANNER + PLAN SWITCHER ─────────────────── */}
+          {isTest && (
+            <div style={{ background: "#1a1200", border: "1px solid #3d2e00", borderRadius: 8, padding: 20, marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <span style={{ background: "#2a1f00", color: "#fbbf24", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", padding: "3px 10px", borderRadius: 100 }}>
+                  TEST ACCOUNT
+                </span>
+                <span style={{ fontSize: 13, color: "#888888" }}>Stripe bypassed — switch plans freely</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {(["essential", "professional", "multi_property"] as PlanKey[]).map((planKey) => {
+                  const labels: Record<PlanKey, string> = { essential: "Essential", professional: "Professional", multi_property: "Multi-property" };
+                  const isCurrent = (profile?.subscription_plan ?? "professional") === planKey;
+                  return (
+                    <button
+                      key={planKey}
+                      type="button"
+                      onClick={async () => {
+                        if (!userId) return;
+                        const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+                        const { error } = await supabase.from("profiles").update({
+                          subscription_plan: planKey,
+                          subscription_status: "active",
+                          subscription_interval: "monthly",
+                        }).eq("id", userId);
+                        if (error) {
+                          showToast("error", "Failed to switch plan");
+                        } else {
+                          console.log(`[TEST] Plan switched to ${planKey} for ${userEmail}`);
+                          setProfile((p) => p ? { ...p, subscription_plan: planKey, subscription_status: "active", subscription_interval: "monthly" } : p);
+                          showToast("success", `Switched to ${labels[planKey]}`);
+                        }
+                      }}
+                      style={{
+                        background: isCurrent ? "#2a1f00" : "transparent",
+                        border: `1px solid ${isCurrent ? "#fbbf24" : "#3d2e00"}`,
+                        borderRadius: 6,
+                        padding: "7px 14px",
+                        color: isCurrent ? "#fbbf24" : "#888888",
+                        fontSize: 13,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        fontWeight: isCurrent ? 600 : 400,
+                        transition: "all 0.15s ease-out",
+                      }}
+                      onMouseEnter={(e) => { if (!isCurrent) { e.currentTarget.style.borderColor = "#fbbf24"; e.currentTarget.style.color = "#fbbf24"; } }}
+                      onMouseLeave={(e) => { if (!isCurrent) { e.currentTarget.style.borderColor = "#3d2e00"; e.currentTarget.style.color = "#888888"; } }}
+                    >
+                      {labels[planKey]}{isCurrent ? " ✓" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div style={{ ...card, padding: 28, marginBottom: 16 }}>
             <SectionLabel>Current Plan</SectionLabel>
 

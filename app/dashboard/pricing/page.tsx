@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import type { CSSProperties } from "react";
+import { isTestAccount } from "@/lib/test-account";
 
 const secondaryBtn: CSSProperties = {
   width: "100%",
@@ -62,6 +63,25 @@ export default function PricingPage() {
 
       if (!user) {
         router.push("/signup?plan=" + plan + "&interval=" + billingInterval);
+        return;
+      }
+
+      // Test accounts bypass Stripe — update DB directly
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_test_account")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (isTestAccount(user, profile as { is_test_account?: boolean | null } | null)) {
+        const planKey = plan === "business" ? "multi_property" : plan;
+        await supabase.from("profiles").update({
+          subscription_plan: planKey,
+          subscription_status: "active",
+          subscription_interval: billingInterval,
+        }).eq("id", user.id);
+        console.log(`[TEST] Plan set to ${planKey}/${billingInterval} for ${user.email}`);
+        router.push("/dashboard/settings?tab=billing");
         return;
       }
 
