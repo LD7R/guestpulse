@@ -800,7 +800,7 @@ export default function ReviewsInboxPage() {
         syncPlatform(platform, url, hotel.id).then((result) => {
           // Dispatch per-platform progress event
           window.dispatchEvent(new CustomEvent("gp:sync-progress", {
-            detail: { platform, status: result.error ? "error" : "done" },
+            detail: { platform, status: result.error ? "error" : "done", count: result.count },
           }));
           return result;
         }),

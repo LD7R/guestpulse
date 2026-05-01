@@ -358,3 +358,53 @@ button:not(:disabled):active,
               border-color 0.15s ease-out, opacity 0.15s ease-out,
               transform 0.1s ease-out;
 }
+
+/* ─── Mobile responsive utilities ──────────────────────────────────────────── */
+
+/* Overflow-scrollable table wrapper */
+.gp-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.gp-table-wrap table {
+  min-width: 560px;
+}
+
+/* Responsive stat grids */
+@media (max-width: 900px) {
+  .gp-grid-4 { grid-template-columns: repeat(2, 1fr) !important; }
+}
+@media (max-width: 520px) {
+  .gp-grid-4 { grid-template-columns: 1fr !important; }
+  .gp-grid-3 { grid-template-columns: 1fr !important; }
+  .gp-grid-2 { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 640px) {
+  .gp-grid-3 { grid-template-columns: repeat(2, 1fr) !important; }
+  .gp-grid-2 { grid-template-columns: 1fr !important; }
+}
+
+/* Hide on mobile */
+@media (max-width: 768px) {
+  .gp-hide-mobile { display: none !important; }
+}
+
+/* Stack flex rows on mobile */
+@media (max-width: 640px) {
+  .gp-stack-mobile {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .gp-stack-mobile > * {
+    width: 100% !important;
+  }
+}
+
+/* Full-width buttons on mobile */
+@media (max-width: 480px) {
+  .gp-btn-full-mobile {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}

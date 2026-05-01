@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 export type SyncPlatformStatus = {
   platform: string;
   status: "idle" | "syncing" | "done" | "error";
+  count?: number;
 };
 
 type Props = {
@@ -68,8 +69,9 @@ export default function TerminalSyncCard({ visible, platforms, startTime }: Prop
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes pulseGreen { 0%,100%{opacity:0.5} 50%{opacity:1} }
+        @keyframes pulseGreen { 0%,100%{opacity:0.4} 50%{opacity:1} }
         @keyframes blinkArrow { 0%,100%{opacity:1} 49%{opacity:1} 50%{opacity:0} 99%{opacity:0} }
+        @keyframes gpFlashGreen { 0%{background:#0a1a0a;border-color:#1a4a1a} 60%{background:#0a1a0a;border-color:#4ade80} 100%{background:#0d0d0d;border-color:#1e1e1e} }
       ` }} />
       <div
         style={{
@@ -80,6 +82,7 @@ export default function TerminalSyncCard({ visible, platforms, startTime }: Prop
           marginBottom: 8,
           fontFamily: '"SF Mono","Cascadia Code",Consolas,monospace',
           fontSize: 11,
+          animation: allDone && errorCount === 0 ? "gpFlashGreen 1.2s ease-out forwards" : "none",
         }}
       >
         {/* Header row */}
@@ -140,8 +143,8 @@ export default function TerminalSyncCard({ visible, platforms, startTime }: Prop
               <span style={{ color: STATUS_COLOR[p.status] ?? "#444444", fontSize: 10, flex: 1 }}>
                 {p.platform}
               </span>
-              <span style={{ color: "#333333", fontSize: 10 }}>
-                {p.status === "syncing" ? "…" : p.status === "done" ? "ok" : p.status === "error" ? "err" : ""}
+              <span style={{ color: p.status === "done" ? "#4ade80" : p.status === "error" ? "#f87171" : "#333333", fontSize: 10 }}>
+                {p.status === "syncing" ? "…" : p.status === "done" ? (p.count != null ? `+${p.count}` : "ok") : p.status === "error" ? "err" : ""}
               </span>
             </div>
           ))}

@@ -198,12 +198,12 @@ function DashboardLayoutInner({
     }
 
     function onSyncProgress(e: Event) {
-      const detail = (e as CustomEvent<{ platform: string; status: "done" | "error" }>).detail;
+      const detail = (e as CustomEvent<{ platform: string; status: "done" | "error"; count?: number }>).detail;
       if (!detail?.platform) return;
       setSyncState((prev) => ({
         ...prev,
         platforms: prev.platforms.map((p) =>
-          p.platform === detail.platform ? { ...p, status: detail.status } : p,
+          p.platform === detail.platform ? { ...p, status: detail.status, count: detail.count } : p,
         ),
       }));
     }

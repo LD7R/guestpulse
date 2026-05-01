@@ -725,7 +725,7 @@ function DashboardOverviewContent() {
       const tasks = platformsToSync.map(({ platform, url }) =>
         syncPlatform(platform, url, primaryHotel.id).then((result) => {
           window.dispatchEvent(new CustomEvent("gp:sync-progress", {
-            detail: { platform, status: result.error ? "error" : "done" },
+            detail: { platform, status: result.error ? "error" : "done", count: result.count },
           }));
           return result;
         }),
