@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
+import FirstSyncExperience from "@/components/FirstSyncExperience";
 
 /* ─── tokens ─────────────────────────────────────────────── */
 const BG = "#0d0d0d";
@@ -124,7 +125,7 @@ function StepIndicator({ step, total }: { step: number; total: number }) {
                 transition: "all 0.2s",
               }}
             >
-              {done ? "✓" : idx}
+              {done ? <span className="gp-check-pop">✓</span> : idx}
             </div>
             {i < total - 1 && (
               <div
@@ -140,83 +141,6 @@ function StepIndicator({ step, total }: { step: number; total: number }) {
           </div>
         );
       })}
-    </div>
-  );
-}
-
-/* ─── platform rows for step 3 ──────────────────────────── */
-type SyncStatus = "idle" | "syncing" | "done" | "error";
-
-function platformLabel(p: string): string {
-  const map: Record<string, string> = {
-    tripadvisor: "TripAdvisor",
-    google: "Google",
-    booking: "Booking.com",
-    trip: "Trip.com",
-    expedia: "Expedia",
-    yelp: "Yelp",
-  };
-  return map[p] ?? p;
-}
-
-function platformColor(p: string): string {
-  const map: Record<string, string> = {
-    tripadvisor: GREEN,
-    google: "#60a5fa",
-    booking: "#a78bfa",
-    trip: "#60a5fa",
-    expedia: "#a78bfa",
-    yelp: DANGER,
-  };
-  return map[p] ?? "#888888";
-}
-
-function SyncRow({
-  platform,
-  status,
-  count,
-}: {
-  platform: string;
-  status: SyncStatus;
-  count?: number;
-}) {
-  const color = platformColor(platform);
-  const label = platformLabel(platform);
-
-  let statusText = "Waiting";
-  let statusColor = "#555555";
-  if (status === "syncing") {
-    statusText = "Syncing…";
-    statusColor = "#fbbf24";
-  } else if (status === "done") {
-    statusText = count !== undefined ? `${count} reviews` : "Done";
-    statusColor = GREEN;
-  } else if (status === "error") {
-    statusText = "Failed";
-    statusColor = DANGER;
-  }
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "10px 0",
-        borderBottom: `1px solid ${BORDER}`,
-      }}
-    >
-      <div
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: status === "idle" ? "#333333" : color,
-          flexShrink: 0,
-        }}
-      />
-      <span style={{ fontSize: 13, color: TEXT, flex: 1 }}>{label}</span>
-      <span style={{ fontSize: 12, color: statusColor, fontWeight: 500 }}>{statusText}</span>
     </div>
   );
 }
@@ -244,39 +168,64 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [savedHotelId, setSavedHotelId] = useState<string | null>(null);
 
-  /* hotel search state */
+  /* AI hotel search state */
   const [searchCity, setSearchCity] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [searchStep, setSearchStep] = useState(0);
-  const [searchFound, setSearchFound] = useState<string | null>(null);
+  const [searchStage, setSearchStage] = useState<"idle" | "searching" | "complete">("idle");
+  const [searchSteps, setSearchSteps] = useState<{ text: string; done: boolean }[]>([]);
   const [searchErr, setSearchErr] = useState<string | null>(null);
 
   /* step 3 state */
-  const [syncStatus, setSyncStatus] = useState<Record<string, SyncStatus>>({});
-  const [syncCounts, setSyncCounts] = useState<Record<string, number>>({});
   const [syncStarted, setSyncStarted] = useState(false);
-  const [syncDone, setSyncDone] = useState(false);
-  const [totalSynced, setTotalSynced] = useState(0);
 
-  /* ── hotel search ───────────────────────────────────────── */
-  async function searchHotel() {
+  /* ── AI hotel search ─────────────────────────────────────── */
+  async function handleAISearch() {
     if (!hotelName.trim()) return;
-    setSearching(true);
-    setSearchStep(0);
-    setSearchFound(null);
+    setSearchStage("searching");
     setSearchErr(null);
+    setSearchSteps([{ text: "Searching hotel databases...", done: false }]);
 
-    const timer = window.setInterval(() => setSearchStep((s) => Math.min(s + 1, 2)), 1200);
+    // Start API call in parallel with the fake progress steps
+    const apiPromise = fetch("/api/search-hotel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        hotel_name: hotelName.trim(),
+        city: searchCity.trim() || undefined,
+      }),
+    });
+
+    await new Promise<void>((r) => setTimeout(r, 600));
+    setSearchSteps([
+      { text: "Searching hotel databases...", done: true },
+      { text: "Identifying review platforms...", done: false },
+    ]);
+
+    await new Promise<void>((r) => setTimeout(r, 700));
+    setSearchSteps([
+      { text: "Searching hotel databases...", done: true },
+      { text: "Identifying review platforms...", done: true },
+      { text: "Locating TripAdvisor profile...", done: false },
+    ]);
+
+    await new Promise<void>((r) => setTimeout(r, 500));
+    setSearchSteps([
+      { text: "Searching hotel databases...", done: true },
+      { text: "Identifying review platforms...", done: true },
+      { text: "Locating TripAdvisor profile...", done: true },
+      { text: "Locating Google Maps profile...", done: false },
+    ]);
+
+    await new Promise<void>((r) => setTimeout(r, 500));
+    setSearchSteps([
+      { text: "Searching hotel databases...", done: true },
+      { text: "Identifying review platforms...", done: true },
+      { text: "Locating TripAdvisor profile...", done: true },
+      { text: "Locating Google Maps profile...", done: true },
+      { text: "Cross-referencing details...", done: false },
+    ]);
 
     try {
-      const res = await fetch("/api/search-hotel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          hotel_name: hotelName.trim(),
-          city: searchCity.trim() || undefined,
-        }),
-      });
+      const res = await apiPromise;
       const data = (await res.json()) as
         | {
             success: true;
@@ -297,6 +246,17 @@ export default function OnboardingPage() {
           }
         | { success: false; error: string };
 
+      // Mark last step done
+      setSearchSteps([
+        { text: "Searching hotel databases...", done: true },
+        { text: "Identifying review platforms...", done: true },
+        { text: "Locating TripAdvisor profile...", done: true },
+        { text: "Locating Google Maps profile...", done: true },
+        { text: "Cross-referencing details...", done: true },
+      ]);
+
+      await new Promise<void>((r) => setTimeout(r, 400));
+
       if (data.success) {
         const h = data.hotel;
         if (h.name) setHotelName(h.name);
@@ -312,16 +272,15 @@ export default function OnboardingPage() {
         setObCountry(h.country ?? "");
         setObPhone(h.phone ?? "");
         setObWebsite(h.website ?? "");
-        setSearchFound("✓ Details found automatically — review and confirm");
         setShowDetails(true);
+        setSearchStage("complete");
       } else {
         setSearchErr(data.error);
+        setSearchStage("idle");
       }
     } catch {
       setSearchErr("Search failed. Please try again.");
-    } finally {
-      window.clearInterval(timer);
-      setSearching(false);
+      setSearchStage("idle");
     }
   }
 
@@ -417,73 +376,28 @@ export default function OnboardingPage() {
 
     setSavedHotelId(hotelId);
     setSaving(false);
-
-    /* initialise sync status rows for the platforms that have URLs */
-    const initial: Record<string, SyncStatus> = {};
-    if (tripadvisorUrl.trim()) initial.tripadvisor = "idle";
-    if (googleUrl.trim()) initial.google = "idle";
-    if (bookingUrl.trim()) initial.booking = "idle";
-    if (tripUrl.trim()) initial.trip = "idle";
-    if (expediaUrl.trim()) initial.expedia = "idle";
-    if (yelpUrl.trim()) initial.yelp = "idle";
-    setSyncStatus(initial);
-
     setStep(3);
   }
 
-  /* ── step 3: sync reviews ───────────────────────────────── */
-  async function startSync() {
-    if (!savedHotelId) return;
-    setSyncStarted(true);
+  /* ── helpers ─────────────────────────────────────────────── */
+  const foundPlatformCount = [tripadvisorUrl, googleUrl, bookingUrl, tripUrl, expediaUrl, yelpUrl]
+    .filter((u) => u.trim()).length;
 
-    const platformUrlMap: Record<string, string> = {};
-    if (tripadvisorUrl.trim()) platformUrlMap.tripadvisor = tripadvisorUrl.trim();
-    if (googleUrl.trim()) platformUrlMap.google = googleUrl.trim();
-    if (bookingUrl.trim()) platformUrlMap.booking = bookingUrl.trim();
-    if (tripUrl.trim()) platformUrlMap.trip = tripUrl.trim();
-    if (expediaUrl.trim()) platformUrlMap.expedia = expediaUrl.trim();
-    if (yelpUrl.trim()) platformUrlMap.yelp = yelpUrl.trim();
+  const platformsForSync = [
+    { platform: "tripadvisor", url: tripadvisorUrl.trim(), label: "TripAdvisor" },
+    { platform: "google", url: googleUrl.trim(), label: "Google Maps" },
+    { platform: "booking", url: bookingUrl.trim(), label: "Booking.com" },
+    { platform: "trip", url: tripUrl.trim(), label: "Trip.com" },
+    { platform: "expedia", url: expediaUrl.trim(), label: "Expedia" },
+    { platform: "yelp", url: yelpUrl.trim(), label: "Yelp" },
+  ].filter((p) => p.url);
 
-    const platforms = Object.entries(platformUrlMap);
-    let grandTotal = 0;
-
-    await Promise.allSettled(
-      platforms.map(async ([platform, url]) => {
-        setSyncStatus((prev) => ({ ...prev, [platform]: "syncing" }));
-        try {
-          const res = await fetch("/api/scrape-reviews", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              hotel_id: savedHotelId,
-              url,
-              platform,
-              sync_type: "initial",
-            }),
-          });
-          const json = (await res.json()) as { count?: number; error?: string };
-          const count = json.count ?? 0;
-          grandTotal += count;
-          setSyncCounts((prev) => ({ ...prev, [platform]: count }));
-          setSyncStatus((prev) => ({ ...prev, [platform]: "done" }));
-        } catch {
-          setSyncStatus((prev) => ({ ...prev, [platform]: "error" }));
-        }
-      }),
-    );
-
-    setTotalSynced(grandTotal);
-    setSyncDone(true);
-
-    /* background classify */
-    void fetch("/api/classify-reviews", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hotel_id: savedHotelId }),
-    });
+  function handleSyncComplete() {
+    sessionStorage.setItem("gp_just_onboarded", "true");
+    router.push("/dashboard");
   }
 
-  /* ─── render ──────────────────────────────────────────── */
+  /* ─── render ──────────────────────────────────────────────── */
   return (
     <div
       style={{
@@ -510,18 +424,21 @@ export default function OnboardingPage() {
         <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>GuestPulse</span>
       </div>
 
-      {/* content */}
+      {/* content — key={step} triggers gp-fade-in re-mount on step change */}
       <div
+        key={step}
+        className="gp-fade-in"
         style={{
           flex: 1,
           display: "flex",
-          alignItems: "center",
+          alignItems: step === 3 && syncStarted ? "flex-start" : "center",
           justifyContent: "center",
           width: "100%",
           padding: "40px 24px",
           boxSizing: "border-box",
         }}
       >
+        {/* ═══════ STEP 1 ═══════ */}
         {step === 1 && (
           <div style={card}>
             <StepIndicator step={1} total={3} />
@@ -550,16 +467,9 @@ export default function OnboardingPage() {
               ].map((feat) => (
                 <div
                   key={feat}
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: 10,
-                    marginBottom: 12,
-                  }}
+                  style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 }}
                 >
-                  <span style={{ color: GREEN, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>
-                    ✓
-                  </span>
+                  <span style={{ color: GREEN, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>✓</span>
                   <span style={{ fontSize: 13, color: "#cccccc", lineHeight: 1.5 }}>{feat}</span>
                 </div>
               ))}
@@ -575,6 +485,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
+        {/* ═══════ STEP 2 ═══════ */}
         {step === 2 && (
           <div style={card}>
             <StepIndicator step={2} total={3} />
@@ -585,13 +496,13 @@ export default function OnboardingPage() {
               Add your hotel name and paste your listing URLs.
             </p>
 
-            {/* Auto-search */}
+            {/* AI Search box */}
             <div
               style={{
                 background: "#111111",
                 border: `1px solid ${BORDER}`,
                 borderRadius: 8,
-                padding: "16px",
+                padding: 16,
                 marginBottom: 20,
               }}
             >
@@ -612,8 +523,11 @@ export default function OnboardingPage() {
                   type="text"
                   placeholder="Hotel name"
                   value={hotelName}
-                  onChange={(e) => setHotelName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") void searchHotel(); }}
+                  onChange={(e) => {
+                    setHotelName(e.target.value);
+                    if (searchStage === "complete") setSearchStage("idle");
+                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter") void handleAISearch(); }}
                   style={{ ...input, flex: 2, minWidth: 140 }}
                 />
                 <input
@@ -621,41 +535,153 @@ export default function OnboardingPage() {
                   placeholder="City (optional)"
                   value={searchCity}
                   onChange={(e) => setSearchCity(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") void searchHotel(); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") void handleAISearch(); }}
                   style={{ ...input, flex: 1, minWidth: 100 }}
                 />
                 <button
                   type="button"
-                  disabled={searching || !hotelName.trim()}
-                  onClick={() => void searchHotel()}
+                  disabled={searchStage === "searching" || !hotelName.trim()}
+                  onClick={() => void handleAISearch()}
                   style={{
                     ...primaryBtn,
                     flexShrink: 0,
-                    opacity: searching || !hotelName.trim() ? 0.55 : 1,
-                    cursor: searching || !hotelName.trim() ? "not-allowed" : "pointer",
+                    opacity: searchStage === "searching" || !hotelName.trim() ? 0.55 : 1,
+                    cursor: searchStage === "searching" || !hotelName.trim() ? "not-allowed" : "pointer",
                   }}
                 >
-                  {searching ? "Searching…" : "Find →"}
+                  {searchStage === "searching" ? "Searching…" : "Find →"}
                 </button>
               </div>
 
-              {searching && (
-                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
-                  {["⟳ Searching Google Maps…", "⟳ Finding platform profiles…", "⟳ Verifying URLs…"].map(
-                    (msg, i) =>
-                      searchStep >= i ? (
-                        <div key={i} style={{ fontSize: 12, color: MUTED }}>{msg}</div>
-                      ) : null,
-                  )}
+              {/* AI Working visualization */}
+              {searchStage === "searching" && (
+                <div
+                  className="gp-fade-in"
+                  style={{
+                    background: "#0a1a0a",
+                    border: "1px solid #1a3a1a",
+                    borderRadius: 8,
+                    padding: 16,
+                    marginTop: 12,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: GREEN,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.1em",
+                      marginBottom: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: GREEN,
+                        display: "inline-block",
+                        animation: "gpPulse 1s ease-in-out infinite",
+                      }}
+                    />
+                    AI Working
+                  </div>
+                  {searchSteps.map((s, i) => (
+                    <div
+                      key={i}
+                      className="gp-fade-in"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "5px 0",
+                        fontSize: 12,
+                        color: s.done ? "#555555" : TEXT,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 16,
+                          height: 16,
+                          borderRadius: "50%",
+                          background: s.done ? "#0a1a0a" : "transparent",
+                          border: s.done ? "1px solid #1a3a1a" : "1.5px solid #444",
+                          color: GREEN,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 9,
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {s.done ? (
+                          <span className="gp-check-pop">✓</span>
+                        ) : (
+                          <span
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: "50%",
+                              background: "#fbbf24",
+                              animation: "gpPulse 1s ease-in-out infinite",
+                            }}
+                          />
+                        )}
+                      </span>
+                      <span>{s.text}</span>
+                    </div>
+                  ))}
                 </div>
               )}
 
-              {searchFound && !searching && (
-                <div style={{ marginTop: 8, fontSize: 12, color: GREEN, fontWeight: 500 }}>
-                  {searchFound}
+              {/* Search complete — success card */}
+              {searchStage === "complete" && (
+                <div
+                  className="gp-fade-in gp-celebrate"
+                  style={{
+                    background: "#0a1a0a",
+                    border: "1px solid #1a3a1a",
+                    borderRadius: 8,
+                    padding: 16,
+                    marginTop: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                  }}
+                >
+                  <span
+                    className="gp-check-pop"
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: "50%",
+                      background: GREEN,
+                      color: BG,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 15,
+                      fontWeight: 700,
+                      flexShrink: 0,
+                    }}
+                  >
+                    ✓
+                  </span>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: TEXT }}>{hotelName}</div>
+                    <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
+                      Found across {foundPlatformCount} platform{foundPlatformCount !== 1 ? "s" : ""} · Review the details below
+                    </div>
+                  </div>
                 </div>
               )}
-              {searchErr && !searching && (
+
+              {/* Search error */}
+              {searchErr && searchStage === "idle" && (
                 <div style={{ marginTop: 8, fontSize: 12, color: DANGER }}>{searchErr}</div>
               )}
             </div>
@@ -735,61 +761,26 @@ export default function OnboardingPage() {
                 >
                   <div>
                     <label style={labelStyle} htmlFor="ob-addr">Address</label>
-                    <input
-                      id="ob-addr"
-                      type="text"
-                      placeholder="Street address"
-                      value={obAddress}
-                      onChange={(e) => setObAddress(e.target.value)}
-                      style={input}
-                    />
+                    <input id="ob-addr" type="text" placeholder="Street address" value={obAddress} onChange={(e) => setObAddress(e.target.value)} style={input} />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <div>
                       <label style={labelStyle} htmlFor="ob-city">City</label>
-                      <input
-                        id="ob-city"
-                        type="text"
-                        placeholder="City"
-                        value={obCity}
-                        onChange={(e) => setObCity(e.target.value)}
-                        style={input}
-                      />
+                      <input id="ob-city" type="text" placeholder="City" value={obCity} onChange={(e) => setObCity(e.target.value)} style={input} />
                     </div>
                     <div>
                       <label style={labelStyle} htmlFor="ob-country">Country</label>
-                      <input
-                        id="ob-country"
-                        type="text"
-                        placeholder="Country"
-                        value={obCountry}
-                        onChange={(e) => setObCountry(e.target.value)}
-                        style={input}
-                      />
+                      <input id="ob-country" type="text" placeholder="Country" value={obCountry} onChange={(e) => setObCountry(e.target.value)} style={input} />
                     </div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <div>
                       <label style={labelStyle} htmlFor="ob-phone">Phone</label>
-                      <input
-                        id="ob-phone"
-                        type="tel"
-                        placeholder="+1 555 000 0000"
-                        value={obPhone}
-                        onChange={(e) => setObPhone(e.target.value)}
-                        style={input}
-                      />
+                      <input id="ob-phone" type="tel" placeholder="+1 555 000 0000" value={obPhone} onChange={(e) => setObPhone(e.target.value)} style={input} />
                     </div>
                     <div>
                       <label style={labelStyle} htmlFor="ob-web">Website</label>
-                      <input
-                        id="ob-web"
-                        type="url"
-                        placeholder="https://"
-                        value={obWebsite}
-                        onChange={(e) => setObWebsite(e.target.value)}
-                        style={input}
-                      />
+                      <input id="ob-web" type="url" placeholder="https://" value={obWebsite} onChange={(e) => setObWebsite(e.target.value)} style={input} />
                     </div>
                   </div>
                 </div>
@@ -813,11 +804,7 @@ export default function OnboardingPage() {
             )}
 
             <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                style={ghostBtn}
-              >
+              <button type="button" onClick={() => setStep(1)} style={ghostBtn}>
                 ← Back
               </button>
               <button
@@ -858,111 +845,65 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {step === 3 && (
+        {/* ═══════ STEP 3 ═══════ */}
+        {step === 3 && !syncStarted && (
           <div style={card}>
             <StepIndicator step={3} total={3} />
             <h2 style={{ fontSize: 20, fontWeight: 700, color: TEXT, margin: "0 0 6px" }}>
               Sync your first reviews
             </h2>
             <p style={{ fontSize: 13, color: MUTED, margin: "0 0 24px", lineHeight: 1.5 }}>
-              We'll pull your existing reviews from each platform. This may take a few minutes.
+              We'll pull your existing reviews from {platformsForSync.length} platform
+              {platformsForSync.length !== 1 ? "s" : ""}. This usually takes 1–3 minutes.
             </p>
 
-            {/* Platform status rows */}
+            {/* Platform list preview */}
             <div style={{ marginBottom: 24 }}>
-              {Object.keys(syncStatus).map((platform) => (
-                <SyncRow
-                  key={platform}
-                  platform={platform}
-                  status={syncStatus[platform]!}
-                  count={syncCounts[platform]}
-                />
+              {platformsForSync.map((p) => (
+                <div
+                  key={p.platform}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "8px 0",
+                    borderBottom: `1px solid ${BORDER}`,
+                    fontSize: 13,
+                    color: TEXT,
+                  }}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#2a2a2a", flexShrink: 0 }} />
+                  <span style={{ flex: 1 }}>{p.label}</span>
+                  <span style={{ fontSize: 11, color: "#444444" }}>Ready</span>
+                </div>
               ))}
             </div>
 
-            {/* Sync result summary */}
-            {syncDone && (
-              <div
-                style={{
-                  background: "rgba(74,222,128,0.06)",
-                  border: `1px solid rgba(74,222,128,0.2)`,
-                  borderRadius: 8,
-                  padding: "14px 16px",
-                  marginBottom: 20,
-                  fontSize: 13,
-                  color: GREEN,
-                  fontWeight: 500,
-                }}
-              >
-                ✓ Synced {totalSynced} review{totalSynced !== 1 ? "s" : ""} across{" "}
-                {Object.keys(syncStatus).length} platform
-                {Object.keys(syncStatus).length !== 1 ? "s" : ""}. AI classification is running in
-                the background.
-              </div>
-            )}
-
             <div style={{ display: "flex", gap: 10 }}>
-              {!syncStarted && (
-                <button
-                  type="button"
-                  onClick={() => void startSync()}
-                  style={{ ...primaryBtn, flex: 1, height: 48 }}
-                >
-                  Sync all reviews now
-                </button>
-              )}
-
-              {syncStarted && !syncDone && (
-                <div
-                  style={{
-                    flex: 1,
-                    height: 48,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 10,
-                    fontSize: 13,
-                    color: "#fbbf24",
-                    fontWeight: 500,
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 14,
-                      height: 14,
-                      borderRadius: "50%",
-                      border: "2px solid rgba(251,191,36,0.3)",
-                      borderTopColor: "#fbbf24",
-                      display: "inline-block",
-                      animation: "ob-spin 0.7s linear infinite",
-                    }}
-                  />
-                  Syncing reviews…
-                </div>
-              )}
-
-              {syncDone && (
-                <button
-                  type="button"
-                  onClick={() => router.push("/dashboard")}
-                  style={{ ...primaryBtn, flex: 1, height: 48 }}
-                >
-                  Go to dashboard →
-                </button>
-              )}
-
-              {!syncDone && (
-                <button
-                  type="button"
-                  disabled={syncStarted}
-                  onClick={() => router.push("/dashboard")}
-                  style={{ ...ghostBtn, flexShrink: 0, opacity: syncStarted ? 0.4 : 1, cursor: syncStarted ? "not-allowed" : "pointer" }}
-                >
-                  Skip for now
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setSyncStarted(true)}
+                style={{ ...primaryBtn, flex: 1, height: 48 }}
+              >
+                Sync all reviews now
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                style={{ ...ghostBtn, flexShrink: 0 }}
+              >
+                Skip for now
+              </button>
             </div>
           </div>
+        )}
+
+        {step === 3 && syncStarted && savedHotelId && (
+          <FirstSyncExperience
+            hotelId={savedHotelId}
+            platforms={platformsForSync}
+            onComplete={handleSyncComplete}
+          />
         )}
       </div>
 

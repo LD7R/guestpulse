@@ -16,6 +16,7 @@ import {
 import ReputationScoreCard from "@/components/ReputationScoreCard";
 import EmptyState from "@/components/EmptyState";
 import ErrorState from "@/components/ErrorState";
+import AnimatedNumber from "@/components/AnimatedNumber";
 import { useToast } from "@/components/Toast";
 
 type Hotel = {
@@ -316,6 +317,7 @@ function DashboardOverviewContent() {
   const [pdfToast, setPdfToast] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
+  const [isFirstTime, setIsFirstTime] = useState(false);
   const [urgentReviewsList, setUrgentReviewsList] = useState<ReviewRow[]>([]);
   const [competitorReviewsForTrend, setCompetitorReviewsForTrend] = useState<
     CompetitorReviewTrendRow[]
@@ -568,10 +570,17 @@ function DashboardOverviewContent() {
     const respondedN = Math.max(0, totalN - needN);
     setResponseRatePct(totalN === 0 ? null : Math.round((respondedN / totalN) * 100));
 
-    setTotalReviews(totalCount ?? 0);
+    const resolvedTotal = totalCount ?? 0;
+    setTotalReviews(resolvedTotal);
     setAvgRating(avg);
     setNeedingResponse(needingCount ?? 0);
     setWeekNew(newLast7);
+
+    // First-time celebratory state
+    try {
+      const justOnboarded = sessionStorage.getItem("gp_just_onboarded") === "true";
+      if (resolvedTotal === 0 && justOnboarded) setIsFirstTime(true);
+    } catch { /* sessionStorage blocked */ }
 
     const dNew = newLast7 - newPrev7;
     const dNeed = uL - uP;
@@ -735,10 +744,17 @@ function DashboardOverviewContent() {
       const results = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
       const totalNew = results.reduce((s, r) => s + r.count, 0);
       const errorCount = results.filter((r) => r.error !== null).length;
+      const wasEmpty = totalReviews === 0;
 
       window.dispatchEvent(new CustomEvent("gp:sync-end", {
         detail: { totalNew, errorCount },
       }));
+
+      if (wasEmpty && totalNew > 0) {
+        showToast("success", `First sync complete — ${totalNew.toLocaleString()} reviews ready!`);
+        try { sessionStorage.removeItem("gp_just_onboarded"); } catch { /* ignore */ }
+        setIsFirstTime(false);
+      }
 
       await loadDashboard();
       router.refresh();
@@ -1094,9 +1110,11 @@ function DashboardOverviewContent() {
         }}
       >
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#f0f0f0", margin: 0 }}>Overview</h1>
-          <p style={{ fontSize: 12, color: "#555555", marginTop: 2, marginBottom: 0 }}>
-            Last 30 days — {primaryHotel?.name?.trim() || "Your hotel"}
+          <h1 style={{ fontSize: 22, fontWeight: 500, color: "#f0f0f0", margin: 0, letterSpacing: "-0.4px" }}>
+            {primaryHotel?.name?.trim() || "Overview"}
+          </h1>
+          <p style={{ fontSize: 13, color: "#888888", marginTop: 2, marginBottom: 0 }}>
+            Operations overview · last 30 days
           </p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
@@ -1424,6 +1442,81 @@ function DashboardOverviewContent() {
             }}
           />
         </div>
+      ) : totalReviews === 0 && !loading && isFirstTime ? (
+        <div
+          className="gp-fade-in"
+          style={{
+            background: "#141414",
+            border: "1px solid #1e1e1e",
+            borderRadius: 12,
+            padding: 48,
+            textAlign: "center",
+            maxWidth: 560,
+            margin: "40px auto",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 40,
+              marginBottom: 20,
+              animation: "gpPulse 2s ease-in-out infinite",
+            }}
+          >
+            ✦
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 500, color: "#f0f0f0", marginBottom: 8, letterSpacing: "-0.3px" }}>
+            Welcome to GuestPulse
+          </div>
+          <div style={{ fontSize: 14, color: "#888888", lineHeight: 1.7, marginBottom: 24 }}>
+            Your reviews are syncing right now. Once complete,
+            this dashboard will come alive with insights,
+            sentiment analysis, and AI-powered responses.
+          </div>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 12,
+              color: "#fbbf24",
+              background: "#1a1200",
+              border: "1px solid #2a2000",
+              borderRadius: 100,
+              padding: "6px 16px",
+              marginBottom: 20,
+            }}
+          >
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: "#fbbf24",
+                animation: "gpPulse 1s ease-in-out infinite",
+              }}
+            />
+            Sync in progress
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={() => void handleSyncAllReviews()}
+              disabled={syncing}
+              style={{
+                background: "transparent",
+                border: "1px solid #2a2a2a",
+                borderRadius: 6,
+                padding: "7px 16px",
+                fontSize: 12,
+                color: "#555555",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {syncing ? "Syncing…" : "Sync now"}
+            </button>
+          </div>
+        </div>
       ) : totalReviews === 0 && !loading ? (
         <div style={{ paddingTop: 40 }}>
           <EmptyState
@@ -1492,6 +1585,7 @@ function DashboardOverviewContent() {
               {
                 label: "Total reviews",
                 value: totalReviews.toLocaleString(),
+                numericValue: totalReviews,
                 trend: trendTotal,
                 subLabel: null as string | null,
                 urgent: false,
@@ -1499,6 +1593,7 @@ function DashboardOverviewContent() {
               {
                 label: "Average rating",
                 value: avgRating === null ? "—" : avgRating.toFixed(1),
+                numericValue: undefined as number | undefined,
                 trend: { text: ratingMonthTrend.text, color: ratingMonthTrend.color },
                 subLabel: weightedHistoricalCount != null && weightedTotalCount != null
                   ? `Based on ${weightedTotalCount} total (${weightedTotalCount - weightedHistoricalCount} recent + ${weightedHistoricalCount} historical)`
@@ -1510,6 +1605,7 @@ function DashboardOverviewContent() {
               {
                 label: "Needing response",
                 value: String(needingResponse),
+                numericValue: needingResponse,
                 trend: trendNeeding,
                 subLabel: null as string | null,
                 urgent: false,
@@ -1517,6 +1613,7 @@ function DashboardOverviewContent() {
               {
                 label: "Urgent",
                 value: String(urgentCount),
+                numericValue: urgentCount,
                 trend: { text: "needs response now", color: "rgba(239,68,68,0.7)" },
                 subLabel: null as string | null,
                 urgent: true,
@@ -1524,7 +1621,7 @@ function DashboardOverviewContent() {
             ].map((card, idx) => (
               <div
                 key={card.label}
-                className={`gp-fade-in gp-stagger-${idx + 1}`}
+                className={`gp-card-hover gp-fade-in gp-stagger-${idx + 1}`}
                 style={{
                   background: "#141414",
                   border: "1px solid #1e1e1e",
@@ -1554,7 +1651,9 @@ function DashboardOverviewContent() {
                     marginBottom: 4,
                   }}
                 >
-                  {card.value}
+                  {card.numericValue !== undefined
+                    ? <AnimatedNumber value={card.numericValue} />
+                    : card.value}
                 </div>
                 {card.subLabel ? (
                   <div style={{ fontSize: 11, color: "#444444", marginBottom: 4 }}>{card.subLabel}</div>
@@ -1801,6 +1900,7 @@ function DashboardOverviewContent() {
                   return (
                     <div
                       key={c.id}
+                      className="gp-card-hover"
                       style={{
                         background: "#141414",
                         border: "1px solid #1e1e1e",

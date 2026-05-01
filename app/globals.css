@@ -324,6 +324,40 @@ body {
 .gp-stagger-5 { animation-delay: 0.20s; opacity: 0; }
 .gp-stagger-6 { animation-delay: 0.24s; opacity: 0; }
 
+/* ─── Celebration animations ────────────────────────────────────────────────── */
+
+@keyframes gpConfettiPop {
+  0%   { transform: scale(0); opacity: 0; }
+  50%  { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes gpRippleOut {
+  0%   { transform: scale(0.95); opacity: 0.7; box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.4); }
+  100% { transform: scale(1);    opacity: 1;   box-shadow: 0 0 0 12px rgba(74, 222, 128, 0); }
+}
+
+@keyframes gpCheckPop {
+  0%   { transform: scale(0) rotate(-180deg); }
+  60%  { transform: scale(1.15) rotate(0deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes gpNumberCount {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+
+@keyframes gpFlash {
+  0%, 100% { background-color: transparent; }
+  20%       { background-color: rgba(74, 222, 128, 0.2); }
+}
+
+.gp-celebrate      { animation: gpRippleOut 0.6s ease-out; }
+.gp-check-pop      { animation: gpCheckPop 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55); display: inline-block; }
+.gp-number-count   { animation: gpNumberCount 0.4s ease-out; display: inline-block; }
+.gp-flash-success  { animation: gpFlash 1.5s ease-out; }
+
 /* Shimmer skeleton */
 .gp-skeleton {
   background: linear-gradient(
