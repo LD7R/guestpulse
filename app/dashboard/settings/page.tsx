@@ -163,7 +163,35 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#555555", marginBottom: 12 }}>{children}</div>;
 }
 
-function PlatformStatusBadge({ status }: { status: PlatformStatus }) {
+function getRegionalNote(platform: string, country: string): string | null {
+  const c = country.toLowerCase();
+  const isAsia = [
+    "indonesia", "thailand", "vietnam", "malaysia", "philippines",
+    "china", "japan", "korea", "india", "singapore", "taiwan", "hong kong",
+  ].some((x) => c.includes(x));
+  const isUSA = c.includes("united states") || c.includes("usa") || c === "us";
+
+  if (platform === "yelp" && !isUSA) {
+    return "Yelp has limited coverage outside the USA. Many international hotels are not listed.";
+  }
+  if (platform === "expedia" && isAsia) {
+    return "Expedia has limited coverage in Asia. Many Asian hotels are not listed.";
+  }
+  if (platform === "trip" && !isAsia) {
+    return "Trip.com is most popular in Asia. Coverage may be limited in your region.";
+  }
+  return null;
+}
+
+function PlatformStatusBadge({
+  status,
+  platformKey,
+  country,
+}: {
+  status: PlatformStatus;
+  platformKey?: string;
+  country?: string;
+}) {
   const base: CSSProperties = {
     fontSize: 10,
     padding: "2px 8px",
@@ -179,9 +207,26 @@ function PlatformStatusBadge({ status }: { status: PlatformStatus }) {
     return <span style={{ ...base, background: "#0a1a0a", color: "#4ade80", border: "1px solid #1a3a1a" }}>✓ Verified</span>;
   }
   if (status.found) {
-    return <span style={{ ...base, background: "#1a1200", color: "#fbbf24", border: "1px solid #2a2000" }}>⚠ Found but not loading</span>;
+    return (
+      <span
+        title="Found a URL but it didn't respond. Try pasting manually."
+        style={{ ...base, background: "#1a1200", color: "#fbbf24", border: "1px solid #2a2000", cursor: "help" }}
+      >
+        ⚠ Couldn&apos;t load
+      </span>
+    );
   }
-  return <span style={{ ...base, background: "#1a0a0a", color: "#f87171", border: "1px solid #2a1a1a" }}>✗ Not found</span>;
+  const regionalNote =
+    (platformKey && country ? getRegionalNote(platformKey, country) : null) ??
+    "Not found via search. Hotel might not be listed, or paste URL manually.";
+  return (
+    <span
+      title={regionalNote}
+      style={{ ...base, background: "#0a0a0a", color: "#888888", border: "1px solid #2a2a2a", cursor: "help" }}
+    >
+      Not listed
+    </span>
+  );
 }
 
 function SaveRow({ saving, label, disabled }: { saving: boolean; label: string; disabled?: boolean }) {
@@ -930,22 +975,20 @@ export default function SettingsPage() {
           {/* Verification summary banner */}
           {searchResult && !searching && (
             <div style={{
-              background: verifiedCount === 6 ? "#0a1a0a" : verifiedCount >= 3 ? "#1a1200" : "#1a0a0a",
-              border: `1px solid ${verifiedCount === 6 ? "#1a3a1a" : verifiedCount >= 3 ? "#2a2000" : "#2a1a1a"}`,
+              background: "#0a0a0a",
+              border: "1px solid #1e1e1e",
               borderRadius: 8, padding: 14, marginBottom: 16, fontSize: 13,
             }}>
-              <div style={{ color: verifiedCount === 6 ? "#4ade80" : verifiedCount >= 3 ? "#fbbf24" : "#f87171", fontWeight: 500, marginBottom: verifiedCount < 6 ? 6 : 0 }}>
-                {verifiedCount === 6
-                  ? "✓ All 6 platforms verified"
-                  : verifiedCount >= 3
-                    ? `⚠ ${verifiedCount} of 6 platforms verified`
-                    : `✗ Only ${verifiedCount} platform(s) verified`}
+              <div style={{ color: "#f0f0f0", fontWeight: 500, marginBottom: 6 }}>
+                ✓ Found {verifiedCount} of 6 platforms
               </div>
-              {verifiedCount < 6 && (
-                <div style={{ fontSize: 12, color: "#888888", lineHeight: 1.5 }}>
-                  Some platforms couldn&apos;t be auto-found. Open the Platforms tab to paste URLs manually and tap Verify, or skip platforms where your hotel isn&apos;t listed.
-                </div>
-              )}
+              <div style={{ fontSize: 12, color: "#888888", lineHeight: 1.5 }}>
+                {verifiedCount === 6
+                  ? "Your hotel is on all 6 platforms — sync will pull reviews from each."
+                  : verifiedCount >= 3
+                    ? "This is normal. Many hotels aren’t listed on every platform. Open the Platforms tab to paste URLs manually for any platform where your hotel exists."
+                    : "Your hotel may not be widely listed. Open the Platforms tab to paste URLs manually for any platform where it exists, or skip platforms where it doesn’t."}
+              </div>
             </div>
           )}
 
@@ -1152,7 +1195,13 @@ export default function SettingsPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 13, fontWeight: 500, color: "#f0f0f0" }}>{meta.label}</span>
-                        {verifyStatus && <PlatformStatusBadge status={verifyStatus} />}
+                        {verifyStatus && (
+                          <PlatformStatusBadge
+                            status={verifyStatus}
+                            platformKey={meta.key}
+                            country={country}
+                          />
+                        )}
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
                         <input type="url" value={urlVal} onChange={e => {
@@ -1174,6 +1223,11 @@ export default function SettingsPage() {
                           {isVerifying ? "…" : "Verify"}
                         </button>
                       </div>
+                      {verifyStatus && !verifyStatus.verified && !verifyStatus.found && !hasUrl && !isLocked && (
+                        <div style={{ fontSize: 11, color: "#666666", marginTop: 6, paddingLeft: 2 }}>
+                          💡 Paste URL manually if your hotel is on this platform
+                        </div>
+                      )}
                     </div>
                     {/* Status */}
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>

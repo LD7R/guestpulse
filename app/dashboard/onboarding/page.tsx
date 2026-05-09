@@ -92,10 +92,34 @@ function Badge({ label, color }: { label: string; color: string }) {
 }
 
 /* ─── platform verification status ───────────────────────── */
+function getRegionalNote(platform: string, country: string): string | null {
+  const c = country.toLowerCase();
+  const isAsia = [
+    "indonesia", "thailand", "vietnam", "malaysia", "philippines",
+    "china", "japan", "korea", "india", "singapore", "taiwan", "hong kong",
+  ].some((x) => c.includes(x));
+  const isUSA = c.includes("united states") || c.includes("usa") || c === "us";
+
+  if (platform === "yelp" && !isUSA) {
+    return "Yelp has limited coverage outside the USA. Many international hotels are not listed.";
+  }
+  if (platform === "expedia" && isAsia) {
+    return "Expedia has limited coverage in Asia. Many Asian hotels are not listed.";
+  }
+  if (platform === "trip" && !isAsia) {
+    return "Trip.com is most popular in Asia. Coverage may be limited in your region.";
+  }
+  return null;
+}
+
 function PlatformStatusBadge({
   status,
+  platformKey,
+  country,
 }: {
   status: { found: boolean; verified: boolean; error?: string };
+  platformKey?: string;
+  country?: string;
 }) {
   const base: CSSProperties = {
     fontSize: 10,
@@ -117,14 +141,23 @@ function PlatformStatusBadge({
   }
   if (status.found) {
     return (
-      <span style={{ ...base, background: "#1a1200", color: "#fbbf24", border: "1px solid #2a2000" }}>
-        ⚠ Found but not loading
+      <span
+        title="Found a URL but it didn't respond. Try pasting manually."
+        style={{ ...base, background: "#1a1200", color: "#fbbf24", border: "1px solid #2a2000", cursor: "help" }}
+      >
+        ⚠ Couldn&apos;t load
       </span>
     );
   }
+  const regionalNote =
+    (platformKey && country ? getRegionalNote(platformKey, country) : null) ??
+    "Not found via search. Hotel might not be listed, or paste URL manually.";
   return (
-    <span style={{ ...base, background: "#1a0a0a", color: "#f87171", border: "1px solid #2a1a1a" }}>
-      ✗ Not found
+    <span
+      title={regionalNote}
+      style={{ ...base, background: "#0a0a0a", color: "#888888", border: "1px solid #2a2a2a", cursor: "help" }}
+    >
+      Not listed
     </span>
   );
 }
@@ -805,48 +838,24 @@ export default function OnboardingPage() {
               <div
                 className="gp-fade-in"
                 style={{
-                  background:
-                    verifiedCount === 6
-                      ? "#0a1a0a"
-                      : verifiedCount >= 3
-                        ? "#1a1200"
-                        : "#1a0a0a",
-                  border: `1px solid ${
-                    verifiedCount === 6
-                      ? "#1a3a1a"
-                      : verifiedCount >= 3
-                        ? "#2a2000"
-                        : "#2a1a1a"
-                  }`,
+                  background: "#0a0a0a",
+                  border: `1px solid ${BORDER}`,
                   borderRadius: 8,
                   padding: 14,
                   marginBottom: 16,
                   fontSize: 13,
                 }}
               >
-                <div
-                  style={{
-                    color:
-                      verifiedCount === 6
-                        ? "#4ade80"
-                        : verifiedCount >= 3
-                          ? "#fbbf24"
-                          : "#f87171",
-                    fontWeight: 500,
-                    marginBottom: verifiedCount < 6 ? 6 : 0,
-                  }}
-                >
-                  {verifiedCount === 6
-                    ? "✓ All 6 platforms verified"
-                    : verifiedCount >= 3
-                      ? `⚠ ${verifiedCount} of 6 platforms verified`
-                      : `✗ Only ${verifiedCount} platform(s) verified`}
+                <div style={{ color: TEXT, fontWeight: 500, marginBottom: 6 }}>
+                  ✓ Found {verifiedCount} of 6 platforms
                 </div>
-                {verifiedCount < 6 && (
-                  <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
-                    Some platforms couldn&apos;t be auto-found. You can paste URLs manually and tap Verify, or skip platforms where your hotel isn&apos;t listed.
-                  </div>
-                )}
+                <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
+                  {verifiedCount === 6
+                    ? "Your hotel is on all 6 platforms — sync will pull reviews from each."
+                    : verifiedCount >= 3
+                      ? "This is normal. Many hotels aren’t listed on every platform. Paste URLs manually for any platform where your hotel exists."
+                      : "Your hotel may not be widely listed. Paste URLs manually for any platform where it exists, or skip platforms where it doesn’t."}
+                </div>
               </div>
             )}
 
@@ -861,6 +870,8 @@ export default function OnboardingPage() {
             ].map(({ id, platformKey, label, badge, color, value, set, placeholder }) => {
               const status = platformStatus[platformKey];
               const isVerifying = !!verifying[platformKey];
+              const showPasteHint =
+                searchStage === "complete" && status && !status.verified && !status.found && !value.trim();
               return (
                 <div key={id} style={{ marginBottom: 12 }}>
                   <label
@@ -871,7 +882,13 @@ export default function OnboardingPage() {
                       <Badge label={badge} color={color} />
                       {label}
                     </span>
-                    {status && <PlatformStatusBadge status={status} />}
+                    {status && (
+                      <PlatformStatusBadge
+                        status={status}
+                        platformKey={platformKey}
+                        country={obCountry}
+                      />
+                    )}
                   </label>
                   <div style={{ display: "flex", gap: 8 }}>
                     <input
@@ -914,6 +931,11 @@ export default function OnboardingPage() {
                       {isVerifying ? "…" : "Verify"}
                     </button>
                   </div>
+                  {showPasteHint && (
+                    <div style={{ fontSize: 11, color: "#666666", paddingLeft: 4, marginTop: 4 }}>
+                      💡 Paste URL manually if your hotel is on this platform
+                    </div>
+                  )}
                 </div>
               );
             })}

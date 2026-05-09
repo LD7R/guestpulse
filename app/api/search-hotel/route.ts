@@ -18,7 +18,8 @@ const PLATFORM_DOMAINS = {
 
 const URL_PATTERNS: Record<Platform, RegExp> = {
   tripadvisor: /tripadvisor\.com\/Hotel_Review-[^/?#"'\s)]+/i,
-  google: /google\.com\/maps\/place\/[^?#"'\s)]+/i,
+  google:
+    /(google\.[a-z.]+\/maps\/place\/[^?#"'\s)]+|maps\.google\.[a-z.]+\/[^"'\s)]+|g\.co\/[a-z]+\/[^"'\s)]+|goo\.gl\/maps\/[^"'\s)]+)/i,
   booking: /booking\.com\/hotel\/[a-z]{2}\/[^/?#"'\s)]+\.html/i,
   trip: /trip\.com\/hotels\/[^?#"'\s)]+/i,
   expedia: /expedia\.com\/[a-zA-Z0-9-]+-Hotels-[^?#"'\s)]+/i,
@@ -81,6 +82,14 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function normalizeMatchedUrl(matched: string): string {
+  if (/^https?:\/\//i.test(matched)) return matched;
+  // For Google, some matches already start with a subdomain (maps., g.co, goo.gl)
+  // For those, do not prepend "www."
+  const startsWithSubdomain = /^(maps\.|m\.|g\.co|goo\.gl)/i.test(matched);
+  return startsWithSubdomain ? `https://${matched}` : `https://www.${matched}`;
+}
+
 async function searchForRealUrl(
   hotelName: string,
   city: string | null,
@@ -110,7 +119,7 @@ No commentary. No quotes. Just the URL or NONE.`,
 
     const match = trimmed.match(pattern);
     if (match) {
-      return { url: "https://www." + match[0] };
+      return { url: normalizeMatchedUrl(match[0]) };
     }
 
     if (/\bNONE\b/i.test(trimmed)) {
@@ -129,6 +138,58 @@ No commentary. No quotes. Just the URL or NONE.`,
     return {
       url: null,
       error: error instanceof Error ? error.message : "Search failed",
+    };
+  }
+}
+
+async function searchGoogleWithFallback(
+  hotelName: string,
+  city: string | null,
+): Promise<{ url: string | null; error?: string }> {
+  // Attempt 1: site:google.com/maps via main search
+  const first = await searchForRealUrl(hotelName, city, "google");
+  if (first.url) return first;
+
+  // Attempt 2: broader query without site: filter
+  const query = `"${hotelName}"${city ? ` ${city}` : ""} google maps`;
+  try {
+    const text = await callClaudeWithSearch(
+      `Find the Google Maps URL for "${hotelName}"${city ? ` in ${city}` : ""}.
+
+Use web_search with: ${query}
+
+Return ONLY the Google Maps URL on a single line. Format examples:
+- https://www.google.com/maps/place/...
+- https://maps.google.com/...
+- https://g.co/kgs/...
+- https://goo.gl/maps/...
+
+If genuinely not on Google Maps, return "NONE". No commentary.`,
+      500,
+    );
+
+    const trimmed = text.trim();
+    if (/\bNONE\b/i.test(trimmed)) {
+      return { url: null, error: "Not on Google Maps" };
+    }
+
+    const urlMatch = trimmed.match(
+      /https?:\/\/[^\s"'>)]*(google\.[a-z.]+|maps\.google\.[a-z.]+|g\.co|goo\.gl)[^\s"'>)]+/i,
+    );
+    if (urlMatch) {
+      return { url: urlMatch[0] };
+    }
+
+    const bareMatch = trimmed.match(URL_PATTERNS.google);
+    if (bareMatch) {
+      return { url: normalizeMatchedUrl(bareMatch[0]) };
+    }
+
+    return { url: null, error: "Not found" };
+  } catch (err) {
+    return {
+      url: null,
+      error: err instanceof Error ? err.message : "Search failed",
     };
   }
 }
@@ -235,10 +296,19 @@ If you cannot find the hotel, return: {"error": "not found"}`,
 
     console.log("[search-hotel] found basic info:", hotelInfo.name);
 
-    const platforms: Platform[] = ["tripadvisor", "google", "booking", "trip", "expedia", "yelp"];
+    const otherPlatforms: Platform[] = ["tripadvisor", "booking", "trip", "expedia", "yelp"];
 
-    const urlResults = await Promise.all(
-      platforms.map(async (platform) => {
+    const urlResults = await Promise.all([
+      (async () => {
+        console.log("[search-hotel] searching google (with fallback)...");
+        const result = await searchGoogleWithFallback(
+          hotelInfo!.name!,
+          hotelInfo!.city ?? null,
+        );
+        console.log("[search-hotel] google:", result.url ?? result.error);
+        return { platform: "google" as Platform, ...result };
+      })(),
+      ...otherPlatforms.map(async (platform) => {
         console.log(`[search-hotel] searching ${platform}...`);
         const result = await searchForRealUrl(
           hotelInfo!.name!,
@@ -248,7 +318,9 @@ If you cannot find the hotel, return: {"error": "not found"}`,
         console.log(`[search-hotel] ${platform}:`, result.url ?? result.error);
         return { platform, ...result };
       }),
-    );
+    ]);
+
+    const platforms: Platform[] = ["google", ...otherPlatforms];
 
     const verifiedResults = await Promise.all(
       urlResults.map(async (r) => {
