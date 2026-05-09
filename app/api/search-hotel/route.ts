@@ -1,279 +1,318 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase";
 
-export const maxDuration = 120;
+export const runtime = "nodejs";
+export const maxDuration = 180;
 
-/* ── Apify polling helper ──────────────────────────────────── */
-async function apifyPoll(
-  token: string,
-  runId: string,
-  initialDatasetId: string,
-  maxAttempts = 15,
-): Promise<{ datasetId: string; succeeded: boolean }> {
-  let status = "RUNNING";
-  let datasetId = initialDatasetId;
-  let attempts = 0;
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const MODEL = "claude-haiku-4-5-20251001";
 
-  while (!["SUCCEEDED", "FAILED", "ABORTED"].includes(status) && attempts < maxAttempts) {
-    await new Promise((r) => setTimeout(r, 3000));
-    const poll = await fetch(`https://api.apify.com/v2/actor-runs/${runId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const pollData = (await poll.json()) as { data: { status: string; defaultDatasetId: string } };
-    status = pollData.data.status;
-    datasetId = pollData.data.defaultDatasetId;
-    attempts++;
-  }
+const PLATFORM_DOMAINS = {
+  tripadvisor: "tripadvisor.com",
+  google: "google.com/maps",
+  booking: "booking.com",
+  trip: "trip.com",
+  expedia: "expedia.com",
+  yelp: "yelp.com",
+} as const;
 
-  return { datasetId, succeeded: status === "SUCCEEDED" };
-}
+const URL_PATTERNS: Record<Platform, RegExp> = {
+  tripadvisor: /tripadvisor\.com\/Hotel_Review-[^/?#"'\s)]+/i,
+  google: /google\.com\/maps\/place\/[^?#"'\s)]+/i,
+  booking: /booking\.com\/hotel\/[a-z]{2}\/[^/?#"'\s)]+\.html/i,
+  trip: /trip\.com\/hotels\/[^?#"'\s)]+/i,
+  expedia: /expedia\.com\/[a-zA-Z0-9-]+-Hotels-[^?#"'\s)]+/i,
+  yelp: /yelp\.com\/biz\/[^?#"'\s)]+/i,
+};
 
-async function apifyDataset(token: string, datasetId: string): Promise<Array<Record<string, unknown>>> {
-  const res = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items`, {
-    headers: { Authorization: `Bearer ${token}` },
+type Platform = keyof typeof PLATFORM_DOMAINS;
+
+type AnthropicResponse = {
+  content?: Array<{ type?: string; text?: string }>;
+  error?: { message?: string };
+};
+
+type HotelInfo = {
+  name?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  postal_code?: string;
+  phone?: string;
+  website?: string;
+  latitude?: number;
+  longitude?: number;
+  description?: string;
+  price_tier?: string;
+  target_guest?: string;
+  error?: string;
+};
+
+async function callClaudeWithSearch(prompt: string, maxTokens: number): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
+
+  const res = await fetch(ANTHROPIC_URL, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      messages: [{ role: "user", content: prompt }],
+    }),
   });
-  return (await res.json()) as Array<Record<string, unknown>>;
+
+  const data = (await res.json()) as AnthropicResponse;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? `Anthropic error (${res.status})`);
+  }
+  return (data.content ?? [])
+    .filter((b) => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text!)
+    .join("");
 }
 
-/* ── Search TripAdvisor via Apify ──────────────────────────── */
-async function searchTripAdvisor(token: string, name: string, city: string): Promise<string | null> {
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function searchForRealUrl(
+  hotelName: string,
+  city: string | null,
+  platform: Platform,
+): Promise<{ url: string | null; error?: string }> {
+  const domain = PLATFORM_DOMAINS[platform];
+  const pattern = URL_PATTERNS[platform];
+  const query = city
+    ? `${hotelName} ${city} site:${domain}`
+    : `${hotelName} hotel site:${domain}`;
+
   try {
-    const searchUrl =
-      `https://www.tripadvisor.com/Search?q=` + encodeURIComponent(`${name} ${city}`.trim());
+    const text = await callClaudeWithSearch(
+      `Search for the official ${platform} URL for "${hotelName}"${city ? ` in ${city}` : ""}.
 
-    const res = await fetch("https://api.apify.com/v2/acts/Hvp4YfFGyLM635Q2F/runs", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ startUrls: [{ url: searchUrl }], maxReviews: 1, language: "en" }),
-    });
-    const runData = (await res.json()) as { data?: { id: string; defaultDatasetId: string } };
-    const runId = runData.data?.id;
-    const initialDatasetId = runData.data?.defaultDatasetId;
-    if (!runId || !initialDatasetId) return null;
+Use the web_search tool with query: ${query}
 
-    const { datasetId, succeeded } = await apifyPoll(token, runId, initialDatasetId);
-    if (!succeeded) return null;
+Then return ONLY the URL of the hotel's listing on ${domain}. The URL must match this pattern: ${pattern}
 
-    const items = await apifyDataset(token, datasetId);
-    const url = (items?.[0]?.url as string | undefined) ?? null;
-    return url;
-  } catch {
-    return null;
+Return JUST the URL on a single line. If not found, return "NONE".
+
+No commentary. No quotes. Just the URL or NONE.`,
+      500,
+    );
+
+    const trimmed = text.trim();
+
+    const match = trimmed.match(pattern);
+    if (match) {
+      return { url: "https://www." + match[0] };
+    }
+
+    if (/\bNONE\b/i.test(trimmed)) {
+      return { url: null, error: "Not found" };
+    }
+
+    const anyUrlMatch = trimmed.match(
+      new RegExp(`https?://[^\\s"'>)]*${escapeRegex(domain)}[^\\s"'>)]*`, "i"),
+    );
+    if (anyUrlMatch) {
+      return { url: anyUrlMatch[0] };
+    }
+
+    return { url: null, error: "No matching URL in result" };
+  } catch (error) {
+    return {
+      url: null,
+      error: error instanceof Error ? error.message : "Search failed",
+    };
   }
 }
 
-/* ── Search Booking.com via Apify ──────────────────────────── */
-async function searchBooking(token: string, name: string, city: string): Promise<string | null> {
+async function verifyUrl(url: string): Promise<boolean> {
   try {
-    const searchUrl =
-      `https://www.booking.com/searchresults.html?ss=` +
-      encodeURIComponent(`${name} ${city}`.trim());
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
 
-    const res = await fetch("https://api.apify.com/v2/acts/PbMHke3jW25J6hSOA/runs", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ startUrls: [{ url: searchUrl }], maxReviews: 1 }),
+    const res = await fetch(url, {
+      method: "HEAD",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; GuestPulse/1.0)",
+      },
+      redirect: "follow",
     });
-    const runData = (await res.json()) as { data?: { id: string; defaultDatasetId: string } };
-    const runId = runData.data?.id;
-    const initialDatasetId = runData.data?.defaultDatasetId;
-    if (!runId || !initialDatasetId) return null;
 
-    const { datasetId, succeeded } = await apifyPoll(token, runId, initialDatasetId);
-    if (!succeeded) return null;
-
-    const items = await apifyDataset(token, datasetId);
-    const url = (items?.[0]?.url as string | undefined) ?? null;
-    return url;
+    clearTimeout(timeout);
+    return res.ok || res.status === 405 || res.status === 403;
   } catch {
-    return null;
+    return false;
   }
 }
 
-/* ── Main route ────────────────────────────────────────────── */
 export async function POST(request: NextRequest) {
   try {
-    const { hotel_name, city, country } = (await request.json()) as {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Not authenticated" }, { status: 401 });
+    }
+
+    const body = (await request.json().catch(() => ({}))) as {
+      query?: string;
       hotel_name?: string;
       city?: string;
       country?: string;
     };
 
-    if (!hotel_name) {
-      return NextResponse.json({ success: false, error: "Hotel name required" }, { status: 400 });
-    }
+    const queryInput =
+      body.query?.trim() ||
+      [body.hotel_name, body.city, body.country].filter((s) => s && s.trim()).join(" ").trim();
 
-    const apifyToken = process.env.APIFY_API_TOKEN;
-    if (!apifyToken) {
+    if (!queryInput) {
       return NextResponse.json(
-        { success: false, error: "APIFY_API_TOKEN not configured" },
-        { status: 500 },
+        { success: false, error: "Hotel name or query required" },
+        { status: 400 },
       );
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: "ANTHROPIC_API_KEY not configured" },
-        { status: 500 },
-      );
-    }
+    console.log("[search-hotel] starting search for:", queryInput);
 
-    /* ── Step 1: Google Maps search ─────────────────────────── */
-    const searchQuery = city
-      ? `${hotel_name} ${city} ${country ?? ""}`.trim()
-      : hotel_name;
+    const infoText = await callClaudeWithSearch(
+      `Find basic information about this hotel:
 
-    const startRes = await fetch("https://api.apify.com/v2/acts/Xb8osYTtOjlsgI6k9/runs", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apifyToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        searchStringsArray: [searchQuery],
-        maxCrawledPlacesPerSearch: 3,
-        maxReviews: 1,
-        language: "en",
-      }),
-    });
+"${queryInput}"
 
-    const gmRunData = (await startRes.json()) as {
-      data: { id: string; status: string; defaultDatasetId: string };
-    };
-    const gmRun = gmRunData.data;
+Use web_search to find the hotel. Return ONLY this JSON, no markdown, no commentary:
 
-    const { datasetId: gmDatasetId, succeeded: gmSucceeded } = await apifyPoll(
-      apifyToken,
-      gmRun.id,
-      gmRun.defaultDatasetId,
-      20,
+{
+  "name": "Official hotel name",
+  "address": "Street address",
+  "city": "City",
+  "country": "Country",
+  "postal_code": "Postal/ZIP code",
+  "phone": "Phone number with country code",
+  "website": "Official hotel website URL",
+  "latitude": 52.123,
+  "longitude": 4.123,
+  "description": "1-2 sentence description",
+  "price_tier": "budget|mid-range|upscale|luxury",
+  "target_guest": "leisure|business|leisure couples|families|etc"
+}
+
+If you cannot find the hotel, return: {"error": "not found"}`,
+      1200,
     );
 
-    if (!gmSucceeded) {
-      return NextResponse.json({
-        success: false,
-        error: "Hotel not found. Try adding city name.",
-      });
-    }
-
-    const gmItems = await apifyDataset(apifyToken, gmDatasetId);
-
-    if (!gmItems || gmItems.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: "Hotel not found. Try adding city name.",
-      });
-    }
-
-    const place = gmItems[0]!;
-
-    /* ── Extract Google Maps data ────────────────────────────── */
-    const googleUrl =
-      (place.url as string | null) ?? (place.googleMapsUrl as string | null) ?? null;
-    const location = place.location as { lat?: number; lng?: number } | null;
-    const latitude = location?.lat ?? null;
-    const longitude = location?.lng ?? null;
-    const address = (place.address as string | null) ?? null;
-    const website = (place.website as string | null) ?? null;
-    const phone = (place.phone as string | null) ?? null;
-    const addressParsed = place.addressParsed as {
-      city?: string;
-      country?: string;
-      postalCode?: string;
-    } | null;
-    const hotelName = (place.title as string | null) ?? hotel_name;
-    const hotelCity = (place.city as string | null) ?? addressParsed?.city ?? city ?? "";
-    const countryFound =
-      (place.countryCode as string | null) ?? addressParsed?.country ?? country ?? null;
-    const postalCode =
-      (place.postalCode as string | null) ?? addressParsed?.postalCode ?? null;
-
-    /* ── Step 2: Search TripAdvisor + Booking in parallel ───── */
-    const [tripadvisorUrl, bookingUrl] = await Promise.all([
-      searchTripAdvisor(apifyToken, hotelName, hotelCity),
-      searchBooking(apifyToken, hotelName, hotelCity),
-    ]);
-
-    /* ── Step 3: Claude generates search-page URLs for the rest  */
-    const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 400,
-        messages: [
-          {
-            role: "user",
-            content: `Generate search-results page URLs for this hotel on Yelp, Trip.com, and Expedia.
-Use the search/results URL format only — do NOT guess direct hotel page URLs.
-
-Hotel: ${hotelName}
-City: ${hotelCity}
-Country: ${countryFound ?? ""}
-
-Respond ONLY with this JSON:
-{
-  "yelp_url": "https://www.yelp.com/search?find_desc=HOTEL_NAME&find_loc=CITY",
-  "trip_url": "https://www.trip.com/hotels/list/?city=CITY&keyword=HOTEL_NAME",
-  "expedia_url": "https://www.expedia.com/Hotel-Search?destination=CITY+HOTEL_NAME"
-}`,
-          },
-        ],
-      }),
-    });
-
-    const claudeData = (await claudeRes.json()) as { content?: Array<{ text?: string }> };
-    const claudeText = claudeData.content?.[0]?.text?.trim();
-
-    let searchUrls: {
-      yelp_url: string | null;
-      trip_url: string | null;
-      expedia_url: string | null;
-    } = { yelp_url: null, trip_url: null, expedia_url: null };
-
+    let hotelInfo: HotelInfo | null = null;
     try {
-      const match = claudeText?.match(/\{[\s\S]*\}/);
-      if (match) searchUrls = JSON.parse(match[0]) as typeof searchUrls;
+      hotelInfo = JSON.parse(infoText.trim()) as HotelInfo;
     } catch {
-      // keep defaults
+      const cleaned = infoText.replace(/```json\n?/gi, "").replace(/```\n?/g, "").trim();
+      const fb = cleaned.indexOf("{");
+      const lb = cleaned.lastIndexOf("}");
+      if (fb !== -1 && lb > fb) {
+        try {
+          hotelInfo = JSON.parse(cleaned.slice(fb, lb + 1)) as HotelInfo;
+        } catch {
+          /* ignore */
+        }
+      }
     }
 
-    /* ── Build url_confidence map ────────────────────────────── */
-    const urlConfidence: Record<string, "verified" | "search_page" | "not_found"> = {
-      google: googleUrl ? "verified" : "not_found",
-      tripadvisor: tripadvisorUrl ? "verified" : "not_found",
-      booking: bookingUrl ? "verified" : "not_found",
-      yelp: searchUrls.yelp_url ? "search_page" : "not_found",
-      trip: searchUrls.trip_url ? "search_page" : "not_found",
-      expedia: searchUrls.expedia_url ? "search_page" : "not_found",
-    };
+    if (!hotelInfo || hotelInfo.error || !hotelInfo.name) {
+      return NextResponse.json(
+        { success: false, error: "Hotel not found. Try a more specific name." },
+        { status: 404 },
+      );
+    }
+
+    console.log("[search-hotel] found basic info:", hotelInfo.name);
+
+    const platforms: Platform[] = ["tripadvisor", "google", "booking", "trip", "expedia", "yelp"];
+
+    const urlResults = await Promise.all(
+      platforms.map(async (platform) => {
+        console.log(`[search-hotel] searching ${platform}...`);
+        const result = await searchForRealUrl(
+          hotelInfo!.name!,
+          hotelInfo!.city ?? null,
+          platform,
+        );
+        console.log(`[search-hotel] ${platform}:`, result.url ?? result.error);
+        return { platform, ...result };
+      }),
+    );
+
+    const verifiedResults = await Promise.all(
+      urlResults.map(async (r) => {
+        if (!r.url) return { ...r, verified: false };
+        const isValid = await verifyUrl(r.url);
+        return {
+          ...r,
+          verified: isValid,
+          error: isValid ? undefined : r.error ?? "URL did not respond",
+        };
+      }),
+    );
+
+    const platformUrls: Record<string, string | null> = {};
+    const platformStatus: Record<
+      string,
+      { found: boolean; verified: boolean; error?: string }
+    > = {};
+    const urlConfidence: Record<string, "verified" | "search_page" | "not_found"> = {};
+
+    for (const r of verifiedResults) {
+      platformUrls[`${r.platform}_url`] = r.verified ? r.url : null;
+      platformStatus[r.platform] = {
+        found: !!r.url,
+        verified: r.verified,
+        ...(r.error ? { error: r.error } : {}),
+      };
+      urlConfidence[r.platform] = r.verified
+        ? "verified"
+        : r.url
+          ? "search_page"
+          : "not_found";
+    }
+
+    const verifiedCount = verifiedResults.filter((r) => r.verified).length;
+    console.log("[search-hotel] verified urls:", verifiedCount);
 
     return NextResponse.json({
       success: true,
       hotel: {
-        name: hotelName,
-        address,
-        city: hotelCity || null,
-        country: countryFound,
-        postal_code: postalCode,
-        website,
-        phone,
-        latitude,
-        longitude,
-        avg_rating: (place.totalScore as number | null) ?? null,
-        total_reviews: (place.reviewsCount as number | null) ?? null,
-        google_url: googleUrl,
-        tripadvisor_url: tripadvisorUrl,
-        booking_url: bookingUrl,
-        yelp_url: searchUrls.yelp_url,
-        trip_url: searchUrls.trip_url,
-        expedia_url: searchUrls.expedia_url,
+        name: hotelInfo.name,
+        address: hotelInfo.address ?? null,
+        city: hotelInfo.city ?? null,
+        country: hotelInfo.country ?? null,
+        postal_code: hotelInfo.postal_code ?? null,
+        phone: hotelInfo.phone ?? null,
+        website: hotelInfo.website ?? null,
+        latitude: typeof hotelInfo.latitude === "number" ? hotelInfo.latitude : null,
+        longitude: typeof hotelInfo.longitude === "number" ? hotelInfo.longitude : null,
+        description: hotelInfo.description ?? null,
+        price_tier: hotelInfo.price_tier ?? null,
+        target_guest: hotelInfo.target_guest ?? null,
+        avg_rating: null,
+        total_reviews: null,
+        ...platformUrls,
         url_confidence: urlConfidence,
       },
+      platform_status: platformStatus,
+      verified_count: verifiedCount,
+      total_platforms: platforms.length,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    const msg = error instanceof Error ? error.message : "Search failed";
+    console.error("[search-hotel] failed:", msg);
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }

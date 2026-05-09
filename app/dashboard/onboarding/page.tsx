@@ -91,6 +91,44 @@ function Badge({ label, color }: { label: string; color: string }) {
   );
 }
 
+/* ─── platform verification status ───────────────────────── */
+function PlatformStatusBadge({
+  status,
+}: {
+  status: { found: boolean; verified: boolean; error?: string };
+}) {
+  const base: CSSProperties = {
+    fontSize: 10,
+    padding: "2px 8px",
+    borderRadius: 100,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    fontWeight: 500,
+    letterSpacing: 0,
+    textTransform: "none",
+  };
+  if (status.verified) {
+    return (
+      <span style={{ ...base, background: "#0a1a0a", color: "#4ade80", border: "1px solid #1a3a1a" }}>
+        ✓ Verified
+      </span>
+    );
+  }
+  if (status.found) {
+    return (
+      <span style={{ ...base, background: "#1a1200", color: "#fbbf24", border: "1px solid #2a2000" }}>
+        ⚠ Found but not loading
+      </span>
+    );
+  }
+  return (
+    <span style={{ ...base, background: "#1a0a0a", color: "#f87171", border: "1px solid #2a1a1a" }}>
+      ✗ Not found
+    </span>
+  );
+}
+
 /* ─── progress indicator ─────────────────────────────────── */
 function StepIndicator({ step, total }: { step: number; total: number }) {
   return (
@@ -173,6 +211,11 @@ export default function OnboardingPage() {
   const [searchStage, setSearchStage] = useState<"idle" | "searching" | "complete">("idle");
   const [searchSteps, setSearchSteps] = useState<{ text: string; done: boolean }[]>([]);
   const [searchErr, setSearchErr] = useState<string | null>(null);
+  const [platformStatus, setPlatformStatus] = useState<
+    Record<string, { found: boolean; verified: boolean; error?: string }>
+  >({});
+  const [verifiedCount, setVerifiedCount] = useState(0);
+  const [verifying, setVerifying] = useState<Record<string, boolean>>({});
 
   /* step 3 state */
   const [syncStarted, setSyncStarted] = useState(false);
@@ -243,6 +286,11 @@ export default function OnboardingPage() {
               phone: string | null;
               website: string | null;
             };
+            platform_status?: Record<
+              string,
+              { found: boolean; verified: boolean; error?: string }
+            >;
+            verified_count?: number;
           }
         | { success: false; error: string };
 
@@ -272,6 +320,8 @@ export default function OnboardingPage() {
         setObCountry(h.country ?? "");
         setObPhone(h.phone ?? "");
         setObWebsite(h.website ?? "");
+        setPlatformStatus(data.platform_status ?? {});
+        setVerifiedCount(data.verified_count ?? 0);
         setShowDetails(true);
         setSearchStage("complete");
       } else {
@@ -281,6 +331,47 @@ export default function OnboardingPage() {
     } catch {
       setSearchErr("Search failed. Please try again.");
       setSearchStage("idle");
+    }
+  }
+
+  /* ── manual verify URL ─────────────────────────────────── */
+  async function handleVerifyUrl(platformKey: string, url: string) {
+    if (!url.trim()) return;
+    setVerifying((prev) => ({ ...prev, [platformKey]: true }));
+    try {
+      const res = await fetch("/api/verify-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url.trim(), platform: platformKey }),
+      });
+      const data = (await res.json()) as {
+        verified: boolean;
+        error?: string;
+      };
+      setPlatformStatus((prev) => {
+        const next = {
+          ...prev,
+          [platformKey]: {
+            found: true,
+            verified: data.verified,
+            ...(data.error ? { error: data.error } : {}),
+          },
+        };
+        const count = Object.values(next).filter((s) => s.verified).length;
+        setVerifiedCount(count);
+        return next;
+      });
+    } catch {
+      setPlatformStatus((prev) => ({
+        ...prev,
+        [platformKey]: {
+          found: true,
+          verified: false,
+          error: "Verification failed",
+        },
+      }));
+    } finally {
+      setVerifying((prev) => ({ ...prev, [platformKey]: false }));
     }
   }
 
@@ -320,6 +411,13 @@ export default function OnboardingPage() {
       return;
     }
 
+    const allPlatforms = ["tripadvisor", "google", "booking", "trip", "expedia", "yelp"] as const;
+    const verifiedPlatforms = allPlatforms.filter((p) => platformStatus[p]?.verified);
+    const activePlatforms: Record<string, boolean> =
+      verifiedPlatforms.length > 0
+        ? Object.fromEntries(allPlatforms.map((p) => [p, verifiedPlatforms.includes(p)]))
+        : { tripadvisor: true, google: true, booking: true, trip: false, expedia: false, yelp: false };
+
     const hotelData: Record<string, unknown> = {
       name: hotelName.trim(),
       tripadvisor_url: tripadvisorUrl.trim() || null,
@@ -333,6 +431,7 @@ export default function OnboardingPage() {
       country: obCountry.trim() || null,
       phone: obPhone.trim() || null,
       website: obWebsite.trim() || null,
+      active_platforms: activePlatforms,
     };
 
     /* extract coords from Google Maps URL */
@@ -701,30 +800,123 @@ export default function OnboardingPage() {
               />
             </div>
 
+            {/* Search summary banner */}
+            {searchStage === "complete" && (
+              <div
+                className="gp-fade-in"
+                style={{
+                  background:
+                    verifiedCount === 6
+                      ? "#0a1a0a"
+                      : verifiedCount >= 3
+                        ? "#1a1200"
+                        : "#1a0a0a",
+                  border: `1px solid ${
+                    verifiedCount === 6
+                      ? "#1a3a1a"
+                      : verifiedCount >= 3
+                        ? "#2a2000"
+                        : "#2a1a1a"
+                  }`,
+                  borderRadius: 8,
+                  padding: 14,
+                  marginBottom: 16,
+                  fontSize: 13,
+                }}
+              >
+                <div
+                  style={{
+                    color:
+                      verifiedCount === 6
+                        ? "#4ade80"
+                        : verifiedCount >= 3
+                          ? "#fbbf24"
+                          : "#f87171",
+                    fontWeight: 500,
+                    marginBottom: verifiedCount < 6 ? 6 : 0,
+                  }}
+                >
+                  {verifiedCount === 6
+                    ? "✓ All 6 platforms verified"
+                    : verifiedCount >= 3
+                      ? `⚠ ${verifiedCount} of 6 platforms verified`
+                      : `✗ Only ${verifiedCount} platform(s) verified`}
+                </div>
+                {verifiedCount < 6 && (
+                  <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
+                    Some platforms couldn&apos;t be auto-found. You can paste URLs manually and tap Verify, or skip platforms where your hotel isn&apos;t listed.
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Platform URLs */}
             {[
-              { id: "ob-ta", label: "TripAdvisor URL", badge: "TA", color: GREEN, value: tripadvisorUrl, set: setTripadvisorUrl, placeholder: "https://tripadvisor.com/Hotel_Review-..." },
-              { id: "ob-go", label: "Google Maps URL", badge: "GO", color: "#60a5fa", value: googleUrl, set: setGoogleUrl, placeholder: "https://maps.google.com/..." },
-              { id: "ob-bk", label: "Booking.com URL", badge: "BK", color: "#a78bfa", value: bookingUrl, set: setBookingUrl, placeholder: "https://booking.com/hotel/..." },
-              { id: "ob-tc", label: "Trip.com URL", badge: "TC", color: "#60a5fa", value: tripUrl, set: setTripUrl, placeholder: "https://trip.com/hotels/..." },
-              { id: "ob-ex", label: "Expedia URL", badge: "EX", color: "#a78bfa", value: expediaUrl, set: setExpediaUrl, placeholder: "https://expedia.com/..." },
-              { id: "ob-yp", label: "Yelp URL", badge: "YP", color: DANGER, value: yelpUrl, set: setYelpUrl, placeholder: "https://yelp.com/biz/..." },
-            ].map(({ id, label, badge, color, value, set, placeholder }) => (
-              <div key={id} style={{ marginBottom: 12 }}>
-                <label style={labelStyle} htmlFor={id}>
-                  <Badge label={badge} color={color} />
-                  {label}
-                </label>
-                <input
-                  id={id}
-                  type="url"
-                  placeholder={placeholder}
-                  value={value}
-                  onChange={(e) => set(e.target.value)}
-                  style={input}
-                />
-              </div>
-            ))}
+              { id: "ob-ta", platformKey: "tripadvisor", label: "TripAdvisor URL", badge: "TA", color: GREEN, value: tripadvisorUrl, set: setTripadvisorUrl, placeholder: "https://tripadvisor.com/Hotel_Review-..." },
+              { id: "ob-go", platformKey: "google", label: "Google Maps URL", badge: "GO", color: "#60a5fa", value: googleUrl, set: setGoogleUrl, placeholder: "https://maps.google.com/..." },
+              { id: "ob-bk", platformKey: "booking", label: "Booking.com URL", badge: "BK", color: "#a78bfa", value: bookingUrl, set: setBookingUrl, placeholder: "https://booking.com/hotel/..." },
+              { id: "ob-tc", platformKey: "trip", label: "Trip.com URL", badge: "TC", color: "#60a5fa", value: tripUrl, set: setTripUrl, placeholder: "https://trip.com/hotels/..." },
+              { id: "ob-ex", platformKey: "expedia", label: "Expedia URL", badge: "EX", color: "#a78bfa", value: expediaUrl, set: setExpediaUrl, placeholder: "https://expedia.com/..." },
+              { id: "ob-yp", platformKey: "yelp", label: "Yelp URL", badge: "YP", color: DANGER, value: yelpUrl, set: setYelpUrl, placeholder: "https://yelp.com/biz/..." },
+            ].map(({ id, platformKey, label, badge, color, value, set, placeholder }) => {
+              const status = platformStatus[platformKey];
+              const isVerifying = !!verifying[platformKey];
+              return (
+                <div key={id} style={{ marginBottom: 12 }}>
+                  <label
+                    style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+                    htmlFor={id}
+                  >
+                    <span style={{ display: "inline-flex", alignItems: "center" }}>
+                      <Badge label={badge} color={color} />
+                      {label}
+                    </span>
+                    {status && <PlatformStatusBadge status={status} />}
+                  </label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      id={id}
+                      type="url"
+                      placeholder={placeholder}
+                      value={value}
+                      onChange={(e) => {
+                        set(e.target.value);
+                        // clear stale verification when URL changes
+                        if (status) {
+                          setPlatformStatus((prev) => {
+                            const next = { ...prev };
+                            delete next[platformKey];
+                            const count = Object.values(next).filter((s) => s.verified).length;
+                            setVerifiedCount(count);
+                            return next;
+                          });
+                        }
+                      }}
+                      style={{ ...input, flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleVerifyUrl(platformKey, value)}
+                      disabled={isVerifying || !value.trim()}
+                      style={{
+                        background: "transparent",
+                        color: MUTED,
+                        border: `1px solid ${BORDER}`,
+                        borderRadius: 6,
+                        padding: "0 12px",
+                        fontSize: 11,
+                        cursor: isVerifying || !value.trim() ? "not-allowed" : "pointer",
+                        opacity: isVerifying || !value.trim() ? 0.5 : 1,
+                        fontFamily: "inherit",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {isVerifying ? "…" : "Verify"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
 
             {/* Collapsible hotel details */}
             <div style={{ marginBottom: 12 }}>

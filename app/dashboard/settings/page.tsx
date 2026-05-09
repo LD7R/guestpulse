@@ -101,6 +101,8 @@ type HotelSearchResult = {
   url_confidence: Record<string, "verified" | "search_page" | "not_found">;
 };
 
+type PlatformStatus = { found: boolean; verified: boolean; error?: string };
+
 type ToastState = { type: "success" | "error"; message: string } | null;
 type ActiveTab = "account" | "brand-voice" | "hotel" | "platforms" | "billing" | "notifications";
 
@@ -159,6 +161,27 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: b
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "#555555", marginBottom: 12 }}>{children}</div>;
+}
+
+function PlatformStatusBadge({ status }: { status: PlatformStatus }) {
+  const base: CSSProperties = {
+    fontSize: 10,
+    padding: "2px 8px",
+    borderRadius: 100,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    fontWeight: 500,
+    letterSpacing: 0,
+    textTransform: "none",
+  };
+  if (status.verified) {
+    return <span style={{ ...base, background: "#0a1a0a", color: "#4ade80", border: "1px solid #1a3a1a" }}>✓ Verified</span>;
+  }
+  if (status.found) {
+    return <span style={{ ...base, background: "#1a1200", color: "#fbbf24", border: "1px solid #2a2000" }}>⚠ Found but not loading</span>;
+  }
+  return <span style={{ ...base, background: "#1a0a0a", color: "#f87171", border: "1px solid #2a1a1a" }}>✗ Not found</span>;
 }
 
 function SaveRow({ saving, label, disabled }: { saving: boolean; label: string; disabled?: boolean }) {
@@ -246,6 +269,9 @@ export default function SettingsPage() {
   const [editingUrls, setEditingUrls] = useState<Record<string, boolean>>({});
   const [editedUrls, setEditedUrls] = useState<Record<string, string>>({});
   const [autoFillMsg, setAutoFillMsg] = useState<string | null>(null);
+  const [platformStatus, setPlatformStatus] = useState<Record<string, PlatformStatus>>({});
+  const [verifiedCount, setVerifiedCount] = useState(0);
+  const [verifying, setVerifying] = useState<Record<string, boolean>>({});
 
   // Saving states
   const [savingAccount, setSavingAccount] = useState(false);
@@ -483,7 +509,16 @@ export default function SettingsPage() {
 
       const { data: refreshed } = await supabase.from("hotels").select("*").eq("user_id", user.id).maybeSingle();
       if (refreshed) setHotel(refreshed as HotelRow);
-      showToast("success", "Platform settings saved");
+
+      const activeWithUrls = (Object.keys(activePlatforms) as Array<keyof ActivePlatforms>).filter(
+        (k) => activePlatforms[k] && (urlMap[k]?.[0] ?? "").trim(),
+      );
+      const unverifiedActive = activeWithUrls.filter((k) => !platformStatus[k]?.verified);
+      if (Object.keys(platformStatus).length > 0 && unverifiedActive.length > 0) {
+        showToast("error", `Saved, but ${unverifiedActive.length} active platform(s) are unverified — they may not sync.`);
+      } else {
+        showToast("success", "Platform settings saved");
+      }
     } catch (err) {
       showToast("error", err instanceof Error ? err.message : "Failed to save platforms");
     } finally {
@@ -502,10 +537,20 @@ export default function SettingsPage() {
     const stepTimer = window.setInterval(() => setSearchStep(s => Math.min(s + 1, 2)), 1200);
     try {
       const res = await fetch("/api/search-hotel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotel_name: searchName.trim(), city: searchCity.trim() || undefined }) });
-      const data = await res.json() as { success: true; hotel: HotelSearchResult } | { success: false; error: string };
+      const data = await res.json() as
+        | {
+            success: true;
+            hotel: HotelSearchResult;
+            platform_status?: Record<string, PlatformStatus>;
+            verified_count?: number;
+          }
+        | { success: false; error: string };
       if (data.success) {
         const h = data.hotel;
+        const ps = data.platform_status ?? {};
         setSearchResult(h);
+        setPlatformStatus(ps);
+        setVerifiedCount(data.verified_count ?? 0);
         setEditedUrls({ tripadvisor: h.tripadvisor_url ?? "", google: h.google_url ?? "", booking: h.booking_url ?? "", trip: h.trip_url ?? "", expedia: h.expedia_url ?? "", yelp: h.yelp_url ?? "" });
         if (!isLocked) {
           if (h.name) setHotelName(h.name);
@@ -515,6 +560,19 @@ export default function SettingsPage() {
           setTripUrl(h.trip_url ?? "");
           setExpediaUrl(h.expedia_url ?? "");
           setYelpUrl(h.yelp_url ?? "");
+          // Auto-toggle active platforms to match verified URLs (only when any verified)
+          const verifiedKeys = (Object.keys(ps) as Array<keyof ActivePlatforms>).filter((k) => ps[k]?.verified);
+          if (verifiedKeys.length > 0) {
+            setActivePlatforms((prev) => ({
+              ...prev,
+              tripadvisor: !!ps.tripadvisor?.verified,
+              google: !!ps.google?.verified,
+              booking: !!ps.booking?.verified,
+              trip: !!ps.trip?.verified,
+              expedia: !!ps.expedia?.verified,
+              yelp: !!ps.yelp?.verified,
+            }));
+          }
         }
         setAddress(h.address ?? ""); setCity(h.city ?? ""); setCountry(h.country ?? ""); setPostalCode(h.postal_code ?? ""); setPhone(h.phone ?? ""); setWebsite(h.website ?? "");
         setAutoFillMsg("✓ Details auto-filled — review and save");
@@ -541,6 +599,41 @@ export default function SettingsPage() {
     setAddress(searchResult.address ?? ""); setCity(searchResult.city ?? ""); setCountry(searchResult.country ?? ""); setPostalCode(searchResult.postal_code ?? ""); setPhone(searchResult.phone ?? ""); setWebsite(searchResult.website ?? "");
     setAutoFillMsg("✓ Details auto-filled — review and save");
     window.setTimeout(() => setAutoFillMsg(null), 3000);
+  }
+
+  async function handleVerifyUrl(platformKey: string, url: string) {
+    if (!url.trim()) return;
+    setVerifying((prev) => ({ ...prev, [platformKey]: true }));
+    try {
+      const res = await fetch("/api/verify-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url.trim(), platform: platformKey }),
+      });
+      const data = (await res.json()) as { verified: boolean; error?: string };
+      setPlatformStatus((prev) => {
+        const next: Record<string, PlatformStatus> = {
+          ...prev,
+          [platformKey]: {
+            found: true,
+            verified: data.verified,
+            ...(data.error ? { error: data.error } : {}),
+          },
+        };
+        setVerifiedCount(Object.values(next).filter((s) => s.verified).length);
+        return next;
+      });
+      if (data.verified) showToast("success", `${platformKey} URL verified`);
+      else showToast("error", data.error ?? "URL did not respond");
+    } catch {
+      setPlatformStatus((prev) => ({
+        ...prev,
+        [platformKey]: { found: true, verified: false, error: "Verification failed" },
+      }));
+      showToast("error", "Verification failed");
+    } finally {
+      setVerifying((prev) => ({ ...prev, [platformKey]: false }));
+    }
   }
 
   async function onSaveNotifications(e: FormEvent<HTMLFormElement>) {
@@ -834,6 +927,28 @@ export default function SettingsPage() {
             )}
           </div>
 
+          {/* Verification summary banner */}
+          {searchResult && !searching && (
+            <div style={{
+              background: verifiedCount === 6 ? "#0a1a0a" : verifiedCount >= 3 ? "#1a1200" : "#1a0a0a",
+              border: `1px solid ${verifiedCount === 6 ? "#1a3a1a" : verifiedCount >= 3 ? "#2a2000" : "#2a1a1a"}`,
+              borderRadius: 8, padding: 14, marginBottom: 16, fontSize: 13,
+            }}>
+              <div style={{ color: verifiedCount === 6 ? "#4ade80" : verifiedCount >= 3 ? "#fbbf24" : "#f87171", fontWeight: 500, marginBottom: verifiedCount < 6 ? 6 : 0 }}>
+                {verifiedCount === 6
+                  ? "✓ All 6 platforms verified"
+                  : verifiedCount >= 3
+                    ? `⚠ ${verifiedCount} of 6 platforms verified`
+                    : `✗ Only ${verifiedCount} platform(s) verified`}
+              </div>
+              {verifiedCount < 6 && (
+                <div style={{ fontSize: 12, color: "#888888", lineHeight: 1.5 }}>
+                  Some platforms couldn&apos;t be auto-found. Open the Platforms tab to paste URLs manually and tap Verify, or skip platforms where your hotel isn&apos;t listed.
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Auto-fill message */}
           {autoFillMsg && (
             <div style={{ background: "#0a1a0a", border: "1px solid #1a3a1a", borderRadius: 6, padding: "10px 14px", fontSize: 12, color: "#4ade80", marginBottom: 16 }}>{autoFillMsg}</div>
@@ -1019,6 +1134,8 @@ export default function SettingsPage() {
                 const [urlVal, setUrlVal] = urlMap[meta.key] ?? ["", () => {}];
                 const hasUrl = !!urlVal.trim();
                 const hasSynced = !!hotel?.last_sync_at;
+                const verifyStatus = platformStatus[meta.key];
+                const isVerifying = !!verifying[meta.key];
                 let statusDot = "#444444";
                 let statusLabel = "Not connected";
                 let statusColor = "#444444";
@@ -1033,10 +1150,30 @@ export default function SettingsPage() {
                     </div>
                     {/* Input area */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: "#f0f0f0", marginBottom: 6 }}>{meta.label}</div>
-                      <input type="url" value={urlVal} onChange={e => setUrlVal(e.target.value)} placeholder="https://..." disabled={isLocked}
-                        style={{ ...inp, height: 34, padding: "0 12px", fontSize: 13, opacity: isLocked ? 0.5 : 1, cursor: isLocked ? "not-allowed" : undefined }}
-                        onFocus={e => { if (!isLocked) onFocus(e); }} onBlur={onBlur} />
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: "#f0f0f0" }}>{meta.label}</span>
+                        {verifyStatus && <PlatformStatusBadge status={verifyStatus} />}
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <input type="url" value={urlVal} onChange={e => {
+                          setUrlVal(e.target.value);
+                          if (verifyStatus) {
+                            setPlatformStatus(prev => {
+                              const next = { ...prev };
+                              delete next[meta.key];
+                              setVerifiedCount(Object.values(next).filter(s => s.verified).length);
+                              return next;
+                            });
+                          }
+                        }} placeholder="https://..." disabled={isLocked}
+                          style={{ ...inp, height: 34, padding: "0 12px", fontSize: 13, opacity: isLocked ? 0.5 : 1, cursor: isLocked ? "not-allowed" : undefined, flex: 1 }}
+                          onFocus={e => { if (!isLocked) onFocus(e); }} onBlur={onBlur} />
+                        <button type="button" onClick={() => void handleVerifyUrl(meta.key, urlVal)}
+                          disabled={isVerifying || !hasUrl || isLocked}
+                          style={{ background: "transparent", color: "#888888", border: "1px solid #2a2a2a", borderRadius: 6, padding: "0 12px", fontSize: 11, cursor: isVerifying || !hasUrl || isLocked ? "not-allowed" : "pointer", opacity: isVerifying || !hasUrl || isLocked ? 0.5 : 1, fontFamily: "inherit", flexShrink: 0, height: 34 }}>
+                          {isVerifying ? "…" : "Verify"}
+                        </button>
+                      </div>
                     </div>
                     {/* Status */}
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
