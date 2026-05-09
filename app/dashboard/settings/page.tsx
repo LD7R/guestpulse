@@ -258,6 +258,10 @@ export default function SettingsPage() {
     if (tabParam && VALID_TABS.includes(tabParam)) {
       setActiveTab(tabParam);
     }
+    try {
+      const stored = localStorage.getItem("gp_auto_sync_after_save");
+      if (stored !== null) setAutoSyncAfterSave(stored === "true");
+    } catch { /* ignore */ }
   }, []);
 
   function goToTab(tab: ActiveTab) {
@@ -317,6 +321,7 @@ export default function SettingsPage() {
   const [platformStatus, setPlatformStatus] = useState<Record<string, PlatformStatus>>({});
   const [verifiedCount, setVerifiedCount] = useState(0);
   const [verifying, setVerifying] = useState<Record<string, boolean>>({});
+  const [autoSyncAfterSave, setAutoSyncAfterSave] = useState(true);
 
   // Saving states
   const [savingAccount, setSavingAccount] = useState(false);
@@ -537,14 +542,45 @@ export default function SettingsPage() {
       const { data: existing } = await supabase.from("hotels").select("locked_until").eq("user_id", user.id).maybeSingle();
       const existingLocked = !!(existing?.locked_until && new Date(existing.locked_until as string) > new Date());
 
-      const updateData: Record<string, unknown> = { active_platforms: activePlatforms };
+      // Derive active_platforms from URL presence (each filled URL → active=true).
+      // Respect explicit user-disabled toggles only when URL was already present.
+      const trimmedUrls: Record<keyof ActivePlatforms, string> = {
+        tripadvisor: tripadvisorUrl.trim(),
+        google: googleUrl.trim(),
+        booking: bookingUrl.trim(),
+        trip: tripUrl.trim(),
+        expedia: expediaUrl.trim(),
+        yelp: yelpUrl.trim(),
+      };
+      const previousUrls: Record<keyof ActivePlatforms, string> = {
+        tripadvisor: hotel?.tripadvisor_url?.trim() ?? "",
+        google: hotel?.google_url?.trim() ?? "",
+        booking: hotel?.booking_url?.trim() ?? "",
+        trip: hotel?.trip_url?.trim() ?? "",
+        expedia: hotel?.expedia_url?.trim() ?? "",
+        yelp: hotel?.yelp_url?.trim() ?? "",
+      };
+      const derivedActive: ActivePlatforms = {
+        tripadvisor: false, google: false, booking: false, trip: false, expedia: false, yelp: false,
+      };
+      const newlyAddedPlatforms: Array<{ platform: keyof ActivePlatforms; url: string }> = [];
+      (Object.keys(trimmedUrls) as Array<keyof ActivePlatforms>).forEach((p) => {
+        const hasUrl = !!trimmedUrls[p];
+        const hadUrl = !!previousUrls[p];
+        // If URL existed before and user explicitly turned it off, respect that.
+        const userDisabled = hadUrl && !activePlatforms[p];
+        derivedActive[p] = hasUrl && !userDisabled;
+        if (hasUrl && !hadUrl) newlyAddedPlatforms.push({ platform: p, url: trimmedUrls[p] });
+      });
+
+      const updateData: Record<string, unknown> = { active_platforms: derivedActive };
       if (!existingLocked) {
-        updateData.tripadvisor_url = tripadvisorUrl.trim() || null;
-        updateData.google_url = googleUrl.trim() || null;
-        updateData.booking_url = bookingUrl.trim() || null;
-        updateData.trip_url = tripUrl.trim() || null;
-        updateData.expedia_url = expediaUrl.trim() || null;
-        updateData.yelp_url = yelpUrl.trim() || null;
+        updateData.tripadvisor_url = trimmedUrls.tripadvisor || null;
+        updateData.google_url = trimmedUrls.google || null;
+        updateData.booking_url = trimmedUrls.booking || null;
+        updateData.trip_url = trimmedUrls.trip || null;
+        updateData.expedia_url = trimmedUrls.expedia || null;
+        updateData.yelp_url = trimmedUrls.yelp || null;
         const coordMatch = googleUrl?.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
         if (coordMatch) { updateData.latitude = parseFloat(coordMatch[1]!); updateData.longitude = parseFloat(coordMatch[2]!); }
       }
@@ -552,15 +588,18 @@ export default function SettingsPage() {
       const { error } = await supabase.from("hotels").update(updateData).eq("user_id", user.id);
       if (error) throw error;
 
+      // Sync local state to derived active so UI reflects what was saved
+      setActivePlatforms(derivedActive);
+
       const { data: refreshed } = await supabase.from("hotels").select("*").eq("user_id", user.id).maybeSingle();
       if (refreshed) setHotel(refreshed as HotelRow);
 
-      const activeWithUrls = (Object.keys(activePlatforms) as Array<keyof ActivePlatforms>).filter(
-        (k) => activePlatforms[k] && (urlMap[k]?.[0] ?? "").trim(),
-      );
-      const unverifiedActive = activeWithUrls.filter((k) => !platformStatus[k]?.verified);
-      if (Object.keys(platformStatus).length > 0 && unverifiedActive.length > 0) {
-        showToast("error", `Saved, but ${unverifiedActive.length} active platform(s) are unverified — they may not sync.`);
+      const newCount = newlyAddedPlatforms.length;
+      if (newCount > 0 && autoSyncAfterSave && hotelId) {
+        showToast("success", `Saved. Syncing ${newCount} new platform${newCount > 1 ? "s" : ""}…`);
+        void syncNewlyAddedPlatforms(hotelId, newlyAddedPlatforms);
+      } else if (newCount > 0) {
+        showToast("success", `Saved. ${newCount} new platform${newCount > 1 ? "s" : ""} ready — click Sync to pull reviews.`);
       } else {
         showToast("success", "Platform settings saved");
       }
@@ -569,6 +608,40 @@ export default function SettingsPage() {
     } finally {
       setSavingPlatforms(false);
     }
+  }
+
+  // Trigger an immediate sync of the platforms whose URLs were just added.
+  async function syncNewlyAddedPlatforms(
+    hId: string,
+    platforms: Array<{ platform: string; url: string }>,
+  ) {
+    window.dispatchEvent(
+      new CustomEvent("gp:sync-start", { detail: { platforms: platforms.map((p) => p.platform) } }),
+    );
+    const tasks = platforms.map(async ({ platform, url }) => {
+      try {
+        const res = await fetch("/api/scrape-reviews", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hotel_id: hId, url, platform, sync_type: "initial" }),
+        });
+        const json = (await res.json()) as { success?: boolean; count?: number };
+        const count = json.count ?? 0;
+        window.dispatchEvent(
+          new CustomEvent("gp:sync-progress", { detail: { platform, status: "done", count } }),
+        );
+        return { platform, count, error: null as string | null };
+      } catch (err) {
+        window.dispatchEvent(
+          new CustomEvent("gp:sync-progress", { detail: { platform, status: "error", count: 0 } }),
+        );
+        return { platform, count: 0, error: err instanceof Error ? err.message : "Sync failed" };
+      }
+    });
+    const results = await Promise.all(tasks);
+    const totalNew = results.reduce((s, r) => s + r.count, 0);
+    const errorCount = results.filter((r) => r.error).length;
+    window.dispatchEvent(new CustomEvent("gp:sync-end", { detail: { totalNew, errorCount } }));
   }
 
   // ── Hotel search ───────────────────────────────────────────────────────────
@@ -1270,6 +1343,19 @@ export default function SettingsPage() {
                   );
                 })}
               </div>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 18, fontSize: 12, color: "#888888", cursor: "pointer", userSelect: "none" }}>
+                <input
+                  type="checkbox"
+                  checked={autoSyncAfterSave}
+                  onChange={(e) => {
+                    setAutoSyncAfterSave(e.target.checked);
+                    try { localStorage.setItem("gp_auto_sync_after_save", String(e.target.checked)); } catch { /* ignore */ }
+                  }}
+                  style={{ width: 14, height: 14, cursor: "pointer" }}
+                />
+                Sync reviews automatically after saving new platforms
+              </label>
 
               <SaveRow saving={savingPlatforms} label="Save platform settings" />
             </div>

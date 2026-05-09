@@ -445,11 +445,23 @@ export default function OnboardingPage() {
     }
 
     const allPlatforms = ["tripadvisor", "google", "booking", "trip", "expedia", "yelp"] as const;
-    const verifiedPlatforms = allPlatforms.filter((p) => platformStatus[p]?.verified);
-    const activePlatforms: Record<string, boolean> =
-      verifiedPlatforms.length > 0
-        ? Object.fromEntries(allPlatforms.map((p) => [p, verifiedPlatforms.includes(p)]))
-        : { tripadvisor: true, google: true, booking: true, trip: false, expedia: false, yelp: false };
+    const urlByPlatform: Record<(typeof allPlatforms)[number], string> = {
+      tripadvisor: tripadvisorUrl.trim(),
+      google: googleUrl.trim(),
+      booking: bookingUrl.trim(),
+      trip: tripUrl.trim(),
+      expedia: expediaUrl.trim(),
+      yelp: yelpUrl.trim(),
+    };
+    // Active = any platform with a URL filled in (manual or via AI search)
+    const activePlatforms: Record<string, boolean> = Object.fromEntries(
+      allPlatforms.map((p) => [p, !!urlByPlatform[p]]),
+    );
+    const anyFilled = allPlatforms.some((p) => urlByPlatform[p]);
+    if (!anyFilled) {
+      // Sensible fallback when nothing was filled (shouldn't happen — guard above blocks it)
+      Object.assign(activePlatforms, { tripadvisor: true, google: true, booking: true });
+    }
 
     const hotelData: Record<string, unknown> = {
       name: hotelName.trim(),

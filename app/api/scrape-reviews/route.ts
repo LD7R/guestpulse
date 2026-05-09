@@ -290,9 +290,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── Determine effective sync mode ────────────────────────────────────────
+    // If no reviews exist yet for this hotel+platform, treat as "initial" (deeper pull)
+    // even if caller asked for incremental — this handles newly-added platforms.
+    let effectiveMode: "initial" | "incremental" | "full" = sync_type;
+    let existingPlatformReviewCount = 0;
+    if (sync_type !== "full") {
+      const { count } = await supabase
+        .from("reviews")
+        .select("id", { count: "exact", head: true })
+        .eq("hotel_id", hotel_id)
+        .eq("platform", platform);
+      existingPlatformReviewCount = count ?? 0;
+      if (existingPlatformReviewCount === 0 && sync_type === "incremental") {
+        console.log(`[scrape:${platform}] no existing reviews — promoting to initial sync`);
+        effectiveMode = "initial";
+      }
+    }
+    const isNewPlatform = existingPlatformReviewCount === 0;
+
     // For incremental sync, fetch hotel's last_sync_at to filter old reviews
     let lastSyncAt: string | null = null;
-    if (sync_type === "incremental") {
+    if (effectiveMode === "incremental") {
       const { data: hotelRow } = await supabase
         .from("hotels")
         .select("last_sync_at")
@@ -311,7 +330,8 @@ export async function POST(request: NextRequest) {
     }
 
     // maxReviews must be at least 1
-    const maxReviews = Math.max(1, sync_type === "incremental" ? 20 : 100);
+    const maxReviews = Math.max(1, effectiveMode === "incremental" ? 20 : 100);
+    console.log(`[scrape:${platform}] mode: ${effectiveMode} (maxReviews=${maxReviews}, isNewPlatform=${isNewPlatform})`);
 
     const actorInput =
       platform === "google"
@@ -500,8 +520,10 @@ export async function POST(request: NextRequest) {
         success: true,
         count: 0,
         platform,
+        mode: effectiveMode,
+        is_new_platform: isNewPlatform,
         result: {
-          [platform]: { attempted: true, success: true, count: 0, error: null },
+          [platform]: { attempted: true, success: true, count: 0, mode: effectiveMode, is_new_platform: isNewPlatform, error: null },
         },
       });
     }
@@ -667,8 +689,10 @@ export async function POST(request: NextRequest) {
         success: true,
         count: 0,
         platform,
+        mode: effectiveMode,
+        is_new_platform: isNewPlatform,
         result: {
-          [platform]: { attempted: true, success: true, count: 0, error: null },
+          [platform]: { attempted: true, success: true, count: 0, mode: effectiveMode, is_new_platform: isNewPlatform, error: null },
         },
       });
     }
@@ -700,8 +724,10 @@ export async function POST(request: NextRequest) {
       success: true,
       count: rowsToInsert.length,
       platform,
+      mode: effectiveMode,
+      is_new_platform: isNewPlatform,
       result: {
-        [platform]: { attempted: true, success: true, count: rowsToInsert.length, error: null },
+        [platform]: { attempted: true, success: true, count: rowsToInsert.length, mode: effectiveMode, is_new_platform: isNewPlatform, error: null },
       },
     });
   } catch (error) {

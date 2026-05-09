@@ -697,11 +697,29 @@ function DashboardOverviewContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hotel_id: hotelId, url, platform }),
       });
-      const json = (await res.json()) as { success?: boolean; count?: number; error?: string };
+      const json = (await res.json()) as {
+        success?: boolean;
+        count?: number;
+        error?: string;
+        mode?: "initial" | "incremental" | "full";
+        is_new_platform?: boolean;
+      };
       if (!res.ok || json.success !== true) throw new Error(json.error ?? `Failed syncing ${platform}`);
-      return { platform, count: json.count ?? 0, error: null as string | null };
+      return {
+        platform,
+        count: json.count ?? 0,
+        mode: json.mode,
+        isNewPlatform: !!json.is_new_platform,
+        error: null as string | null,
+      };
     } catch (e) {
-      return { platform, count: 0, error: e instanceof Error ? e.message : `Failed syncing ${platform}` };
+      return {
+        platform,
+        count: 0,
+        mode: undefined as "initial" | "incremental" | "full" | undefined,
+        isNewPlatform: false,
+        error: e instanceof Error ? e.message : `Failed syncing ${platform}`,
+      };
     }
   }
 
@@ -744,6 +762,7 @@ function DashboardOverviewContent() {
       const results = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
       const totalNew = results.reduce((s, r) => s + r.count, 0);
       const errorCount = results.filter((r) => r.error !== null).length;
+      const newlyAdded = results.filter((r) => r.isNewPlatform && !r.error).map((r) => r.platform);
       const wasEmpty = totalReviews === 0;
 
       window.dispatchEvent(new CustomEvent("gp:sync-end", {
@@ -754,6 +773,11 @@ function DashboardOverviewContent() {
         showToast("success", `First sync complete — ${totalNew.toLocaleString()} reviews ready!`);
         try { sessionStorage.removeItem("gp_just_onboarded"); } catch { /* ignore */ }
         setIsFirstTime(false);
+      } else if (newlyAdded.length > 0) {
+        showToast(
+          "success",
+          `🎉 Added ${newlyAdded.length} new platform${newlyAdded.length > 1 ? "s" : ""} — pulled all historical reviews!`,
+        );
       }
 
       await loadDashboard();

@@ -40,11 +40,45 @@ type HotelSync = {
   tripadvisor_url: string | null;
   google_url: string | null;
   booking_url: string | null;
+  trip_url: string | null;
+  expedia_url: string | null;
+  yelp_url: string | null;
+  active_platforms: unknown;
   first_sync_completed: boolean | null;
   last_sync_at: string | null;
   locked_until: string | null;
   brand_voice_completed_at: string | null;
 };
+
+const HOTEL_SELECT =
+  "id, name, tripadvisor_url, google_url, booking_url, trip_url, expedia_url, yelp_url, active_platforms, first_sync_completed, last_sync_at, locked_until, brand_voice_completed_at";
+
+type PlatformKey = "tripadvisor" | "google" | "booking" | "trip" | "expedia" | "yelp";
+
+function platformsFromHotel(hotel: HotelSync): Array<{ platform: PlatformKey; url: string }> {
+  const ap = hotel.active_platforms;
+  const apMap: Record<string, boolean> | null =
+    ap && typeof ap === "object" && !Array.isArray(ap)
+      ? (ap as Record<string, boolean>)
+      : Array.isArray(ap)
+        ? Object.fromEntries((ap as string[]).map((k) => [k, true]))
+        : null;
+
+  const isActive = (k: PlatformKey) => (apMap ? apMap[k] !== false : true);
+
+  const all: Array<{ platform: PlatformKey; url: string | null }> = [
+    { platform: "tripadvisor", url: hotel.tripadvisor_url },
+    { platform: "google", url: hotel.google_url },
+    { platform: "booking", url: hotel.booking_url },
+    { platform: "trip", url: hotel.trip_url },
+    { platform: "expedia", url: hotel.expedia_url },
+    { platform: "yelp", url: hotel.yelp_url },
+  ];
+
+  return all
+    .filter((p): p is { platform: PlatformKey; url: string } => Boolean(p.url?.trim()))
+    .filter((p) => isActive(p.platform));
+}
 
 function computeInitials(fullName: string | null | undefined, email: string | null | undefined): string {
   const n = fullName?.trim();
@@ -136,7 +170,7 @@ function DashboardLayoutInner({
       }
       const { data } = await supabase
         .from("hotels")
-        .select("id, name, tripadvisor_url, google_url, booking_url, first_sync_completed, last_sync_at, locked_until, brand_voice_completed_at")
+        .select(HOTEL_SELECT)
         .eq("user_id", user.id)
         .maybeSingle();
       setPrimaryHotel((data as HotelSync | null) ?? null);
@@ -243,8 +277,7 @@ function DashboardLayoutInner({
   // Auto-sync when hotel is first loaded or hotel changes
   useEffect(() => {
     if (!primaryHotel?.id) return;
-    const hasUrl = primaryHotel.google_url || primaryHotel.tripadvisor_url || primaryHotel.booking_url;
-    if (!hasUrl) return;
+    if (platformsFromHotel(primaryHotel).length === 0) return;
     void autoSync(primaryHotel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [primaryHotel?.id]);
@@ -263,11 +296,7 @@ function DashboardLayoutInner({
 
     setAutoSyncing(true);
 
-    const platforms = [
-      { platform: "tripadvisor", url: hotel.tripadvisor_url },
-      { platform: "google", url: hotel.google_url },
-      { platform: "booking", url: hotel.booking_url },
-    ].filter((p): p is { platform: string; url: string } => Boolean(p.url));
+    const platforms = platformsFromHotel(hotel);
 
     for (const p of platforms) {
       try {
@@ -307,7 +336,7 @@ function DashboardLayoutInner({
     );
     const { data } = await supabase
       .from("hotels")
-      .select("id, name, tripadvisor_url, google_url, booking_url, first_sync_completed, last_sync_at, locked_until, brand_voice_completed_at")
+      .select(HOTEL_SELECT)
       .eq("id", hotel.id)
       .maybeSingle();
     if (data) setPrimaryHotel(data as HotelSync);
