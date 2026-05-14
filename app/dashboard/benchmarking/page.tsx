@@ -7,8 +7,8 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "r
 import type { MapHotel, MapCompetitor } from "./MapComponent";
 import EmptyState from "@/components/EmptyState";
 import ErrorState from "@/components/ErrorState";
-import ConfirmModal from "@/components/ConfirmModal";
-import { useToast } from "@/components/Toast";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import { toast } from "sonner";
 
 const MapComponent = dynamic(() => import("./MapComponent"), {
   ssr: false,
@@ -362,8 +362,6 @@ const inputStyle: CSSProperties = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function BenchmarkingPage() {
-  const { showToast } = useToast();
-
   // Core data
   const [loading, setLoading] = useState(true);
   const [loadingAnalysis, setLoadingAnalysis] = useState(true);
@@ -978,9 +976,9 @@ export default function BenchmarkingPage() {
       const { error: delError } = await sb.from("competitors").delete().eq("id", id);
       if (!delError) {
         setCompetitors((prev) => prev.filter((c) => c.id !== id));
-        showToast("success", "Competitor removed");
+        toast.success("Competitor removed");
       } else {
-        showToast("error", "Failed to remove competitor");
+        toast.error("Failed to remove competitor");
       }
     } finally {
       setRemovingId(null);
@@ -3175,7 +3173,7 @@ export default function BenchmarkingPage() {
       </div>
 
       {/* Remove competitor confirmation */}
-      <ConfirmModal
+      <ConfirmDialog
         open={removeConfirm.open}
         title="Remove competitor?"
         message={`This will delete all data for "${removeConfirm.name}". This action cannot be undone.`}

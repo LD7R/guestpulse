@@ -16,6 +16,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import BrandVoiceWizard from "@/components/BrandVoiceWizard";
 import ErrorState from "@/components/ErrorState";
 import { isTestAccount, type PlanKey } from "@/lib/test-account";
@@ -103,7 +104,6 @@ type HotelSearchResult = {
 
 type PlatformStatus = { found: boolean; verified: boolean; error?: string };
 
-type ToastState = { type: "success" | "error"; message: string } | null;
 type ActiveTab = "account" | "brand-voice" | "hotel" | "platforms" | "billing" | "notifications";
 
 const VALID_TABS: ActiveTab[] = ["account", "brand-voice", "hotel", "platforms", "billing", "notifications"];
@@ -339,11 +339,8 @@ export default function SettingsPage() {
     ratingDropAlerts: true,
   });
 
-  const [toast, setToast] = useState<ToastState>(null);
-
-  const showToast = useCallback((type: "success" | "error", message: string) => {
-    setToast({ type, message });
-    window.setTimeout(() => setToast(null), type === "success" ? 3000 : 5000);
+  const showToast = useCallback((type: "success" | "error" | "info" | "warning", message: string) => {
+    toast[type](message);
   }, []);
 
   const isLocked = useMemo(() => !!(hotel?.locked_until && new Date(hotel.locked_until) > new Date()), [hotel]);
@@ -1642,16 +1639,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* ── Toast ─────────────────────────────────────────────────────────── */}
-      {toast && (
-        <div role="status" style={{ position: "fixed", bottom: 24, right: 24, zIndex: 1000, background: toast.type === "success" ? "#0a1a0a" : "#1a0a0a", border: `1px solid ${toast.type === "success" ? "#1a3a1a" : "#3a1a1a"}`, borderRadius: 8, padding: "12px 18px", display: "flex", alignItems: "center", gap: 10, maxWidth: 340, animation: "toast-in 0.3s ease forwards", boxShadow: "none" }}>
-          <span style={{ fontSize: 13, color: toast.type === "success" ? "#4ade80" : "#f87171", fontWeight: 600 }}>{toast.type === "success" ? "✓" : "!"}</span>
-          <span style={{ fontSize: 13, color: toast.type === "success" ? "#f0f0f0" : "#f87171" }}>{toast.message}</span>
-        </div>
-      )}
-
       <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes toast-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes skeleton-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
         @keyframes bv-pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
         @keyframes step-fadein { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: translateX(0); } }

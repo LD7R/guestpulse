@@ -8,7 +8,10 @@ import { createBrowserClient } from "@supabase/ssr";
 import PageLoadingBar from "@/app/components/PageLoadingBar";
 import TerminalSyncCard, { type SyncPlatformStatus } from "@/app/components/TerminalSyncCard";
 import Logo from "@/components/Logo";
-import { ToastProvider, useToast } from "@/components/Toast";
+import { toast } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
+import PageTransition from "@/components/PageTransition";
+import CommandPalette from "@/components/CommandPalette";
 import { isTestAccount } from "@/lib/test-account";
 
 const labelStyle: CSSProperties = {
@@ -107,7 +110,6 @@ function DashboardLayoutInner({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { showToast } = useToast();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -253,11 +255,11 @@ function DashboardLayoutInner({
 
       // Show toast via context
       if (errorCount > 0) {
-        showToast("warning", `Sync finished · ${errorCount} platform${errorCount > 1 ? "s" : ""} failed`);
+        toast.warning(`Sync finished · ${errorCount} platform${errorCount > 1 ? "s" : ""} failed`);
       } else if (totalNew > 0) {
-        showToast("success", `Sync complete · ${totalNew} new review${totalNew > 1 ? "s" : ""}`);
+        toast.success(`Sync complete · ${totalNew} new review${totalNew > 1 ? "s" : ""}`);
       } else {
-        showToast("success", "Sync complete · No new reviews");
+        toast.success("Sync complete · No new reviews");
       }
 
       // Clear sync card after 2s
@@ -604,6 +606,16 @@ function DashboardLayoutInner({
           >
             Log out
           </button>
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 10,
+              color: "#555",
+              fontFamily: "ui-monospace, monospace",
+            }}
+          >
+            Press ⌘K for commands
+          </div>
         </div>
       </aside>
 
@@ -666,10 +678,8 @@ function DashboardLayoutInner({
 
       <main className="main-content" style={{ position: "relative" }}>
         <PageLoadingBar loading={pageLoading} />
-        {children}
+        <PageTransition pathname={pathname ?? ""}>{children}</PageTransition>
       </main>
-
-      {/* Toasts are rendered by ToastProvider */}
 
       <nav className="bottom-nav" aria-label="Mobile navigation">
         {[
@@ -758,8 +768,21 @@ export default function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <ToastProvider>
+    <>
       <DashboardLayoutInner>{children}</DashboardLayoutInner>
-    </ToastProvider>
+      <CommandPalette />
+      <Toaster
+        position="bottom-right"
+        theme="dark"
+        richColors
+        toastOptions={{
+          style: {
+            background: "#141414",
+            border: "1px solid #1e1e1e",
+            color: "#f0f0f0",
+          },
+        }}
+      />
+    </>
   );
 }

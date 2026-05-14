@@ -6,7 +6,7 @@ import type { CSSProperties } from "react";
 import ReputationScoreCard from "@/components/ReputationScoreCard";
 import EmptyState from "@/components/EmptyState";
 import ErrorState from "@/components/ErrorState";
-import { useToast } from "@/components/Toast";
+import { toast } from "sonner";
 import {
   CartesianGrid,
   Line,
@@ -146,7 +146,6 @@ function TrendTooltip({ active, payload, label }: TTP) {
 
 /* ─── main page ──────────────────────────────────────────── */
 export default function SentimentPage() {
-  const { showToast } = useToast();
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -468,7 +467,7 @@ export default function SentimentPage() {
       const data = (await res.json()) as { success: boolean; insights?: Insights; error?: string };
       if (data.success && data.insights) {
         setInsights(data.insights);
-        showToast("success", "Insights generated");
+        toast.success("Insights generated");
       } else {
         setInsightError(data.error ?? "Failed to generate insights");
       }

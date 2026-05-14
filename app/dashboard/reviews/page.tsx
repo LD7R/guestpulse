@@ -5,10 +5,11 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import { useRouter } from "next/navigation";
 
 import Spinner from "@/app/components/Spinner";
-import ConfirmModal from "@/components/ConfirmModal";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import EmptyState from "@/components/EmptyState";
 import ErrorState from "@/components/ErrorState";
-import { useToast } from "@/components/Toast";
+import { toast } from "sonner";
+import { motion, AnimatePresence } from "motion/react";
 import { friendlyError } from "@/lib/errors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -395,7 +396,8 @@ function Pill({
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function ReviewsInboxPage() {
   const router = useRouter();
-  const { showToast } = useToast();
+  const showToast = (type: "success" | "error" | "info" | "warning", message: string) =>
+    toast[type](message);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -1067,7 +1069,7 @@ export default function ReviewsInboxPage() {
       )}
 
       {/* Confirm delete note modal */}
-      <ConfirmModal
+      <ConfirmDialog
         open={confirmModal !== null}
         title="Delete note"
         message="Are you sure you want to delete this internal note? This cannot be undone."
@@ -1429,6 +1431,7 @@ export default function ReviewsInboxPage() {
 
       {/* ── 7. Review Cards ─────────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <AnimatePresence initial={false}>
         {visibleReviews.map((review, idx) => {
           const platform = review.platform ?? review.source ?? "";
           const rating = normalizeRating(review.rating ?? review.stars);
@@ -1454,7 +1457,14 @@ export default function ReviewsInboxPage() {
                 : "3px solid #333333";
 
           return (
-            <div key={reviewId}>
+            <motion.div
+              key={reviewId}
+              layout
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+            >
               {/* Review card */}
               <div
                 style={{
@@ -1833,9 +1843,10 @@ export default function ReviewsInboxPage() {
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
           );
         })}
+        </AnimatePresence>
       </div>
       </div>
     </>

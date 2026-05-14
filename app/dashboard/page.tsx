@@ -17,7 +17,7 @@ import ReputationScoreCard from "@/components/ReputationScoreCard";
 import EmptyState from "@/components/EmptyState";
 import ErrorState from "@/components/ErrorState";
 import AnimatedNumber from "@/components/AnimatedNumber";
-import { useToast } from "@/components/Toast";
+import { toast } from "sonner";
 
 type Hotel = {
   id: string;
@@ -274,7 +274,6 @@ const CustomTooltip = ({
 function DashboardOverviewContent() {
   const router = useRouter();
   const pathname = usePathname();
-  const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -770,12 +769,11 @@ function DashboardOverviewContent() {
       }));
 
       if (wasEmpty && totalNew > 0) {
-        showToast("success", `First sync complete — ${totalNew.toLocaleString()} reviews ready!`);
+        toast.success(`First sync complete — ${totalNew.toLocaleString()} reviews ready!`);
         try { sessionStorage.removeItem("gp_just_onboarded"); } catch { /* ignore */ }
         setIsFirstTime(false);
       } else if (newlyAdded.length > 0) {
-        showToast(
-          "success",
+        toast.success(
           `🎉 Added ${newlyAdded.length} new platform${newlyAdded.length > 1 ? "s" : ""} — pulled all historical reviews!`,
         );
       }
@@ -797,10 +795,10 @@ function DashboardOverviewContent() {
       .update({ responded: true })
       .eq("id", reviewId);
     if (error) {
-      showToast("error", "Failed to mark as responded");
+      toast.error("Failed to mark as responded");
       return;
     }
-    showToast("success", "Marked as responded");
+    toast.success("Marked as responded");
     setUrgentReviewsList((prev) => prev.filter((r) => r.id !== reviewId));
     setNeedingResponse((prev) => Math.max(0, prev - 1));
     setDrafts((prev) => {

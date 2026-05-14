@@ -71,7 +71,7 @@ const ACTOR_IDS = {
 // tripadvisor: maxcopell~tripadvisor-reviews
 // google:      compass~google-maps-reviews-scraper
 // booking:     voyager~booking-reviews-scraper
-// trip:        compass~trip-com-scraper
+// trip:        Y60CBfEPblopOe9P3 (raw ID — slug intentionally omitted, may change)
 // expedia:     tri_angle~expedia-hotels-scraper
 // yelp:        compass~yelp-scraper
 
